@@ -5,7 +5,7 @@
 //! goal, the stream column's calls, her open question with the time it has left, the danger, and
 //! (when asked for: it costs a look at what's open) why the bot's doing what it's doing.
 
-use super::{ask, Director};
+use super::Director;
 use crate::console::{EvilState, QuestionState};
 use crate::domain::Observation;
 use crate::play::Agent;
@@ -34,7 +34,7 @@ impl Director {
             choices: q.choices.iter().map(|c| c.label.clone()).collect(),
             default: q.default,
             left: if q.now {
-                Some((ask::NOW_OPEN - (obs.tic - q.opened)).max(0) as f64 / 35.0)
+                Some(q.deadline.map_or(0, |d| (d - obs.tic).max(0)) as f64 / 35.0)
             } else {
                 q.deadline.map(|d| (d - obs.tic).max(0) as f64 / 35.0)
             },

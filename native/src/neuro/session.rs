@@ -9,32 +9,17 @@
 use serde_json::{json, Value};
 
 use super::link::{Incoming, Link};
-use crate::control::directed::{
-    bearing, Director, Hints, Order, Topic, STANCE_SECONDS, TACTIC_SECONDS,
-};
+use crate::control::directed::{bearing, Director, Hints, Order, Topic};
 use crate::control::game::Choices;
 use crate::domain::Observation;
 use crate::play::Agent;
+use crate::tactical::tuning::Directed;
 
-/// waiting on her this long (tics) with nothing to do: a decision forced (unless the console
-/// says otherwise: `set_forcing`)
-const IDLE_FORCE: i64 = 6 * 35;
-/// her state told (silently) at most this often, when it's changed
-const STATUS_EVERY: i64 = 20 * 35;
+// (how long she's waited for, and how often she's put to: the tuning's `directed`, the console
+// changing some as it runs: `set_forcing`)
 /// a list in an answer: at most this many lines
 const LIST_MAX: usize = 15;
-/// at most this many moments (not silent) a minute: past it, what's not urgent is told
-/// silently (her context and her attention are what's being spent)
-const MOMENTS_A_MINUTE: usize = 6;
 const MINUTE: i64 = 60 * 35;
-/// on with something by herself (instinct's taken up something new, a fight's over): asked
-/// what next, at most this often (tics; the console's to change, as `IDLE_FORCE`)
-const NEXT_FORCE: i64 = 15 * 35;
-/// waiting on her, an action of hers that moves nothing (a look, a list, a setting): at least
-/// this long (tics) after it before a decision's forced
-const AFTER_LOOK: i64 = 3 * 35;
-/// a question unanswered this long (tics): a decision forced (as `IDLE_FORCE`)
-const ASK_FORCE: i64 = 3 * 35;
 /// the rules told again (silently) this often, or after this many characters told her since,
 /// whichever comes first: her context rolls, and the rules shouldn't roll out of it
 const BRIEF_EVERY: i64 = 10 * MINUTE;
@@ -79,7 +64,11 @@ pub struct Session {
     /// a decision's forced on her (0: never); the console's to change
     idle_force: i64,
     ask_force: i64,
-    /// asked what next while she's on with something (`NEXT_FORCE`: at most this often, 0
+    /// after a look or a list, her status at most so often, the moments a minute (the tuning's)
+    after_look: i64,
+    status_every: i64,
+    moments: usize,
+    /// asked what next while she's on with something (`Directed::next_force`: at most this often, 0
     /// never): the moment waiting to be asked about ("step", "fight"), and when she was last
     /// asked or last acted
     next_force: i64,
@@ -180,6 +169,12 @@ impl Character {
 
 /// The actions, as registered (descriptions and schemas Neuro reads as they are).
 pub fn actions() -> Vec<Value> {
+    actions_timed(&Directed::default())
+}
+
+/// ...with the times her say in a fight holds as `c` has them.
+pub fn actions_timed(c: &Directed) -> Vec<Value> {
+    let (tactic, stance) = (c.tactic, c.stance);
     let s = |props: Value, required: &[&str]| json!({ "type": "object", "properties": props, "required": required });
     // (short: every word here is in Evil's context for the whole game)
     vec![
@@ -191,7 +186,7 @@ pub fn actions() -> Vec<Value> {
         json!({ "name": "doom_explore", "description": "Explore an area or a compass direction, the likeliest secret walls too; paused while you're fighting. queue_up: queue this action up next, don't override current action.", "schema": s(json!({ "target": { "type": "string" }, "queue_up": { "type": "boolean" } }), &["target"]) }),
         json!({ "name": "doom_search", "description": "Search an area or a compass direction for secrets: thorough 2 (most suspicious walls, default) or 3 (every one, slow). queue_up: queue this action up next, don't override current action.", "schema": s(json!({ "target": { "type": "string" }, "thorough": { "type": "integer", "enum": [2, 3] }, "queue_up": { "type": "boolean" } }), &["target"]) }),
         json!({ "name": "doom_exit", "description": "Leave the level. sure: even with things left.", "schema": s(json!({ "sure": { "type": "boolean" } }), &[]) }),
-        json!({ "name": "doom_fight", "description": format!("Who you fight and how: target, weapon or hold_fire for the next {TACTIC_SECONDS}s; bold, careful, avoid or steady for {STANCE_SECONDS}s (or seconds, if given). target: ref a monster id or kind, shot first. weapon: ref a gun, or auto. retreat: to cover. hold_fire / fire. bold / careful / avoid (keep clear: to get past) / steady: how you fight. auto: end this, fight as usual."), "schema": s(json!({ "do": { "type": "string", "enum": ["target", "weapon", "retreat", "hold_fire", "fire", "bold", "careful", "avoid", "steady", "auto"] }, "ref": { "type": "string" }, "seconds": { "type": "integer" } }), &["do"]) }),
+        json!({ "name": "doom_fight", "description": format!("Who you fight and how: target, weapon or hold_fire for the next {tactic:.0}s; bold, careful, avoid or steady for {stance:.0}s (or seconds, if given). target: ref a monster id or kind, shot first. weapon: ref a gun, or auto. retreat: to cover. hold_fire / fire. bold / careful / avoid (keep clear: to get past) / steady: how you fight. auto: end this, fight as usual."), "schema": s(json!({ "do": { "type": "string", "enum": ["target", "weapon", "retreat", "hold_fire", "fire", "bold", "careful", "avoid", "steady", "auto"] }, "ref": { "type": "string" }, "seconds": { "type": "integer" } }), &["do"]) }),
         json!({ "name": "doom_policy", "description": format!("Your settings, kept till you change them. Give any to change them; none to hear them all. {}{INSTINCT_HELP} hints: when you get suggestions: off, on_stall (when you're stuck) or always.", crate::control::directed::policy_help()), "schema": s(json!({ "stance": { "type": "string", "enum": ["careful", "steady", "bold", "avoid", "yolo"] }, "save": { "type": "string", "enum": ["cells", "none"] }, "risk": { "type": "string", "enum": ["careful", "normal", "bold"] }, "powerups": { "type": "string", "enum": ["need", "now"] }, "explore": { "type": "string", "enum": ["normal", "methodical", "speedy"] }, "instinct": { "type": "string", "enum": ["on", "off"] }, "hints": { "type": "string", "enum": ["off", "on_stall", "always"] } }), &[]) }),
         json!({ "name": "doom_game", "description": "The game itself, when it's yours. start: a game, when you're offered one (map; skill 1 easiest to 4 hardest; play single level or continuous). next: on to the next level from the tally screen. restart: this level from its start, after a while with nothing new.", "schema": s(json!({ "do": { "type": "string", "enum": ["start", "next", "restart"] }, "map": { "type": "string" }, "skill": { "type": "integer", "enum": [1, 2, 3, 4] }, "play": { "type": "string", "enum": ["single", "continuous"] } }), &["do"]) }),
         json!({ "name": "doom_answer", "description": "Answer a question ([ask q3] ...): id, and choice by its letter.", "schema": s(json!({ "id": { "type": "string" }, "choice": { "type": "string" } }), &["id", "choice"]) }),
@@ -224,14 +219,16 @@ const BRIEFING: &str = "You're playing Doom. Moving, fighting and taking spare h
 Ids come from doom_list; your names work as ids. \"NE 400\": north-east of you, 400 units away. (tally): counts for the items %. An action done, you carry on by instinct, not leaving the level, and you're asked what next (doom_policy instinct).";
 
 impl Session {
-    pub fn new(url: &str) -> Session {
+    pub fn new(url: &str, c: &Directed) -> Session {
+        let mut director = Director::new();
+        director.set_clocks(c);
         Session {
             link: Link::start(url),
             url: url.to_string(),
             connected: false,
             who: String::new(),
             character: Character::Unknown,
-            director: Director::new(),
+            director,
             forced: false,
             forced_question: None,
             idle_since: 0,
@@ -247,9 +244,12 @@ impl Session {
             reply: None,
             now_tic: 0,
             registered: std::collections::BTreeSet::new(),
-            idle_force: IDLE_FORCE,
-            ask_force: ASK_FORCE,
-            next_force: NEXT_FORCE,
+            idle_force: Directed::tics(c.idle_force),
+            ask_force: Directed::tics(c.ask_force),
+            next_force: Directed::tics(c.next_force),
+            after_look: Directed::tics(c.after_look),
+            status_every: Directed::tics(c.status_every),
+            moments: c.moments_a_minute,
             next_due: None,
             next_at: 0,
             instinct_hers: true,
@@ -471,8 +471,9 @@ impl Session {
                     } else {
                         // (a look, a list, her status, a setting: time to act on it, no more.
                         // One after another doesn't put off her being asked)
-                        self.idle_since =
-                            self.idle_since.max(obs.tic - self.idle_force + AFTER_LOOK);
+                        self.idle_since = self
+                            .idle_since
+                            .max(obs.tic - self.idle_force + self.after_look);
                     }
                     let (ok, msg) = self.action(agent, obs, &name, data.as_deref());
                     log.push(format!(">> {name} {}", data.as_deref().unwrap_or("")));
@@ -531,7 +532,7 @@ impl Session {
         // (her status again when what she'd act on has changed: not a shell spent, nor a
         // monster's bearing)
         let gist = self.director.status_gist(agent, obs);
-        if gist != self.told_status.1 && obs.tic - self.told_status.0 >= STATUS_EVERY {
+        if gist != self.told_status.1 && obs.tic - self.told_status.0 >= self.status_every {
             let status = self.director.status(agent, obs);
             self.tell(&status, true);
             self.told_status = (obs.tic, gist);
@@ -679,7 +680,7 @@ impl Session {
 
     /// Her actions, `doom_game` as what's offered her has it.
     fn actions(&self) -> Vec<Value> {
-        let mut all = actions();
+        let mut all = actions_timed(&self.director.clocks);
         if let (Some(c), Some(g)) = (
             &self.choices,
             all.iter_mut().find(|a| a["name"] == "doom_game"),
@@ -790,7 +791,7 @@ impl Session {
             let moment = news
                 .iter()
                 .any(|r| r.event.weight() == crate::control::directed::Weight::Moment);
-            let within = moment && self.loud.len() < MOMENTS_A_MINUTE;
+            let within = moment && self.loud.len() < self.moments;
             if within {
                 self.loud.push_back(tic);
             }

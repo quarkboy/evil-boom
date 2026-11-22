@@ -20,6 +20,7 @@ use crate::domain::{heading, norm, Observation};
 use crate::geom::{dist, Point};
 use crate::knowledge::explorer::{Ident, Kind, Objective};
 use crate::play::Agent;
+use crate::tactical::tuning::Directed;
 
 mod ask;
 mod death;
@@ -41,7 +42,7 @@ mod tactics;
 mod view;
 mod why;
 
-pub use ask::{Question, ANSWER_WAIT};
+pub use ask::Question;
 pub use events::{Event, Weight};
 pub use look::{Hints, Listing, Pick};
 pub use moments::{skill_name, Level};
@@ -240,11 +241,10 @@ enum Aim {
     Kind(&'static str),
 }
 
-/// a tactic holds this long (seconds) unless she says, and at most this long
-pub const TACTIC_SECONDS: f64 = 10.0;
+/// a tactic holds as long as the clocks say (`Directed::tactic`) unless she says, and at most
+/// this long (seconds)
 const TACTIC_MOST: f64 = 60.0;
-/// a stance, longer
-pub const STANCE_SECONDS: f64 = 30.0;
+/// a stance (`Directed::stance`), longer
 const STANCE_MOST: f64 = 180.0;
 
 /// The stances she can order, with what each puts over the tuning (the advisor's, as
@@ -527,6 +527,8 @@ pub struct Director {
     /// (None: as long as it takes)
     asking: ask::Asking,
     pub answer_wait: Option<i64>,
+    /// directed play's clocks, as the run's tuning has them (`set_clocks`)
+    pub clocks: Directed,
     /// powers running, (what, till when, told it's ending); each ammo pool last tic (`powers.rs`)
     running: Vec<(&'static str, i64, bool)>,
     pools_had: Option<[i32; 4]>,
@@ -598,13 +600,20 @@ impl Tally {
 impl Director {
     pub fn new() -> Director {
         Director {
-            answer_wait: Some(ask::ANSWER_WAIT),
+            answer_wait: Some(Directed::tics(Directed::default().answer_wait)),
             idle_auto: Some(IDLE_AUTO),
             next_due: None,
             console_name: CONSOLE_NAME.into(),
             policy_due: true,
             ..Director::default()
         }
+    }
+
+    /// The run's clocks for directed play (its tuning's `directed`); how long a question waits
+    /// with them (0: as long as it takes).
+    pub fn set_clocks(&mut self, c: &Directed) {
+        self.clocks = c.clone();
+        self.answer_wait = (c.answer_wait > 0.0).then(|| Directed::tics(c.answer_wait));
     }
 
     /// Directed play on: the explorer chooses nothing of its own from now.

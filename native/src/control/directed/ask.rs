@@ -12,20 +12,15 @@ use super::Event;
 use super::{Director, Doing, Order, Report};
 use crate::domain::Observation;
 use crate::play::Agent;
+use crate::tactical::tuning::Directed;
 
-/// at most this many questions a minute (over it, the caller does as it would unasked)
-const QUESTIONS_A_MINUTE: usize = 3;
 const MINUTE: i64 = 60 * 35;
-/// the default taken after this long (tics) with no answer, unless her policy says otherwise
-pub const ANSWER_WAIT: i64 = 8 * 35;
 /// no progress this long (tics): asked whether she's stuck
 const STUCK: i64 = 180 * 35;
 /// her goal completionist and nothing of it found this long (tics): asked whether to go on looking
 const LOOKING: i64 = 180 * 35;
 /// ...and that question open at least this long (tics): its default changes her goal
 const LOOKING_WAIT: i64 = 20 * 35;
-/// a question that can't wait: open this long (tics) for her to switch from its default
-pub(super) const NOW_OPEN: i64 = 3 * 35;
 /// a fight's turned bad below this health
 const LOW_HEALTH: f64 = 25.0;
 
@@ -143,7 +138,7 @@ impl Question {
                 self.id,
                 self.text,
                 opts.join("  "),
-                NOW_OPEN / 35
+                self.deadline.map_or(0, |d| (d - self.opened + 17) / 35)
             );
         }
         let opts: Vec<String> = self
@@ -218,7 +213,8 @@ impl Director {
                 then: Then::Stay,
             });
         }
-        let deadline = Some(obs.tic + self.answer_wait.unwrap_or(ANSWER_WAIT));
+        let wait = Directed::tics(self.clocks.answer_wait);
+        let deadline = Some(obs.tic + self.answer_wait.unwrap_or(wait));
         self.open(
             obs,
             Draft {
@@ -252,7 +248,7 @@ impl Director {
                 choices,
                 default,
                 told: false,
-                deadline: Some(obs.tic + NOW_OPEN),
+                deadline: Some(obs.tic + Directed::tics(self.clocks.now_open)),
                 about,
                 now: true,
             },
@@ -266,6 +262,7 @@ impl Director {
     /// A question opened (`d`), its line given back and told her unless it's told already;
     /// None if one's open or the minute's spent.
     fn open(&mut self, obs: &Observation, d: Draft) -> Option<String> {
+        let most = self.clocks.questions_a_minute;
         let next = d.about == About::Next;
         if !next
             && self
@@ -283,7 +280,7 @@ impl Director {
         // (the minute's few are the bot's own, so it doesn't nag: one that answers an action
         // of hers, "sure?", is hers to have whenever she asks)
         let counted = !next && !d.told;
-        if a.open.is_some() || (counted && a.asked.len() >= QUESTIONS_A_MINUTE) {
+        if a.open.is_some() || (counted && a.asked.len() >= most) {
             return None;
         }
         if counted {

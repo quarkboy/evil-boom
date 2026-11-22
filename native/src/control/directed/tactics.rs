@@ -18,6 +18,7 @@ impl Director {
         seconds: Option<f64>,
     ) -> Result<String, String> {
         self.said_in_fight();
+        let (tactic, stance_secs) = (self.clocks.tactic, self.clocks.stance);
         let hold = |default: f64, most: f64| {
             let secs = seconds.unwrap_or(default).clamp(1.0, most);
             (secs, obs.tic + (secs * 35.0) as i64)
@@ -46,7 +47,7 @@ impl Director {
                 } else {
                     return Err(format!("\"{r}\" isn't a monster or a kind of one."));
                 };
-                let (secs, until) = hold(TACTIC_SECONDS, TACTIC_MOST);
+                let (secs, until) = hold(tactic, TACTIC_MOST);
                 let said = format!("Targeting {called} first, {secs:.0} s.");
                 self.tactics.target = Some((aim, called, until));
                 Ok(said)
@@ -65,7 +66,7 @@ impl Director {
                 if gun != 0 && !obs.owned.as_ref().is_some_and(|o| o.contains(&gun)) {
                     return Err(format!("You haven't got the {}.", gun_called(gun)));
                 }
-                let (secs, until) = hold(TACTIC_SECONDS, TACTIC_MOST);
+                let (secs, until) = hold(tactic, TACTIC_MOST);
                 self.tactics.gun = Some((gun, until));
                 Ok(format!(
                     "Using the {} while it has a shot, {secs:.0} s.",
@@ -81,7 +82,7 @@ impl Director {
                 Ok("Falling back to cover.".into())
             }
             "hold_fire" => {
-                let (secs, until) = hold(TACTIC_SECONDS, TACTIC_MOST);
+                let (secs, until) = hold(tactic, TACTIC_MOST);
                 self.tactics.hold_fire = Some(until);
                 Ok(format!("Holding fire, {secs:.0} s."))
             }
@@ -111,7 +112,7 @@ impl Director {
                 let (name, over) = stance(other).ok_or(
                     "fight: target REF, weapon NAME|auto, retreat, hold_fire, fire, bold, careful, avoid, steady, auto",
                 )?;
-                let (secs, until) = hold(STANCE_SECONDS, STANCE_MOST);
+                let (secs, until) = hold(stance_secs, STANCE_MOST);
                 agent
                     .player_mut()
                     .ok_or("no fight to take a stance in")?

@@ -3716,3 +3716,23 @@ and the fight gives it up. A corner takes one side of the fan and leaves over th
 
 MAP14's eight runs: 49 such holds. The three-lives test, 544 runs, against the plasma rule
 alone: exits 293 -> 292 (MAP21, one run), 13 runs differ, none stood: level.
+
+## The Neuro layer against the SDK of 11 November, and a model that answers fast (2026-11-22)
+
+A survey of `neuro/` and `control/directed/` against the SDK's specification and best
+practices (its copy of 11 November: the dialogue messages and `silent` on a force are new
+since the plan was checked), and of the tuning against what `doom_policy` reaches. The layer
+was built for a model whose answer takes seconds. The maintainer's word: Neuro can answer in
+under half a second, one to two at worst, so the design stands and the fast paths are to be
+tried, with what's there now as the fallback. What follows is each change made of it.
+
+### Directed play's clocks are the tuning's (`directed`)
+
+How long she's waited for and how often she's put to were constants in three files
+(`session.rs`, `ask.rs`, `directed.rs`), set for a slow stand-in. They're a tuning group now,
+`directed`, in seconds: `idle_force` 6, `ask_force` 3, `next_force` 15, `after_look` 3,
+`answer_wait` 8, `now_open` 3, `questions_a_minute` 3, `moments_a_minute` 6, `status_every`
+20, `tactic` 10, `stance` 30. A `--tuning` file for a fast model and one for a slow stand-in
+differ there and nowhere else. The stream console still changes the forcing times and the
+answer wait as it runs. The values are as they were: nothing she does changes (parity: 24 of
+24 the same).

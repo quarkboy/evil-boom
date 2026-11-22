@@ -32,6 +32,7 @@ pub struct Tuning {
     pub retreat: Retreat,
     pub deaths: Deaths,
     pub hand: Hand,
+    pub directed: Directed,
 }
 
 impl Tuning {
@@ -990,6 +991,64 @@ impl Default for Deaths {
             same_goal: 96.0,
             reveal_secs: 5.0,
         }
+    }
+}
+
+/// Directed play's clocks (`control/directed`, `neuro/session.rs`): how long whoever directs her
+/// is waited for, and how often she's put to. All in seconds: they're set to the model that's
+/// answering (one that answers in half a second, one that takes ten), not to the game. The
+/// stream console changes some as it runs.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Directed {
+    /// waiting on her this long with nothing to do: a decision forced (0: never)
+    pub idle_force: f64,
+    /// a question unanswered this long: a decision forced (0: never)
+    pub ask_force: f64,
+    /// on with something by herself: asked what next at most this often (0: never)
+    pub next_force: f64,
+    /// after an action of hers that moves nothing (a look, a list): at least this long before a
+    /// decision's forced
+    pub after_look: f64,
+    /// a question's default is taken after this long with no answer (0: she's waited for)
+    pub answer_wait: f64,
+    /// a question that can't wait (its default done at once) stays open this long for her to
+    /// switch it
+    pub now_open: f64,
+    /// at most this many of the bot's own questions a minute...
+    pub questions_a_minute: usize,
+    /// ...and this many moments told aloud (past it, what isn't urgent is told silently)
+    pub moments_a_minute: usize,
+    /// her status told (silently) at most this often, when it's changed
+    pub status_every: f64,
+    /// her say in a fight holds this long unless she says (a target, a gun, holding fire)...
+    pub tactic: f64,
+    /// ...and a stance this long
+    pub stance: f64,
+}
+
+impl Default for Directed {
+    fn default() -> Self {
+        Directed {
+            idle_force: 6.0,
+            ask_force: 3.0,
+            next_force: 15.0,
+            after_look: 3.0,
+            answer_wait: 8.0,
+            now_open: 3.0,
+            questions_a_minute: 3,
+            moments_a_minute: 6,
+            status_every: 20.0,
+            tactic: 10.0,
+            stance: 30.0,
+        }
+    }
+}
+
+impl Directed {
+    /// Seconds as tics.
+    pub fn tics(secs: f64) -> i64 {
+        (secs.clamp(0.0, 3600.0) * 35.0).round() as i64
     }
 }
 

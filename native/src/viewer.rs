@@ -616,7 +616,14 @@ fn first_watch(
     watch.feed = o.directed.as_deref().map(Feed::new);
     // (the stand-in's thread, if there's one waiting: the engine is up, the environment set)
     crate::neuro::gpt::go();
-    watch.neuro = o.neuro.as_deref().map(crate::neuro::session::Session::new);
+    let clocks = Tuning::from(o.tuning.as_deref())?.directed.clone();
+    if let Some(f) = watch.feed.as_mut() {
+        f.director.set_clocks(&clocks);
+    }
+    watch.neuro = o
+        .neuro
+        .as_deref()
+        .map(|url| crate::neuro::session::Session::new(url, &clocks));
     Ok((w, watch))
 }
 
