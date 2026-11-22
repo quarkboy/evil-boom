@@ -256,7 +256,7 @@ pub fn actions_timed(c: &Directed) -> Vec<Value> {
         json!({ "name": "doom_answer", "description": "Answer a question ([ask q3] ...): id, and choice by its letter.", "schema": s(json!({ "id": { "type": "string" }, "choice": { "type": "string" } }), &["id", "choice"]) }),
         json!({ "name": "doom_pause", "description": "Pause the game, as stepping away from it: the menu comes up and nothing moves till you play on (on: false). on: true by default.", "schema": s(json!({ "on": { "type": "boolean" } }), &[]) }),
         json!({ "name": "doom_status", "description": "Your current status." }),
-        json!({ "name": "doom_goal", "description": "A standing aim, till met. It doesn't play for you: what's suggested to you, and your instinct when you leave it to that, put it first: out, completionist (100% then out: slow, asked first), key (ref: a colour or key id), kills, supplies, secrets; none to drop it.", "schema": s(json!({ "goal": { "type": "string", "enum": ["out", "completionist", "key", "kills", "supplies", "secrets", "none"] }, "ref": { "type": "string" } }), &["goal"]) }),
+        json!({ "name": "doom_goal", "description": "Two standing aims; neither plays for you: each puts what it's after first in what's suggested to you and in what you do by instinct. finish: when the level's done: out (by the first exit), kills, secrets or completionist (all of it: slow, asked first), each then out; none: you're asked. prefer: what comes first meanwhile, till it's had: health (to 100), ammo (enough for a cyberdemon), hunt (the monsters you know of), unexplored (new ground), or none. Neither given: what's set.", "schema": s(json!({ "finish": { "type": "string", "enum": ["none", "out", "kills", "secrets", "completionist"] }, "prefer": { "type": "string", "enum": ["none", "health", "ammo", "hunt", "unexplored"] } }), &[]) }),
     ]
 }
 
@@ -1472,16 +1472,30 @@ impl Session {
             // (not one of hers any more: the stream console's "Why" button asks it)
             "doom_why" => (true, self.director.why(agent, obs)),
             "doom_goal" => {
-                let Some(g) = arg("goal") else {
-                    return (
-                        false,
-                        "goal: out, completionist, key, kills, supplies, secrets or none.".into(),
-                    );
-                };
-                match self.director.set_goal(agent, obs, g, arg("ref")) {
-                    Ok(said) => (true, said),
-                    Err(why) => (false, why),
+                let mut said: Vec<String> = Vec::new();
+                if let Some(f) = arg("finish") {
+                    match self.director.set_goal(agent, obs, f) {
+                        // (completionist: asked first; what's asked is the answer)
+                        Ok(s) => said.push(s),
+                        Err(why) => return (false, why),
+                    }
                 }
+                if let Some(p) = arg("prefer") {
+                    match self.director.set_prefer(agent, obs, p) {
+                        Ok(s) => said.push(s),
+                        Err(why) => return (false, why),
+                    }
+                }
+                if said.is_empty() {
+                    return (
+                        true,
+                        match self.director.goal_label() {
+                            Some(g) => format!("Set: {g}."),
+                            None => "Nothing set: finish none, prefer none.".into(),
+                        },
+                    );
+                }
+                (true, said.join(" "))
             }
             "doom_answer" => {
                 let (Some(id), Some(choice)) = (arg("id"), arg("choice")) else {

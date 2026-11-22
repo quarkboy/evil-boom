@@ -504,8 +504,10 @@ pub struct Director {
     told_auto: String,
     /// the level's 100% told her
     told_complete: bool,
-    /// her standing aim, if she's set one (`doom_goal`)
+    /// when the level's done, if she's said (`doom_goal`'s `finish`), and what she'd have
+    /// first meanwhile (its `prefer`)
     goal: Option<goal::Goal>,
+    prefer: Option<goal::Prefer>,
     told_auto_tic: Option<i64>,
     /// on her own she found nothing more to do: not taken up again till an order's been given
     auto_spent: bool,
@@ -933,6 +935,7 @@ impl Director {
         // before isn't yet: she has the level to get through again)
         let everything =
             self.goal == Some(goal::Goal::Completionist) && agent.x().exit_seen_this_life();
+        let preferred = self.preferred_things(obs);
         agent.x_mut().spares = obs
             .things
             .iter()
@@ -941,6 +944,8 @@ impl Director {
             // at 200 is still one of the level's items)
             .filter(|t| {
                 spare(t.name, obs)
+                    // (what she prefers, health or ammo: hers to have gone for, wanted or not)
+                    || preferred.contains(&t.id)
                     || (everything
                         && crate::knowledge::completion::Completionist::counted(t.name, obs))
             })

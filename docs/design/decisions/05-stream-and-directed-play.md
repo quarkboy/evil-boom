@@ -3941,3 +3941,31 @@ only) and `doom_exit`. The question does it for one round trip, once a level, an
 in a second. Gone from both. `doom_exit` has no parameters ("Leave the level by the nearest
 exit"); an exit as `doom_go`'s `ref` stays, the only way to choose between two (a secret
 exit). `thorough`, `sweep` and `search` are read as `explore` (`repair.rs`).
+
+### `doom_goal` is two things: when the level's done, and what comes first
+
+The maintainer's reading: `key` and `supplies` were errands among aims of another kind, the
+conditions for leaving a level. So the action does double duty, said as such.
+
+**`finish`** (standing, across levels): `none` (instinct never leaves; she's asked when
+nothing's left), `out`, `kills`, `secrets`, `completionist`. `kills` and `secrets` end in
+leaving now, as `completionist` did: "Everything here is dead: leaving." The `key` goal is
+gone (keys rank high as it is: the maintainer's), and `supplies` is no longer hers to set (it's
+still what "stock up first?" answers with).
+
+**`prefer`** (the maintainer's list): what instinct and the suggestions put first, a boost to
+their ranking and nothing more, till it's had or the level ends:
+
+- `health`: health that would add anything (stimpacks, medikits, bonuses; the spheres stay
+  her `powerups`), as she goes for it when hurt. Over at 100.
+- `ammo`: ammo she has room for, as when she's short. Over when what she holds, the BFG left
+  out, would kill a cyberdemon by the fight's own count of what her ammo's worth
+  (`Combat::ammo_short_for`: each kind with the best gun she has for it).
+- `hunt`: the monsters she knows of. Over when none is left alive.
+- `unexplored`: new ground, before pickups, doors and switches. Over when none she has a way to
+  is left. (Her `explore: speedy` is about never going back; this only reorders.)
+
+One already had isn't set, and says why. The explorer's `Focus` carries it (`Things`, with
+the pickups meant, and `Unexplored` are new; `Keys` is gone), sorted first where a goal's was.
+Nothing's set by default, so the bot alone is as it was: parity 24 of 24. How well each plays
+isn't measured: they're hers to try.

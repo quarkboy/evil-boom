@@ -269,10 +269,13 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
           <div class="row" style="align-items:center"><b id="ev-goal" style="flex:1">none</b></div>
           <div class="row">
             <select id="ev-goalsel" style="width:auto">
-              <option value="out">out</option><option value="completionist">completionist</option><option value="key">key</option>
-              <option value="kills">kills</option><option value="supplies">supplies</option><option value="secrets">secrets</option>
+              <option value="out">out</option><option value="kills">kills</option><option value="secrets">secrets</option>
+              <option value="completionist">completionist</option>
             </select>
-            <input id="ev-goalref" placeholder="colour (key)" style="width:9em">
+            <select id="ev-goalref" style="width:auto" title="What comes first meanwhile, this level.">
+              <option value="">prefer…</option><option value="health">health</option><option value="ammo">ammo</option>
+              <option value="hunt">hunt</option><option value="unexplored">unexplored</option><option value="none">none</option>
+            </select>
             <button id="ev-goalset">Set</button><button id="ev-goaldrop">Drop</button>
           </div>
         </div>
@@ -753,10 +756,10 @@ $("e-order").onclick = () => {
 };
 for (const b of $("evilcard").querySelectorAll("[data-q]")) b.onclick = () => order(b.dataset.q, b.dataset.d ? JSON.parse(b.dataset.d) : null);
 $("ev-goalset").onclick = () => {
-  const g = $("ev-goalsel").value, r = $("ev-goalref").value.trim();
-  order("doom_goal", r && g === "key" ? { goal: g, ref: r } : { goal: g });
+  const g = $("ev-goalsel").value, r = $("ev-goalref").value;
+  order("doom_goal", r ? { finish: g, prefer: r } : { finish: g });
 };
-$("ev-goaldrop").onclick = () => order("doom_goal", { goal: "none" });
+$("ev-goaldrop").onclick = () => order("doom_goal", { finish: "none", prefer: "none" });
 for (const el of $("evilcard").querySelectorAll("[data-p]")) el.addEventListener("change", () => { setsDirty = true; });
 for (const id of ["ev-fidle", "ev-fask", "ev-fnext", "ev-fwait", "ev-finst", "ev-fquiet"]) $(id).addEventListener("input", () => { forceDirty = true; });
 $("ev-forceapply").onclick = async () => {

@@ -196,8 +196,13 @@ pub fn command(
         Some("status") => Ok(vec![d.status(agent, obs)]),
         Some("why") => Ok(d.why(agent, obs).lines().map(str::to_string).collect()),
         Some("goal") => match w.get(1) {
-            Some(g) => d.set_goal(agent, obs, g, w.get(2).copied()).map(|s| vec![s]),
-            None => Err("goal out|completionist|key [colour]|kills|supplies|secrets|none".into()),
+            // (`goal prefer WHAT`: what comes first meanwhile; else when the level's done)
+            Some(&"prefer") => match w.get(2) {
+                Some(p) => d.set_prefer(agent, obs, p).map(|s| vec![s]),
+                None => Err("goal prefer health|ammo|hunt|unexplored|none".into()),
+            },
+            Some(g) => d.set_goal(agent, obs, g).map(|s| vec![s]),
+            None => Err("goal out|kills|secrets|completionist|none, or goal prefer ...".into()),
         },
         Some("check") => {
             let risky = w.last() == Some(&"risky");

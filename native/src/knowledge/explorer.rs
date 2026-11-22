@@ -511,30 +511,34 @@ pub enum GoingBack {
     Never,
 }
 
-/// On instinct for whoever directs her, a goal of theirs: which objectives come first.
+/// On instinct for whoever directs her, what they'd have first (a goal of theirs, or what
+/// they've said to prefer): which objectives come before the rest.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Focus {
     #[default]
     None,
-    /// keys, the one wanted or any
-    Keys,
     /// what's left alive
     Kills,
     /// walls to search
     Secrets,
     /// things to pick up
     Supplies,
+    /// these things, of those to pick up (`Explorer::focus_things`: health, or ammo)
+    Things,
+    /// ground not yet seen
+    Unexplored,
 }
 
 impl Focus {
-    /// Is o what the goal's after?
-    pub fn wants(self, o: &Objective) -> bool {
+    /// Is o what's wanted first? (`things`: the pickups meant, for `Things`.)
+    pub fn wants(self, o: &Objective, things: &BTreeSet<i32>) -> bool {
         match self {
             Focus::None => false,
-            Focus::Keys => o.kind == Kind::Key,
             Focus::Kills => o.kind == Kind::Hunt,
             Focus::Secrets => matches!(o.kind, Kind::Wall | Kind::Secret),
             Focus::Supplies => o.kind == Kind::Item,
+            Focus::Things => o.kind == Kind::Item && o.thing.is_some_and(|t| things.contains(&t)),
+            Focus::Unexplored => matches!(o.kind, Kind::Frontier | Kind::Room | Kind::Visit),
         }
     }
 }
@@ -737,6 +741,8 @@ pub struct Explorer {
     pub secret_search: bool,
     /// on instinct for whoever directs her, what a goal of theirs puts first
     pub focus: Focus,
+    /// ...and for `Focus::Things`, which pickups
+    pub focus_things: BTreeSet<i32>,
     /// (while choosing, on instinct for whoever directs her) only new ground offered: going back
     /// over what she's done left out, so new ground the risky way comes before it
     new_ground_only: bool,
@@ -938,6 +944,7 @@ impl Explorer {
             new_ground_only: false,
             secret_search: false,
             focus: Focus::None,
+            focus_things: BTreeSet::new(),
             resort_wanted: None,
             stuck_retried: None,
             lapsing_jumps: (BTreeSet::new(), 0),

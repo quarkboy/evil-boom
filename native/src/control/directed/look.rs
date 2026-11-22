@@ -81,14 +81,16 @@ impl Director {
         }
         // (her goal: the way out first where that's it; else what it's after, in the order the
         // explorer had them)
-        let focus = self.goal.as_ref().map(super::goal::Goal::focus);
+        let focus =
+            Some(self.focus_now()).filter(|f| *f != crate::knowledge::explorer::Focus::None);
+        let things = self.preferred_things(obs);
         if self.goal == Some(super::goal::Goal::Out)
             && let Some(e) = open.iter().find(|o| o.kind == Kind::Exit)
         {
             return Some(self.pick_of(agent, obs, e, "your goal: the way out".into()));
         }
         if let Some(f) = focus {
-            open.sort_by_key(|o| !f.wants(o));
+            open.sort_by_key(|o| !f.wants(o, &things));
         }
         // (not a pickup she takes by herself on the way or while she waits: nothing to choose;
         // nor a wall to search with every secret found)
@@ -98,7 +100,11 @@ impl Director {
             .iter()
             .filter(|o| !matches!(o.kind, Kind::Exit | Kind::Barrel))
             .filter(|o| !(secrets_done && matches!(o.kind, Kind::Wall | Kind::Secret)))
-            .filter(|o| o.thing.is_none_or(|t| !spares.contains(&t)))
+            // (...unless it's what she's said to prefer: then it's the choice)
+            .filter(|o| {
+                o.thing
+                    .is_none_or(|t| !spares.contains(&t) || things.contains(&t))
+            })
             .take(PICK_TRIES)
             .find(|o| agent.x_mut().route_to(o, obs).is_some());
         // (another look somewhere is the least of what's left: a way out she knows comes first)
@@ -106,8 +112,14 @@ impl Director {
         match choice {
             Some(o) if o.kind == Kind::Recheck && exit.is_some() => exit
                 .map(|e| self.pick_of(agent, obs, e, "the way out: only another look left".into())),
-            Some(o) if focus.is_some_and(|f| f.wants(o)) => {
-                Some(self.pick_of(agent, obs, o, format!("your goal: {}", why(o))))
+            Some(o) if focus.is_some_and(|f| f.wants(o, &things)) => {
+                // (by which of the two: what she prefers, or what her goal's after)
+                let whose = if self.prefers() {
+                    "you prefer"
+                } else {
+                    "your goal"
+                };
+                Some(self.pick_of(agent, obs, o, format!("{whose}: {}", why(o))))
             }
             Some(o) => Some(self.pick_of(agent, obs, o, why(o))),
             // (nothing else she has a way to: the way out, if she knows one)

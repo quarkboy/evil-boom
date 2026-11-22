@@ -1618,7 +1618,8 @@ impl Explorer {
         // (a goal of whoever directs her: what it's after first, on instinct for them)
         if !self.directed && self.resorts.is_some() && self.focus != Focus::None {
             let focus = self.focus;
-            weighed.sort_by_key(|(_, o)| !focus.wants(o));
+            let things = &self.focus_things;
+            weighed.sort_by_key(|(_, o)| !focus.wants(o, things));
         }
         if self
             .debug_tics

@@ -544,7 +544,7 @@ impl Director {
             }),
             Then::Instinct => self.on_instinct(agent, obs),
             Then::Goal(what) => {
-                let line = self.goal_to(agent, obs, what, None).unwrap_or_else(|e| e);
+                let line = self.goal_to(agent, what).unwrap_or_else(|e| e);
                 self.tell(obs, Event::Outcome, line);
             }
             Then::Restart => self.restart_wanted = self.restart_allowed,
