@@ -1265,7 +1265,8 @@ impl Director {
     }
 }
 
-/// What she has: "Health 100, armor 0; fist, pistol; 50 bullets; no keys".
+/// What she has: "Health 100, armor 0; pistol; 50/200 bullets; no keys" (each pool with the
+/// most it holds, a backpack's doubling in it).
 fn kit(obs: &Observation) -> String {
     // (every gun she has, the plain shotgun and the super apart; the fist only as a berserk's)
     let mut weapons: Vec<&str> = Vec::new();
@@ -1277,6 +1278,7 @@ fn kit(obs: &Observation) -> String {
             weapons.push(gun_called(gun));
         }
     }
+    let packed = obs.backpack == Some(true);
     let pools: Vec<String> = POOLS
         .iter()
         .filter_map(|&(slot, what)| {
@@ -1286,7 +1288,8 @@ fn kit(obs: &Observation) -> String {
                 .flatten()
                 .find(|(s, _)| *s == slot)
                 .map_or(0, |(_, n)| *n);
-            (n > 0).then(|| format!("{n} {what}"))
+            let most = crate::bestiary::ammo_max(slot) * if packed { 2.0 } else { 1.0 };
+            (n > 0).then(|| format!("{n}/{most:.0} {what}"))
         })
         .collect();
     let keys: Vec<&str> = obs.keys.unwrap_or_default().iter().map(key_name).collect();
