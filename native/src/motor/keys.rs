@@ -27,7 +27,42 @@
 //! what a demo is a list of.
 
 use crate::domain::Controls;
-use crate::tactical::tuning::Hand;
+use serde::{Deserialize, Serialize};
+
+/// Her hand on the keys (`--keys`): how fast it presses. Part of the tuning (`Tuning::hand`,
+/// `hand` in a `--tuning` file); it lives here because the motor can't name the layer above it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Hand {
+    /// a move key pressed stays down this many tics at least (2: a quick tap, 57 ms)...
+    pub press: i64,
+    /// ...and one let go stays up this many before it's pressed again (a tap and its gap are
+    /// five tics: seven taps a second at the very most)
+    pub gap: i64,
+    /// run pressed or let go stays so this many (it's held as a rule, let go to walk)
+    pub run_hold: i64,
+    /// what a key's change costs against how near the push is to what's asked (in units of
+    /// push): under this much nearer, the keys stay as they are
+    pub change_cost: f64,
+    /// what was asked and no key gave is owed, this share of it kept from tic to tic...
+    pub carry: f64,
+    /// ...up to this much either way (in pushes: three tics of a run is 150), and asked for
+    /// again a share a tic over a press's length
+    pub owed: f64,
+}
+
+impl Default for Hand {
+    fn default() -> Self {
+        Hand {
+            press: 2,
+            gap: 3,
+            run_hold: 8,
+            change_cost: 6.0,
+            carry: 0.85,
+            owed: 150.0,
+        }
+    }
+}
 
 /// The game's pushes for the keys: forward or back at a walk and a run, sideways the same
 /// (`forwardmove[2]` and `sidemove[2]`, g_game.c).
