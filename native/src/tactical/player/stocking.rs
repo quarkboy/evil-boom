@@ -149,8 +149,8 @@ impl Fight {
             // How much it's needed (0: not at all, 1: badly).
             let mut need = 0.0;
             let invulnerability = t.name == "InvulnerabilitySphere"
-                && self.wants_invulnerability(obs)
-                && self.clear_way_to(obs, (t.x, t.y));
+                && self.wants_invulnerability(obs, (t.x, t.y))
+                && self.clear_dash_to(obs, (t.x, t.y));
             if invulnerability || (weapon_item(t.name).is_some() && Self::new_gun(obs, t.name)) {
                 need = 1.0;
             } else if let Some(slot) = weapon_item(t.name).filter(|&s| s != 1) {

@@ -736,6 +736,17 @@ pub struct Errands {
     /// a key counts as this much further with only the pistol and a better gun to go for
     /// (4: no nearer than anything else, undoing what being a key takes off its way)
     pub key_unarmed: f64,
+    /// invulnerability is for a fight she'd reach from the sphere in this many seconds at
+    /// most, of its thirty, the way reckoned as this many times the straight line
+    pub sphere_secs: f64,
+    pub sphere_detour: f64,
+    /// invulnerable, what it's for counts as this much of its way: first, whatever else is near
+    pub sphere_first: f64,
+    /// fetching the sphere before doing again what she died after doing: given this long (s)
+    /// to have it before she goes on without
+    pub sphere_wait: f64,
+    /// a sphere this near is run for through whatever's by the way
+    pub sphere_dash: f64,
 }
 
 impl Default for Errands {
@@ -766,6 +777,11 @@ impl Default for Errands {
             armor_outmatched: 50.0,
             spare_ammo: 0.5,
             key_unarmed: 4.0,
+            sphere_secs: 15.0,
+            sphere_detour: 1.6,
+            sphere_first: 0.05,
+            sphere_wait: 60.0,
+            sphere_dash: 384.0,
             invulnerability_now: false,
         }
     }
@@ -931,6 +947,9 @@ pub struct Deaths {
     pub death_zone_urgent: usize,
     /// a goal this near where she died going for the same kind of thing is the same
     pub same_goal: f64,
+    /// a line she set off this long (s) or less before the worst of what killed her came into
+    /// sight is what brought it on (`Death::action`)
+    pub reveal_secs: f64,
 }
 
 impl Default for Deaths {
@@ -942,6 +961,7 @@ impl Default for Deaths {
             death_zone_count: 2,
             death_zone_urgent: 3,
             same_goal: 96.0,
+            reveal_secs: 5.0,
         }
     }
 }

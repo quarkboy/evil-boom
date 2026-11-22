@@ -3443,3 +3443,47 @@ the same 544): exits 295 -> 295 (9 runs more, 9 less; MAP27 -2), lives lost a ru
 1.101, 529 s -> 542 s, and two runs stood the hour that didn't (E4M6 HMP 1008128369, MAP06
 HMP 854202743). So its five exits on the other build are within what one set of seeds
 tells; the stands are what to look at.
+
+## Invulnerability kept for the fight that killed her (2026-11-21)
+
+The maintainer's idea, from MAP27: on a later life she knows where the sphere is and where
+the arch-vile is; get the one, then go to the other. She used to take a sphere whenever
+something dangerous was awake anywhere, and then walk off with it to a box of shells.
+
+What she does now (`Fight::sphere_use`, `sphere_death`, `Player::revealed_by`):
+
+- **A death remembers what brought it on.** Of what she had in sight in her last ten
+  seconds, the one that matters most (`Monster::threat`), and the last line she set off
+  (a switch, a door, a line walked over) no more than five seconds before she first saw
+  it (`deaths.reveal_secs`). MAP27: "use line 149", the bookcase door, the arch-vile seen
+  four tics after.
+- **The sphere is for that.** Of her deaths this level that a sphere would have mended
+  (not want of a gun, nor a floor), the one behind whose line the worst thing stood; she
+  doesn't take a sphere for anything else meanwhile, unless outmatched or surrounded with
+  them in sight.
+- **Fetched as her way turns to it.** When the route she's on will set that line off
+  again (a step's line, or a door it opens that the line moves), and she knows a sphere
+  within fifteen seconds' run of it (`errands.sphere_secs`), the sphere comes first; once
+  a life, and given a minute.
+- **Then straight there.** With it on she goes to the line, the route keeping her legs
+  through whatever's between, shooting only what's ahead: its thirty seconds aren't for
+  them. There, it's done with for this life.
+- **A sphere a dash away** (`errands.sphere_dash`) is run for through what's by it, with
+  no falling back on the way, and is worth being shut in for: for the sphere a level puts
+  in the room with what it's for.
+
+Tried on the way and dropped: fetching it only when near the line (MAP27's library door
+doesn't open from inside: she stood at it till the errand timed out); going by the errand
+she had when she died (the door is a step inside "pick up YELLOW_SKULL", never an errand);
+taking the latest death (a chaingunner's door, and the sphere spent on that).
+
+MAP27, the test's eight runs: with three lives none out either way, but half the level
+seen in four runs where it was none, the arch-vile dead in three within 5 to 22 s of the
+door; with six lives, out 2 of 8 for 1, and over half seen in 7 for 2. Not yet good: the
+sphere inside the arch-vile's room has a hell knight between it and the door, and the one
+dash for it seen ended in 1.7 s.
+
+The three-lives test, 544 runs: exits 284 -> 286 (6 runs more, 4 less), lives lost a run
+1.107 -> 1.103, damage 0.768 -> 0.767, 536 s -> 530 s, stood the hour 2 -> 1. 73 runs
+differ, on the levels with spheres: MAP27's lines seen 0.28 -> 0.43, MAP21 and MAP10 an
+exit more each, MAP28 one less.

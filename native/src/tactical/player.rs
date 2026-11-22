@@ -57,6 +57,10 @@ const HEAVIES: [&str; 7] = [
 ];
 /// units a second she gets along a route, about (turns, doors, lifts)
 const RUN_SPEED: f64 = 400.0;
+/// this near what the invulnerability's for, she's there
+const ARRIVED: f64 = 96.0;
+/// what she's had in sight this lately (tics) is what was on her when she died
+const RECENT_TICS: i64 = 10 * 35;
 /// the trail back: a place every this far, at most this many
 const TRAIL_STEP: f64 = 48.0;
 const TRAIL_LEN: usize = 96;
@@ -99,6 +103,8 @@ struct Fight {
     pending_log: Vec<String>,
     /// better guns she's turned aside for already
     offered: BTreeSet<i32>,
+    /// ...the spheres among them, this life (one left lying in a life before is to be had again)
+    offered_spheres: BTreeSet<i32>,
     present: BTreeSet<i32>,
     /// hunts that got her to where she was going with nothing to show for it: (the monster,
     /// the spot, whole units). Not gone to again: it's somewhere she can't get at from there
@@ -114,6 +120,17 @@ struct Fight {
     /// a better gun than she has is among what she could go for now: one lying where she can
     /// get to, or carried by something she can (`supplies`)
     gun_to_have: bool,
+    /// invulnerable, and what it's to be spent on (where, and what she calls it): gone for
+    /// before anything else while it lasts (`sphere_use`, chosen as it's picked up)
+    charge: Option<(Point, String)>,
+    /// ...chosen for this sphere already (once a pickup)
+    charged: bool,
+    /// about to do again what she died after doing: the sphere first, from this tic (given up
+    /// after `errands.sphere_wait`, and not tried twice a life)
+    sphere_first: Option<i64>,
+    sphere_tried: bool,
+    /// where she's been this life of the places a sphere would be for: done with, this life
+    answered: Vec<Point>,
     /// the polys not yet seen of the sectors such guns lie in
     toward_gun: BTreeSet<i64>,
 }
@@ -150,6 +167,10 @@ struct Death {
     goal: Point,
     label: String,
     why: Cause,
+    /// what she set off just before the worst of what was on her came into sight (a switch, a
+    /// door, a line walked over: `deaths.reveal_secs`): its line, where it is, what it's
+    /// called, the sectors it moves. Doing it again is what brings them on again.
+    action: Option<(usize, Point, String, Vec<usize>, f64)>,
 }
 
 /// What things were like for her a moment ago (what killed her, at a restart).
@@ -326,6 +347,7 @@ impl Player {
                 tune: Rc::clone(&tune),
                 pending_log: Vec::new(),
                 offered: BTreeSet::new(),
+                offered_spheres: BTreeSet::new(),
                 present: BTreeSet::new(),
                 hunted_spots: BTreeSet::new(),
                 completion: None,
@@ -333,6 +355,11 @@ impl Player {
                 rethink: false,
                 gun_out_of_reach: false,
                 gun_to_have: false,
+                charge: None,
+                charged: false,
+                sphere_first: None,
+                sphere_tried: false,
+                answered: Vec::new(),
                 toward_gun: BTreeSet::new(),
             },
             retreat: None,
@@ -695,11 +722,53 @@ impl Player {
         self.trail.clear();
         self.fallen_for.clear();
         self.fight.hunted_spots.clear();
+        (self.fight.sphere_first, self.fight.sphere_tried) = (None, false);
+        self.fight.answered.clear();
+        self.fight.offered_spheres.clear();
     }
 
     /// The level known beforehand: its monsters, where they stand at the start.
     pub fn know_monsters(&mut self, obs: &Observation) {
         self.fight.combat.know_monsters(obs);
+    }
+
+    /// What she set off just before the worst of what's on her came into sight, if anything
+    /// (`Death::action`): of what she's had in sight these last seconds and first saw this
+    /// life, the one that matters most (`Monster::threat`), and the last line she fired no
+    /// more than `deaths.reveal_secs` before she first saw it.
+    fn revealed_by(&self) -> Option<(usize, Point, String, Vec<usize>, f64)> {
+        let now = self.fight.combat.now.tic;
+        let worst = self
+            .fight
+            .combat
+            .remaining()
+            .into_iter()
+            .filter(|s| !s.foreknown && now - s.sighted < RECENT_TICS)
+            .max_by(|a, b| {
+                let threat = |s: &Seen| monster(s.name).map_or(0.0, |m| m.threat);
+                threat(a).total_cmp(&threat(b)).then(b.first.cmp(&a.first))
+            })?;
+        let k = &self.explorer.knowledge;
+        let window = (self.fight.tune.deaths.reveal_secs * 35.0) as i64;
+        let fired =
+            k.fired.iter().rev().find(|f| {
+                f.life == k.lives && f.tic <= worst.first && worst.first - f.tic <= window
+            })?;
+        let nav = &self.explorer.nav;
+        let (a, b) = nav.map.line_seg(fired.line);
+        let sectors = nav
+            .triggers
+            .iter()
+            .filter(|t| t.linedef() == Some(fired.line))
+            .flat_map(|t| t.effects.iter().map(|(s, _)| *s))
+            .collect();
+        Some((
+            fired.line,
+            ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0),
+            format!("line {} ({})", fired.line, worst.name),
+            sectors,
+            monster(worst.name).map_or(0.0, |m| m.threat),
+        ))
     }
 
     /// Dead, and the level again: what killed her noted, then as any level begun again
@@ -714,6 +783,7 @@ impl Player {
                 goal: cur.goal,
                 label: cur.label.clone(),
                 why: self.plight.why(self.fight.tune.deaths.blast_hit),
+                action: self.revealed_by(),
             };
             self.explorer.log.push(format!(
                 "  [fight] died at ({:.0}, {:.0}) going for: {} ({})",
@@ -826,12 +896,18 @@ impl Player {
         // only shoots.
         let free = matches!(icon, Some(boss::Turn::Free(_)));
         let stay = matches!(icon, Some(boss::Turn::Stay(_)));
+        // ...as on the last dash to a sphere: nothing she could do instead is worth more than
+        // having it a second sooner. No falling back, no cover, no standing to shoot.
         let busy = (icon.is_some() && !free)
             || self
                 .explorer
                 .follower
                 .as_ref()
-                .is_some_and(|f| f.jumping() || f.crossing_crusher());
+                .is_some_and(|f| f.jumping() || f.crossing_crusher())
+            || self.fight.dashing(&self.explorer, obs)
+            // ...and with the sphere on, on her way to what it's for: straight there, through
+            // whatever's between, shooting only what's ahead. Its seconds aren't for them.
+            || (self.fight.charge.is_some() && self.fight.combat.now.invulnerable);
         let (errand, toward) = if busy {
             (String::new(), None)
         } else {
@@ -1140,7 +1216,7 @@ impl Fight {
     /// The way to p (as the crow flies) isn't past anything about that she can't take on: a run
     /// for the invulnerability doesn't go straight through what it's for. Till it has moved off
     /// the line, she keeps clear.
-    fn clear_way_to(&self, obs: &Observation, p: Point) -> bool {
+    pub(super) fn clear_way_to(&self, obs: &Observation, p: Point) -> bool {
         let pos = obs.pos();
         self.combat
             .remaining()
@@ -1155,6 +1231,27 @@ impl Fight {
                 segment_point_distance(pos, p, s.pos())
                     > self.tune.errands.way_clear + monster(s.name).map_or(20.0, |m| m.radius)
             })
+    }
+
+    /// On her way to a sphere and no more than a dash from it (`errands.sphere_dash`).
+    fn dashing(&self, x: &Explorer, obs: &Observation) -> bool {
+        !self.combat.now.invulnerable
+            && x.current.as_ref().is_some_and(|cur| {
+                dist(obs.pos(), cur.goal) < self.tune.errands.sphere_dash
+                    && cur
+                        .thing
+                        .and_then(|id| obs.things.iter().flatten().find(|t| t.id == id))
+                        .is_some_and(|t| t.name == "InvulnerabilitySphere")
+            })
+    }
+
+    /// A sphere's way: clear as above, or the sphere no more than a dash off
+    /// (`errands.sphere_dash`). She has it before what's by the way has done much, and then
+    /// nothing it does matters: a sphere put in the room with what it's for is run for
+    /// through them. (Doom II MAP27: the library's arch-vile and three hell knights behind a
+    /// door, the sphere two hundred units inside it and left lying, the way to it "not clear".)
+    pub(super) fn clear_dash_to(&self, obs: &Observation, p: Point) -> bool {
+        dist(obs.pos(), p) < self.tune.errands.sphere_dash || self.clear_way_to(obs, p)
     }
 
     /// The way to the ammo or gun at p, armed with it (`obs`): clear as above, and all of what's
@@ -1178,23 +1275,81 @@ impl Fight {
 
     /// Invulnerability worth taking now: a fight that needs it, or her policy taking it as it
     /// comes (`errands.invulnerability_now`).
-    fn wants_invulnerability(&self, obs: &Observation) -> bool {
-        self.tune.errands.invulnerability_now || self.needs_invulnerability(obs)
+    pub(super) fn wants_invulnerability(&self, obs: &Observation, sphere: Point) -> bool {
+        self.tune.errands.invulnerability_now
+            // (with them in sight: how things stood when she last died isn't how they stand)
+            || (!self.combat.visible.is_empty()
+                && (self.combat.now.outmatched || self.combat.now.surrounded))
+            || self.sphere_use(obs, Some(sphere)).is_some()
     }
 
-    /// Something about she can't take on (awake, known), or what's about her too much together
-    /// (outmatched, or round her on several sides): invulnerability's for that.
-    fn needs_invulnerability(&self, obs: &Observation) -> bool {
-        // One of them too much for her, or all that's about her together: a ring of weak ones is
-        // each nothing and together what the sphere is for.
-        self.combat.now.outmatched
-            || self.combat.now.surrounded
-            || self.combat.remaining().iter().any(|s| {
-                s.awake
-                    && self
-                        .combat
-                        .too_much(obs, &[s.name], self.tune.engage.leave_be)
+    /// The death a sphere is for: of those it would have mended (not want of a gun, nor a
+    /// floor) whose place she hasn't been back to this life, the one that followed on
+    /// something she set off with the worst thing behind it; with none such, the latest.
+    fn sphere_death(&self) -> Option<&Death> {
+        let open = |d: &&Death| {
+            let at = d.action.as_ref().map_or(d.goal, |a| a.1);
+            !matches!(d.why, Cause::Unarmed | Cause::HurtingFloor)
+                && !self
+                    .answered
+                    .iter()
+                    .any(|a| dist(*a, at) < self.tune.deaths.same_goal)
+        };
+        let threat = |d: &Death| d.action.as_ref().map_or(-1.0, |a| a.4);
+        self.deaths
+            .iter()
+            .filter(open)
+            // (the latest of the worst: `max_by` keeps the last of equals)
+            .max_by(|a, b| threat(a).total_cmp(&threat(b)))
+    }
+
+    /// What invulnerability would be for, and where: what she last died going for, to what
+    /// was there (not a floor, a blast or want of a gun: thirty seconds mend none of those);
+    /// else the nearest thing awake that she can't take on. From `sphere`, only what she'd get
+    /// to with most of the thirty seconds left (`errands.sphere_secs`, the way reckoned as the
+    /// straight line and `sphere_detour` times it): a sphere the far side of the level from
+    /// the fight isn't for it.
+    pub(super) fn sphere_use(
+        &self,
+        obs: &Observation,
+        sphere: Option<Point>,
+    ) -> Option<(Point, String)> {
+        let e = &self.tune.errands;
+        let in_time = |at: Point| {
+            sphere.is_none_or(|s| dist(s, at) * e.sphere_detour / RUN_SPEED <= e.sphere_secs)
+        };
+        let died = self
+            .sphere_death()
+            // (died after something she did on purpose: it's for doing that again, and kept
+            // till she's about to, `sphere_first`; what's before it is fought as it comes)
+            .filter(|d| d.action.is_none() || self.sphere_first.is_some() || sphere.is_none())
+            .map(|d| match &d.action {
+                Some((_, at, what, _, _)) => (*at, what.clone()),
+                None => (d.goal, d.label.clone()),
             })
+            .filter(|(at, _)| in_time(*at));
+        // (kept for what she died after doing: not spent on whatever else is about meanwhile)
+        let kept = sphere.is_some()
+            && self.sphere_first.is_none()
+            && self.sphere_death().is_some_and(|d| d.action.is_some());
+        if kept {
+            return None;
+        }
+        died.or_else(|| {
+            let from = sphere.unwrap_or(obs.pos());
+            self.combat
+                .remaining()
+                .iter()
+                .filter(|s| {
+                    s.awake
+                        && in_time(s.pos())
+                        && self
+                            .combat
+                            .too_much(obs, &[s.name], self.tune.engage.leave_be)
+                })
+                .min_by(|a, b| dist(a.pos(), from).total_cmp(&dist(b.pos(), from)))
+                .map(|s| (s.pos(), format!("{} {}", s.name, s.id)))
+        })
     }
 
     /// Barrels she's seen, near, with nothing in sight and the ammo for it: each to be shot from
@@ -1372,9 +1527,12 @@ impl Hooks for Fight {
         else {
             return false;
         };
-        obj.urgent
-            && (ammo_item(t.name).is_some() || weapon_item(t.name).is_some())
-            && self.combat.now.short_of_ammo
+        // (and the sphere a level puts in with what it's for: shut in there with them is
+        // where it's wanted)
+        (t.name == "InvulnerabilitySphere" && self.wants_invulnerability(obs, (t.x, t.y)))
+            || (obj.urgent
+                && (ammo_item(t.name).is_some() || weapon_item(t.name).is_some())
+                && self.combat.now.short_of_ammo)
     }
 
     /// Items she could use now; with --complete, every counted item she's seen too.
@@ -1408,6 +1566,16 @@ impl Hooks for Fight {
             .collect();
         let mut out = self.supplies(x, obs, reach, pos);
         out.extend(self.barrels(x, obs, pos));
+        if let Some((at, what)) = self.charge.clone().filter(|_| self.combat.now.invulnerable) {
+            let mut o = Objective::new(
+                Kind::Visit,
+                x.stand_spot_for(at, reach),
+                format!("back with the invulnerability ({what})"),
+            );
+            o.urgent = true;
+            o.needed = true;
+            out.push(o);
+        }
         if let Some(c) = &mut self.completion {
             for o in c.wanted(x, obs, reach, pos) {
                 if !out.iter().any(|w| w.thing.is_some() && w.thing == o.thing) {
@@ -1510,10 +1678,23 @@ impl Hooks for Fight {
             .and_then(|id| obs.things.iter().flatten().find(|t| t.id == id))
             .is_some_and(|t| t.name == "InvulnerabilitySphere")
         {
-            return !self.wants_invulnerability(obs);
+            return !self.wants_invulnerability(obs, obj.goal);
         }
         if self.combat.now.invulnerable {
             return false; // (nothing can hurt her: the risky ones now)
+        }
+        // What she died after doing waits while she fetches the sphere for it.
+        if self.sphere_first.is_some()
+            && let Some(li) = obj
+                .trigger
+                .as_ref()
+                .and_then(crate::navigator::TriggerLine::linedef)
+            && self
+                .deaths
+                .iter()
+                .any(|d| d.action.as_ref().is_some_and(|a| a.0 == li))
+        {
+            return true;
         }
         // Died going for it: not first again; twice, not at all. Likewise a place she has died at
         // again and again, whatever for.
@@ -1564,6 +1745,22 @@ impl Hooks for Fight {
         if obj.kind == Kind::Frontier && !obj.reveals.is_disjoint(&self.toward_gun) {
             return self.tune.errands.switch_for_gun;
         }
+        // Fetching the sphere for what she's about to do: the sphere before anything.
+        if self.sphere_first.is_some()
+            && obj
+                .thing
+                .and_then(|id| obs.things.iter().flatten().find(|t| t.id == id))
+                .is_some_and(|t| t.name == "InvulnerabilitySphere")
+        {
+            return self.tune.errands.sphere_first;
+        }
+        // Invulnerable and off to what it's for: that, and what's to be done there, before
+        // anything else, however far beside the rest.
+        if let Some((at, _)) = &self.charge
+            && dist(obj.goal, *at) < self.tune.deaths.same_goal
+        {
+            return self.tune.errands.sphere_first;
+        }
         // With only the pistol and a better gun to go for, a key waits: it's no nearer for being
         // a key (`Objective::nearer`), and the gun, or what carries one, comes first unless the
         // key's on the way. The pistol alone is next to never enough for what's past a key.
@@ -1606,13 +1803,92 @@ impl Hooks for Fight {
         if std::mem::take(&mut self.rethink) {
             return true;
         }
+        // About to do again what she died after doing (her way sets it off, and she's near
+        // it), with a sphere she knows of near enough to it: the sphere first.
+        let deadly = self.sphere_death().and_then(|d| d.action.clone());
+        if let Some((li, at, what, sectors, _)) = deadly
+            && !self.sphere_tried
+            && !self.combat.now.invulnerable
+        {
+            let e = &self.tune.errands;
+            let sphere = obs.things.iter().flatten().any(|t| {
+                t.name == "InvulnerabilitySphere"
+                    && dist((t.x, t.y), at) * e.sphere_detour / RUN_SPEED <= e.sphere_secs
+            });
+            let line_of = |t: &Option<crate::navigator::TriggerLine>| {
+                t.as_ref().and_then(crate::navigator::TriggerLine::linedef)
+            };
+            let on_her_way = line_of(&obj.trigger) == Some(li)
+                || x.follower.as_ref().is_some_and(|f| {
+                    f.steps.iter().any(|st| {
+                        line_of(&st.trigger) == Some(li)
+                            || st.path.as_ref().is_some_and(|p| {
+                                p.notes.iter().any(|n| {
+                                    matches!(n, crate::navigator::PathNote::OpenDoor { sector }
+                                        if sectors.contains(sector))
+                                })
+                            })
+                    })
+                });
+            if sphere && on_her_way {
+                self.sphere_tried = true;
+                self.sphere_first = Some(obs.tic);
+                self.pending_log.push(format!(
+                    "tic {}: died after {what} before: the invulnerability first",
+                    obs.tic
+                ));
+                return true;
+            }
+        }
+        if self
+            .sphere_first
+            .is_some_and(|t| obs.tic - t > (self.tune.errands.sphere_wait * 35.0) as i64)
+        {
+            self.sphere_first = None; // (not had in time: on without it)
+        }
+        // Where a sphere would be for, and she's there: done with for this life.
+        if let Some((at, _)) = self.sphere_use(obs, None)
+            && dist(obs.pos(), at) < ARRIVED
+            && self
+                .deaths
+                .iter()
+                .any(|d| dist(d.action.as_ref().map_or(d.goal, |a| a.1), at) < 1.0)
+        {
+            self.answered.push(at);
+        }
+        if self
+            .charge
+            .as_ref()
+            .is_some_and(|(at, _)| dist(obs.pos(), *at) < ARRIVED)
+        {
+            self.charge = None; // (there with it: on with what's there)
+            return true;
+        }
+        // Invulnerable just now: what it's for chosen, and she turns to that at once.
+        if !self.combat.now.invulnerable {
+            (self.charge, self.charged) = (None, false);
+        } else if !self.charged {
+            self.charged = true;
+            self.charge = self.sphere_use(obs, None);
+            if let Some((at, what)) = &self.charge {
+                self.pending_log.push(format!(
+                    "tic {}: invulnerable: off to ({:.0}, {:.0}) with it ({what})",
+                    obs.tic, at.0, at.1
+                ));
+                return true;
+            }
+        }
         if obj.urgent || obj.kind == Kind::Exit {
             return false;
         }
         let Some(t) = self.errands(x, obs).into_iter().next() else {
             return false;
         };
-        self.offered.insert(t.id);
+        if t.name == "InvulnerabilitySphere" {
+            self.offered_spheres.insert(t.id);
+        } else {
+            self.offered.insert(t.id);
+        }
         self.pending_log
             .push(format!("tic {}: spotted a {}", obs.tic, t.name));
         true

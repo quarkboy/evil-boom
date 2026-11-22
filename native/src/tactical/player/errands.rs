@@ -155,13 +155,13 @@ impl Fight {
         obs.things
             .iter()
             .flatten()
-            .filter(|t| !self.offered.contains(&t.id))
+            .filter(|t| !self.offered.contains(&t.id) && !self.offered_spheres.contains(&t.id))
             .filter(|t| {
                 if t.name == "InvulnerabilitySphere" {
                     // In the middle of a fight she can't win as she is: what wins it.
                     return dist((t.x, t.y), pos) < 2.0 * self.tune.errands.item_range
-                        && self.wants_invulnerability(obs)
-                        && self.clear_way_to(obs, (t.x, t.y));
+                        && self.wants_invulnerability(obs, (t.x, t.y))
+                        && self.clear_dash_to(obs, (t.x, t.y));
                 }
                 if let Some(slot) = weapon_item(t.name)
                     .filter(|&s| s != 1 && held.contains(&s) && !Self::new_gun(obs, t.name))
