@@ -252,12 +252,17 @@ impl Watch {
             } else {
                 "Not in a level now."
             });
-            lines.extend(
-                neuro.off_level(tic, idle, |args| match GameAct::of_json(args) {
+            // (a game hers to start: nothing happens till she does)
+            let offer = (start && not_now.is_none() && choices.offered()).then(|| choices.offer());
+            lines.extend(neuro.off_level(
+                tic,
+                idle,
+                offer.as_deref(),
+                |args| match GameAct::of_json(args) {
                     Ok(act) => take(act),
                     Err(e) => (false, e),
-                }),
-            );
+                },
+            ));
         }
         self.agent.x_mut().log.extend(lines);
         // (offered again once what she's chosen is over: a level begun is a Watch afresh, with

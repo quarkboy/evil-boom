@@ -3753,3 +3753,14 @@ it's still out, waited for afresh; unanswered `directed.force_timeout` (30 s), i
 as dropped. None is sent while one's out: a question's force waits its turn. Against the
 mock server with nobody answering, E1M1: forces at 15.0, 45.4 and 75.4 s, one out at a time
 (they'd been every 15 s, on top of each other).
+
+### A game hers to start is forced
+
+The SDK: "Use `actions/force` whenever the game is blocked waiting on her decision. Without
+a force she will eventually get distracted and forget about the game." At the title with a
+game hers to start (`--choices`), nothing happens till she starts one, and she was only told
+so, once. Now, `idle_force` after the offer, a force (medium, `doom_game` alone, the offer
+its state), and again whenever the last has gone unanswered its timeout. Timed by the wall's
+clock: off a level the game's own doesn't run. The tally screen isn't forced: it goes on by
+itself. Against the mock server: one force 6 s after the title's offer, the game started by
+its answer.

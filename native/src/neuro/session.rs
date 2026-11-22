@@ -86,6 +86,10 @@ pub struct Session {
     /// the game paused by her (as the watch has it), and her asking for it on or off
     pub paused: bool,
     pause_wanted: Option<bool>,
+    /// off a level: since when a game's been hers to start, and when a force for it went out
+    /// (the wall's clock: the game's doesn't run there)
+    off_since: Option<std::time::Instant>,
+    off_forced: Option<std::time::Instant>,
 }
 
 /// The force out, if one is. Neuro handles one at a time, and a second sent meanwhile "will
@@ -322,6 +326,8 @@ impl Session {
             game_stale: false,
             paused: false,
             pause_wanted: None,
+            off_since: None,
+            off_forced: None,
         }
     }
 
@@ -582,6 +588,11 @@ impl Session {
     /// The lines for the log.
     pub fn tic(&mut self, agent: &mut Agent, obs: &Observation) -> Vec<String> {
         self.clock(obs.tic);
+        // (a level: what was forced off one, a game to start, is over with)
+        if self.off_forced.take().is_some() {
+            self.forced.clear();
+        }
+        self.off_since = None;
         let mut log = Vec::new();
         self.receive(agent, obs, &mut log);
         if self.connected
@@ -881,14 +892,37 @@ impl Session {
     /// comes in handled, `doom_game` by `act` (checked: (success, message));
     /// any other action answered `idle`: why there's no level to do it in. What's been told
     /// since, passed on. The lines for the log.
+    ///
+    /// `offer`: a game's hers to start, and nothing happens till she does (what's on offer, in
+    /// words). That's the game blocked on her, the SDK's case for a force: after
+    /// `idle_force` of it one's sent, and again whenever the last has gone unanswered its
+    /// timeout. (By the wall's clock: off a level the game's own doesn't run.)
     pub fn off_level(
         &mut self,
         tic: i64,
         idle: &str,
+        offer: Option<&str>,
         mut act: impl FnMut(&Value) -> (bool, String),
     ) -> Vec<String> {
         self.clock(tic);
         let mut log = Vec::new();
+        let now = std::time::Instant::now();
+        let waited = |since: Option<std::time::Instant>, tics: i64| {
+            tics > 0
+                && since.is_some_and(|t| now.duration_since(t).as_secs_f64() * 35.0 >= tics as f64)
+        };
+        if offer.is_none() {
+            self.off_since = None;
+        } else if self.off_since.is_none() {
+            self.off_since = Some(now);
+        }
+        // (a force sent here and never answered: dropped by the server by now)
+        if self.forced.out() && waited(self.off_forced, self.forced.timeout) {
+            self.forced.clear();
+            self.off_forced = None;
+            self.off_since = Some(now);
+            log.push("neuro: the force went unanswered: taken as dropped".into());
+        }
         while let Ok(i) = self.link.incoming.try_recv() {
             match i {
                 Incoming::Connected => {
@@ -930,6 +964,9 @@ impl Session {
                     } else {
                         (false, idle.to_string())
                     };
+                    self.forced.answered(&name, ok, tic);
+                    // (whatever she did: waited for afresh)
+                    self.off_since = offer.map(|_| now);
                     log.push(format!(">> {name} {}", data.as_deref().unwrap_or("")));
                     log.push(format!("<< {}{msg}", if ok { "" } else { "FAILED: " }));
                     self.keep(&name, data.as_deref(), ok, &msg, false);
@@ -944,6 +981,23 @@ impl Session {
         }
         self.tell_news(tic, &mut log);
         self.sync_actions(OFF_LEVEL.iter().copied().collect(), &mut log);
+        if let Some(offer) = offer
+            && self.connected
+            && !self.forced.out()
+            && waited(self.off_since, self.idle_force)
+        {
+            self.force(
+                tic,
+                offer,
+                "No game's on. Start one?",
+                &["doom_game"],
+                "medium",
+            );
+            if self.forced.out() {
+                self.off_forced = Some(now);
+                log.push("neuro: a game's hers to start: decision forced".into());
+            }
+        }
         log
     }
 
