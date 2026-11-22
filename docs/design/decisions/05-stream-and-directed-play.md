@@ -3437,3 +3437,9 @@ not for the score.
 
 Not done: a cost on plain drops off a ledge (none now), and a way back that needs a floor
 that hurts still counts as a way back.
+
+The cost of 16 by itself, without the two changes before it (jump16 against fix1-lava,
+the same 544): exits 295 -> 295 (9 runs more, 9 less; MAP27 -2), lives lost a run 1.105 ->
+1.101, 529 s -> 542 s, and two runs stood the hour that didn't (E4M6 HMP 1008128369, MAP06
+HMP 854202743). So its five exits on the other build are within what one set of seeds
+tells; the stands are what to look at.
