@@ -129,7 +129,9 @@ impl Director {
             out.push(format!("{line}."));
             if let Some(why) = agent.player().and_then(|p| p.combat().holding_fire()) {
                 // (the fight's own words, said to her)
-                let why = why.replace("by her", "near you");
+                let why = why
+                    .replace("by her", "near you")
+                    .replace("her shots", "your shots");
                 out.push(format!("You're not shooting: {why}."));
             }
         }

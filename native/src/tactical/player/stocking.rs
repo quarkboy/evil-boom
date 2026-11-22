@@ -196,7 +196,7 @@ impl Fight {
             let mut why = "";
             if invulnerability {
                 // Invulnerability with something about she can't take on: gone for at once.
-                why = " (something about she can't take on)";
+                why = " (something about that's too much)";
             } else if (weapon_item(t.name).is_some() || ammo_item(t.name).is_some())
                 && !self.clear_way_armed(&Self::armed_with(obs, t.name), (t.x, t.y))
             {

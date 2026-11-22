@@ -3808,8 +3808,8 @@ Since the layer was last worked on the bot has taken to deciding things of the l
 by itself on instinct: the invulnerability fetched before she does again what she died
 after doing (`errands.sphere_*`), a gun before any key on the pistol
 (`errands.key_unarmed`), places left alone for the deaths they've cost (`deaths.*`). The
-layer had no words for any of it, and plans of that scale are hers
-([macro planning is Evil's]). `Player::plans` gives them as they stand (`Plan`); the
+layer had no words for any of it, and plans of that scale are hers (the maintainer's rule:
+level-scale planning belongs to whoever directs her). `Player::plans` gives them as they stand (`Plan`); the
 Director tells each as it's taken up:
 
 - **The sphere first:** a question with its default done, "You died to an arch-vile after
