@@ -6,7 +6,9 @@
 //! The pick: what she'd do next left to herself (the explorer's best objective she has a way
 //! to; leaving is never its choice while anything else is left, as on her own), under the id a
 //! commander would order it by, with why in a few words. Lists mark it, a failed order says what
-//! would do instead, and with no order for a while it's suggested (`Hints`).
+//! would do instead, and with no order for a while it's suggested. (Suggestions were hers to
+//! turn off once, `hints`; they're always given now: they're named as suggestions, and hers to
+//! leave.)
 //!
 //! The look: what's round her now as a player's eyes give it: the room, what it leads to, the
 //! monsters, pickups, doors, switches and barrels in sight, what she's heard, and the pick.
@@ -46,38 +48,6 @@ const SAME_PLACE: f64 = 64.0;
 /// how tall a pickup is, for whether she sees one (a barrel: `BARREL_HEIGHT`)
 const PICKUP_HEIGHT: f64 = 16.0;
 
-/// How much of its own opinion the bot offers unasked.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Hints {
-    /// none: lists in its order still, no pick, no suggestions
-    Off,
-    /// its pick where she asks (a list, a look, a decision forced), what would do when an order
-    /// fails, and a suggestion once she's had no order for a while
-    #[default]
-    OnStall,
-    /// and a suggestion as soon as she's waiting
-    Always,
-}
-
-impl Hints {
-    pub fn parse(s: &str) -> Option<Hints> {
-        Some(match s {
-            "off" => Hints::Off,
-            "on_stall" => Hints::OnStall,
-            "always" => Hints::Always,
-            _ => return None,
-        })
-    }
-
-    pub fn name(self) -> &'static str {
-        match self {
-            Hints::Off => "off",
-            Hints::OnStall => "on_stall",
-            Hints::Always => "always",
-        }
-    }
-}
-
 /// What the bot would do next, as a commander would order it.
 #[derive(Clone, Debug)]
 pub struct Pick {
@@ -100,11 +70,8 @@ pub struct Listing {
 }
 
 impl Director {
-    /// What she'd do next left to herself, if anything (and hints aren't off).
+    /// What she'd do next left to herself, if anything.
     pub fn pick(&mut self, agent: &mut Agent, obs: &Observation) -> Option<Pick> {
-        if self.hints == Hints::Off {
-            return None;
-        }
         let mut open = self.open_unheld(agent, obs);
         // (everything the level counts done: the way out first)
         if self.tally.complete()
@@ -249,12 +216,9 @@ impl Director {
     }
 
     /// An order that couldn't get to `at`: what's untried nearest it, as a sentence ("" if
-    /// nothing is, or hints are off). The way to something out of reach is most likely by what's
+    /// nothing is). The way to something out of reach is most likely by what's
     /// nearest it that she hasn't tried.
     pub(super) fn toward(&mut self, agent: &mut Agent, obs: &Observation, at: Point) -> String {
-        if self.hints == Hints::Off {
-            return String::new();
-        }
         let open = self.open_objectives(agent, obs);
         let nearest = |f: &dyn Fn(&Objective) -> bool| {
             open.iter()
@@ -299,12 +263,10 @@ impl Director {
     }
 
     /// Waiting on an order for `idle` tics: the pick suggested, once quietly, once to be heard
-    /// (with hints `always`, as soon as she waits).
     pub(super) fn nudge(&mut self, agent: &mut Agent, obs: &Observation, idle: i64) {
-        let at = match (self.hints, self.nudged) {
-            (Hints::Always, 0) => 0,
-            (Hints::OnStall, 0) => NUDGE_QUIET,
-            (Hints::Always | Hints::OnStall, 1) => NUDGE_LOUD,
+        let at = match self.nudged {
+            0 => NUDGE_QUIET,
+            1 => NUDGE_LOUD,
             _ => return,
         };
         if idle < at || obs.health.unwrap_or(0.0) <= 0.0 {

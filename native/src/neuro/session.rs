@@ -9,7 +9,7 @@
 use serde_json::{json, Value};
 
 use super::link::{Incoming, Link};
-use crate::control::directed::{bearing, Director, Hints, Order, Topic};
+use crate::control::directed::{bearing, Director, Order, Topic};
 use crate::control::game::Choices;
 use crate::domain::Observation;
 use crate::play::Agent;
@@ -262,7 +262,7 @@ pub fn actions_timed(c: &Directed) -> Vec<Value> {
         json!({ "name": "doom_search", "description": "Search an area or a compass direction for secrets: thorough 2 (most suspicious walls, default) or 3 (every one, slow). queue_up: queue this action up next, don't override current action.", "schema": s(json!({ "target": { "type": "string" }, "thorough": { "type": "integer", "enum": [2, 3] }, "queue_up": { "type": "boolean" } }), &["target"]) }),
         json!({ "name": "doom_exit", "description": "Leave the level. sure: even with things left.", "schema": s(json!({ "sure": { "type": "boolean" } }), &[]) }),
         json!({ "name": "doom_fight", "description": format!("Your say in the fight, for a while; give any together. target: a monster id or kind to shoot first ({tactic:.0}s; none ends it). weapon: a gun you hold, used while it has a shot ({tactic:.0}s; auto ends it). fire: hold, or free ({tactic:.0}s). override_stance: how hard you fight, over your policy's ({stance:.0}s). retreat: fall back to cover now. cancel: drop all of these. seconds: a different length. None given: what's holding now."), "schema": s(json!({ "target": { "type": "string" }, "weapon": { "type": "string" }, "fire": { "type": "string", "enum": ["hold", "free"] }, "override_stance": { "type": "string", "enum": ["bold", "careful", "avoid", "steady"] }, "retreat": { "type": "boolean" }, "cancel": { "type": "boolean" }, "seconds": { "type": "integer" } }), &[]) }),
-        json!({ "name": "doom_policy", "description": "Your settings, kept till you change them. Give any to change them; none to hear them all and what each does.", "schema": s(json!({ "stance": { "type": "string", "enum": ["careful", "steady", "bold", "avoid", "yolo"] }, "save": { "type": "string", "enum": ["cells", "none"] }, "risk": { "type": "string", "enum": ["careful", "normal", "bold"] }, "powerups": { "type": "string", "enum": ["need", "now"] }, "explore": { "type": "string", "enum": ["normal", "methodical", "speedy"] }, "instinct": { "type": "string", "enum": ["on", "off"] }, "hints": { "type": "string", "enum": ["off", "on_stall", "always"] } }), &[]) }),
+        json!({ "name": "doom_policy", "description": "Your settings, kept till you change them. Give any to change them; none to hear them all and what each does.", "schema": s(json!({ "stance": { "type": "string", "enum": ["careful", "steady", "bold", "avoid", "yolo"] }, "save": { "type": "string", "enum": ["cells", "none"] }, "risk": { "type": "string", "enum": ["careful", "normal", "bold"] }, "powerups": { "type": "string", "enum": ["need", "now"] }, "explore": { "type": "string", "enum": ["normal", "methodical", "speedy"] }, "instinct": { "type": "string", "enum": ["on", "off"] } }), &[]) }),
         json!({ "name": "doom_game", "description": "The game itself, when it's yours. start: a game, when you're offered one (map; skill 1 easiest to 4 hardest; play single level or continuous). next: on to the next level from the tally screen. restart: this level from its start, after a while with nothing new.", "schema": s(json!({ "do": { "type": "string", "enum": ["start", "next", "restart"] }, "map": { "type": "string" }, "skill": { "type": "integer", "enum": [1, 2, 3, 4] }, "play": { "type": "string", "enum": ["single", "continuous"] } }), &["do"]) }),
         json!({ "name": "doom_answer", "description": "Answer a question ([ask q3] ...): id, and choice by its letter.", "schema": s(json!({ "id": { "type": "string" }, "choice": { "type": "string" } }), &["id", "choice"]) }),
         json!({ "name": "doom_pause", "description": "Pause the game, as stepping away from it: the menu comes up and nothing moves till you play on (on: false). on: true by default.", "schema": s(json!({ "on": { "type": "boolean" } }), &[]) }),
@@ -1258,11 +1258,6 @@ impl Session {
                     Some(_) => return (false, "instinct: on or off.".into()),
                     None => None,
                 };
-                let hints = match arg("hints").map(Hints::parse) {
-                    Some(None) => return (false, "hints: off, on_stall or always.".into()),
-                    Some(h) => h,
-                    None => None,
-                };
                 // (her settings first: one refused, or yolo asked about, is answered at once)
                 for setting in ["stance", "save", "risk", "powerups", "explore"] {
                     if let Some(v) = arg(setting) {
@@ -1279,25 +1274,16 @@ impl Session {
                 if let Some(on) = instinct {
                     self.director.idle_auto = on.then_some(crate::control::directed::IDLE_AUTO);
                 }
-                if let Some(h) = hints {
-                    self.director.hints = h;
-                }
                 let idle = match self.director.idle_auto {
                     Some(_) => "carry on by instinct when an action's done".to_string(),
                     None => "wait for the next action (instinct off)".to_string(),
                 };
-                let now = format!(
-                    "Your policy: {}. You {idle}; hints {}.",
-                    self.director.policy.line(),
-                    self.director.hints.name()
-                );
+                let now = format!("Your policy: {}. You {idle}.", self.director.policy.line());
                 // (none given: what each does with it; her action's description doesn't
                 // carry that, it'd sit in her context the whole game)
-                let asked = [
-                    "stance", "save", "risk", "powerups", "explore", "instinct", "hints",
-                ]
-                .iter()
-                .any(|k| args.get(*k).is_some());
+                let asked = ["stance", "save", "risk", "powerups", "explore", "instinct"]
+                    .iter()
+                    .any(|k| args.get(*k).is_some());
                 if asked {
                     (true, now)
                 } else {
@@ -1309,7 +1295,7 @@ impl Session {
                     (
                         true,
                         format!(
-                            "{now}\n{}{instinct} hints: when you get suggestions: off, on_stall (when you're stuck) or always.",
+                            "{now}\n{}{instinct}",
                             crate::control::directed::policy_help()
                         ),
                     )

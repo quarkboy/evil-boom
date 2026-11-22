@@ -48,7 +48,7 @@ With `--stream --present` it's the stream's window with Doom's own screens. The
 
 | action | what it does |
 |---|---|
-| `doom_look` | what's round you: the room, what it leads to, monsters, items, doors and switches in sight, sounds (and the bot's suggestion, unless hints are off or she's fighting) |
+| `doom_look` | what's round you: the room, what it leads to, monsters, items, doors and switches in sight, sounds (and the bot's suggestion, unless she's fighting) |
 | `doom_list` | known areas, doors, switches, items, monsters or exits, with ids, likeliest first |
 | `doom_inspect` | what something is and where |
 | `doom_status` | health, armor, weapons, ammo, keys, the tally, what you're doing and fighting |
@@ -61,7 +61,7 @@ With `--stream --present` it's the stream's window with Doom's own screens. The
 | `doom_pause` | pause the game, as stepping away (Doom's menu up on its own screens), till `on: false`; meanwhile only what doesn't move her is registered |
 | `doom_fight` | your say in the fight for a while, any together: `target`, `weapon`, `fire` (hold, free), `override_stance`, `retreat`, `cancel`; none given, what's holding |
 | `doom_goal` | a standing aim, till met. It doesn't play for her: it puts what it's after first in what's suggested to her and in what she does on instinct: out, completionist (100%, then out; she's asked if she's sure), a key, kills, supplies, secrets. A goal says what she's after, not how she explores: that stays her `explore` setting |
-| `doom_policy` | standing settings: stance, save, risk, powerups, explore, instinct, hints |
+| `doom_policy` | standing settings: stance, save, risk, powerups, explore, instinct |
 | `doom_answer` | answer one of the bot's questions |
 | `doom_game` | the game itself: start, next level, restart; only the moves hers, and the levels, skills and play on offer, in its schema (registered again when the console changes them) |
 
@@ -88,7 +88,9 @@ Its description is two sentences; what each value does is what it answers with n
 - **powerups:** `need` (spheres and invulnerability when they'd help), `now` (as they come).
 - **explore:** `normal` (new ground first, back over what's done after), `methodical` (everything
   as it comes, secrets too: slow), `speedy` (new ground only, never back). A goal doesn't change it.
-- **instinct** (`on`, `off`: she waits for each action), **hints** (`off`, `on_stall`, `always`). How long
+- **instinct** (`on`, `off`: she waits for each action). The bot's suggestions are always given
+  (in a look, a list, a decision forced, and when an order can't be done); they were hers to
+  turn off once, and aren't. How long
   a question waits for her answer is the stream's (the console), not hers.
 
 ### The clocks (`directed` in a tuning file)

@@ -21,9 +21,6 @@
 //!                       her standing settings (stance, save, risk, powerups, explore); none: as they are
 //!   look                what's round her: the room, what it leads to, what's in sight and heard,
 //!                       the bot's pick
-//!   hints off|on_stall|always
-//!                       the bot's own pick: never; where asked and after a while with no order
-//!                       (as it starts); or as soon as she's waiting
 //!   answer ID CHOICE    a question's answer (answer q3 a)
 //!   answers SECONDS|wait
 //!                       how long a question waits before its default
@@ -36,7 +33,7 @@
 //!   where               where she is, her health, what she's doing
 //!   log [N]             her log's last N lines (40), as the watcher shows it
 
-use super::directed::{bearing, Director, Hints, Order, Topic};
+use super::directed::{bearing, Director, Order, Topic};
 use crate::domain::Observation;
 use crate::play::Agent;
 
@@ -192,13 +189,6 @@ pub fn command(
                 None => "questions wait for an answer".to_string(),
             }])
         }
-        Some("hints") => {
-            d.hints = w
-                .get(1)
-                .and_then(|h| Hints::parse(h))
-                .ok_or("hints off|on_stall|always")?;
-            Ok(vec![format!("hints {}", d.hints.name())])
-        }
         Some("game") => match crate::control::game::GameAct::of_words(&w[1..])? {
             crate::control::game::GameAct::Restart => d.ask_restart(obs.tic).map(|s| vec![s]),
             _ => Err("in a level: a new game, or the next level, when it's over".into()),
@@ -247,7 +237,7 @@ pub fn command(
                 .collect())
         }
         _ => Err(format!(
-            "unknown command \"{line}\": list, look, name, order, check, fight, idle, hints, status, where, log"
+            "unknown command \"{line}\": list, look, name, order, check, fight, idle, status, where, log"
         )),
     }
 }

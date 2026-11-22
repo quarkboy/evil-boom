@@ -3863,3 +3863,14 @@ fight with it: `{"fire":"free","target":"zombieman"}`.
 **`doom_policy`**'s description carried every value's meaning, 895 characters in her context
 the whole game. It's two sentences (116); the meanings are what it answers with nothing
 given. Its schema's enums were always there.
+
+### `hints` is gone: suggestions are always given
+
+`doom_policy`'s `hints` (`off`, `on_stall`, `always`) set whether the bot's pick was offered.
+`off` took it out of answers she'd asked for (a look, a list, a forced decision's state);
+`on_stall` and `always` differed only in when she's nudged while waiting, which with instinct
+on she hardly ever is. The maintainer's: pointless, they should always be on; they're named
+as suggestions, and she doesn't have to take them. The setting, its script command and the
+`Hints` type are removed; the nudge keeps the times it had by default (30 s quietly, 60 s
+aloud). A `hints` a model still sends is dropped as any field she doesn't have. `doom_look`'s
+description no longer names the suggestion either (it isn't there in a fight).

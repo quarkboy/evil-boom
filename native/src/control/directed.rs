@@ -45,7 +45,7 @@ mod why;
 
 pub use ask::{About, Question};
 pub use events::{Event, Weight};
-pub use look::{Hints, Listing, Pick};
+pub use look::{Listing, Pick};
 pub use moments::{skill_name, Level};
 pub use policy::{help as policy_help, Policy};
 pub use situation::Situation;
@@ -509,9 +509,7 @@ pub struct Director {
     /// an order of hers begun since she was last on instinct: instinct taking up after it is
     /// the moment to ask her what next
     had_order: bool,
-    /// how much of its own opinion the bot offers; and how often it's suggested its pick this
-    /// wait for an order
-    pub hints: Hints,
+    /// how often it's suggested its pick this wait for an order
     nudged: u8,
     /// kills and blasts being gathered to tell (`kills.rs`); and what the game's runner gives
     /// it each tic, as it gives the tally: the hits on her since the last, and the monsters
