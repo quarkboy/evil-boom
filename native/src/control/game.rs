@@ -200,9 +200,14 @@ impl Choices {
         if !self.offered() {
             return Err("Starting a game isn't yours on this stream.".into());
         }
-        let map = match map.map(|m| m.trim().to_uppercase()) {
-            Some(m) if self.maps.contains(&m) => m,
-            Some(m) => return Err(format!("{m} isn't on offer: {}.", self.maps_line())),
+        let map = match map.map(|m| (m.trim().to_string(), self.map_named(m))) {
+            Some((_, Some(m))) => m,
+            Some((said, None)) => {
+                return Err(format!(
+                    "\"{said}\" isn't a level on offer: {}.",
+                    self.maps_line()
+                ))
+            }
             None if self.maps.len() == 1 => self.maps[0].clone(),
             None => return Err(format!("Which level? {}.", self.maps_line())),
         };
@@ -237,6 +242,26 @@ impl Choices {
             self.skills_line(),
             self.play_line()
         )
+    }
+
+    /// A level on offer as she might write it: the name in any case, with spaces or without
+    /// ("e1 m1", "map 7"), a Doom II map by its number alone or unpadded ("7", "MAP7").
+    fn map_named(&self, said: &str) -> Option<String> {
+        let m: String = said
+            .to_uppercase()
+            .chars()
+            .filter(char::is_ascii_alphanumeric)
+            .collect();
+        let padded = m
+            .strip_prefix("MAP")
+            .unwrap_or(&m)
+            .parse::<u32>()
+            .ok()
+            .map(|n| format!("MAP{n:02}"));
+        [Some(m), padded]
+            .into_iter()
+            .flatten()
+            .find(|c| self.maps.contains(c))
     }
 
     fn maps_line(&self) -> String {
@@ -287,6 +312,19 @@ mod tests {
             })
         );
         assert!(only.check(Some("E1M2"), None, None).is_err());
+        // (a level as she might write it; one not on offer answered with what is)
+        let two: Vec<String> = ["MAP01", "MAP07"].map(String::from).to_vec();
+        let d2 = Choices::parse("maps=all; skills=3", &two, ("MAP01", 3, false)).unwrap();
+        for said in ["map07", "MAP7", "7", "map 7", " Map07 "] {
+            assert_eq!(
+                d2.check(Some(said), None, None).map(|s| s.map),
+                Ok("MAP07".into())
+            );
+        }
+        assert_eq!(
+            d2.check(Some("the hangar"), None, None),
+            Err("\"the hangar\" isn't a level on offer: MAP01, MAP07.".into())
+        );
         let wide = Choices::parse(
             "maps=all; skills=3,4; play=single,continuous",
             &wad,
