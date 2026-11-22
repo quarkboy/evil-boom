@@ -3971,3 +3971,14 @@ One already had isn't set, and says why. The explorer's `Focus` carries it (`Thi
 the pickups meant, and `Unexplored` are new; `Keys` is gone), sorted first where a goal's was.
 Nothing's set by default, so the bot alone is as it was: parity 24 of 24. How well each plays
 isn't measured: they're hers to try.
+
+### No pause of hers
+
+`doom_pause` let her pause the game "as stepping away". The maintainer's: whoever's at the
+stream can pause from the console, and she shouldn't need to. It's gone: ten actions in a
+level. What her pause had that's worth keeping is kept for theirs: while the game's paused in
+a level, by the window's space bar or the console, what she sends is answered (it wasn't:
+her action waited on a game that wasn't running, and Neuro waits 20 s at most), what doesn't
+move her as ever, the rest told "The game's paused by the stream". Her actions stay
+registered through it. Untried against a real pause: there's no pausing a headless game, and
+the window's wasn't opened for it.

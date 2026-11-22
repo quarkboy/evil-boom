@@ -87,9 +87,8 @@ pub struct Session {
     /// made from them), and doom_game registered with older ones
     choices: Option<Choices>,
     game_stale: bool,
-    /// the game paused by her (as the watch has it), and her asking for it on or off
+    /// the game's paused (the watcher's, the console's: as the watch has it)
     pub paused: bool,
-    pause_wanted: Option<bool>,
     /// off a level: since when a game's been hers to start, and when a force for it went out
     /// (the wall's clock: the game's doesn't run there)
     off_since: Option<std::time::Instant>,
@@ -173,7 +172,6 @@ const ALL_ACTIONS: &[&str] = &[
     "doom_policy",
     "doom_game",
     "doom_answer",
-    "doom_pause",
     "doom_status",
     "doom_goal",
 ];
@@ -188,9 +186,9 @@ const OFF_LEVEL: &[&str] = &[
     "doom_goal",
 ];
 
-/// The game paused by her: what doesn't move her (asking, answering, settings) and playing on.
+/// The game paused (by whoever's at the stream): what doesn't move her is answered as ever
+/// (asking, answering, settings); what would is told it's paused.
 const PAUSED: &[&str] = &[
-    "doom_pause",
     "doom_look",
     "doom_query",
     "doom_status",
@@ -254,7 +252,6 @@ pub fn actions_timed(c: &Directed) -> Vec<Value> {
         json!({ "name": "doom_policy", "description": "Your settings, kept till you change them. Give any to change them; none to hear them all and what each does.", "schema": s(json!({ "stance": { "type": "string", "enum": ["careful", "steady", "bold", "avoid", "yolo"] }, "save": { "type": "string", "enum": ["cells", "none"] }, "risk": { "type": "string", "enum": ["careful", "normal", "bold"] }, "powerups": { "type": "string", "enum": ["need", "now"] }, "explore": { "type": "string", "enum": ["normal", "methodical", "speedy"] }, "instinct": { "type": "string", "enum": ["on", "off"] } }), &[]) }),
         json!({ "name": "doom_game", "description": "The game itself, when it's yours. start: a game, when you're offered one (map; skill 1 easiest to 4 hardest; play single level or continuous). next: on to the next level from the tally screen. restart: this level from its start, after a while with nothing new.", "schema": s(json!({ "do": { "type": "string", "enum": ["start", "next", "restart"] }, "map": { "type": "string" }, "skill": { "type": "integer", "enum": [1, 2, 3, 4] }, "play": { "type": "string", "enum": ["single", "continuous"] } }), &["do"]) }),
         json!({ "name": "doom_answer", "description": "Answer a question ([ask q3] ...): id, and choice by its letter.", "schema": s(json!({ "id": { "type": "string" }, "choice": { "type": "string" } }), &["id", "choice"]) }),
-        json!({ "name": "doom_pause", "description": "Pause the game, as stepping away from it: the menu comes up and nothing moves till you play on (on: false). on: true by default.", "schema": s(json!({ "on": { "type": "boolean" } }), &[]) }),
         json!({ "name": "doom_status", "description": "Your current status." }),
         json!({ "name": "doom_goal", "description": "Two standing aims; neither plays for you: each puts what it's after first in what's suggested to you and in what you do by instinct. finish: when the level's done: out (by the first exit), kills, secrets or completionist (all of it: slow, asked first), each then out; none: you're asked. prefer: what comes first meanwhile: health (while under 100), ammo (while short of a cyberdemon's worth), hunt (the monsters you know of), unexplored (new ground), or none. Neither given: what's set.", "schema": s(json!({ "finish": { "type": "string", "enum": ["none", "out", "kills", "secrets", "completionist"] }, "prefer": { "type": "string", "enum": ["none", "health", "ammo", "hunt", "unexplored"] } }), &[]) }),
     ]
@@ -320,7 +317,6 @@ impl Session {
             choices: None,
             game_stale: false,
             paused: false,
-            pause_wanted: None,
             off_since: None,
             off_forced: None,
             speaking: None,
@@ -535,12 +531,7 @@ impl Session {
                 Incoming::Action { id, name, data } => {
                     if matches!(
                         name.as_str(),
-                        "doom_go"
-                            | "doom_exit"
-                            | "doom_answer"
-                            | "doom_goal"
-                            | "doom_game"
-                            | "doom_pause"
+                        "doom_go" | "doom_exit" | "doom_answer" | "doom_goal" | "doom_game"
                     ) {
                         self.idle_since = obs.tic;
                         // (she's just had her say: not asked what next on top of it)
@@ -568,22 +559,16 @@ impl Session {
         }
     }
 
-    /// The game paused by her: what she sends answered, nothing else (no tic of the director,
-    /// nothing told her, no decision forced on her).
+    /// The game paused: what she sends answered, nothing else (no tic of the director,
+    /// nothing told her, no decision forced on her). Her actions stay registered as they
+    /// were: a pause is the stream's, and short.
     pub fn tic_paused(&mut self, agent: &mut Agent, obs: &Observation) -> Vec<String> {
         let mut log = Vec::new();
         self.receive(agent, obs, &mut log);
-        let wanted = self.level_actions(agent);
-        self.sync_actions(wanted, &mut log);
         log
     }
 
-    /// Her asking for the game paused (true) or played on, once.
-    pub fn take_pause(&mut self) -> Option<bool> {
-        self.pause_wanted.take()
-    }
-
-    /// The game paused by her or not, as it now is (played on: her wait for an action starts
+    /// The game paused or not, as it now is (played on: her wait for an action starts
     /// afresh).
     pub fn set_paused(&mut self, on: bool, tic: i64) {
         if self.paused && !on {
@@ -777,9 +762,6 @@ impl Session {
     /// In a level: every action but the game's own (only where she may restart the level), and
     /// leaving only once she's seen an exit in this life (as stocking up waits for).
     fn level_actions(&self, agent: &Agent) -> std::collections::BTreeSet<&'static str> {
-        if self.paused {
-            return PAUSED.iter().copied().collect();
-        }
         let exit = agent.x().exit_seen_this_life();
         ALL_ACTIONS
             .iter()
@@ -1203,7 +1185,10 @@ impl Session {
                 .filter(|v| !v.is_empty())
         };
         if self.paused && !PAUSED.contains(&name) {
-            return (false, "Paused: doom_pause on: false first.".into());
+            return (
+                false,
+                "The game's paused by the stream: wait for it to go on.".into(),
+            );
         }
         let rush = args.get("rush").and_then(Value::as_bool).unwrap_or(false);
         let then = args
@@ -1448,25 +1433,6 @@ impl Session {
                     (true, false) => (false, not.join(" ")),
                     (false, false) => (false, format!("{} But: {}", said.join(" "), not.join(" "))),
                 }
-            }
-            "doom_pause" => {
-                let on = args.get("on").and_then(Value::as_bool).unwrap_or(true);
-                if on == self.paused {
-                    return (
-                        true,
-                        if on { "Paused already." } else { "Not paused." }.into(),
-                    );
-                }
-                self.pause_wanted = Some(on);
-                (
-                    true,
-                    if on {
-                        "Paused. doom_pause on: false to play on."
-                    } else {
-                        "Playing on."
-                    }
-                    .into(),
-                )
             }
             "doom_status" => (true, self.director.status(agent, obs)),
             // (not one of hers any more: the stream console's "Why" button asks it)

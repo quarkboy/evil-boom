@@ -42,6 +42,9 @@ With `--stream --present` it's the stream's window with Doom's own screens. The
   forced the tic it's asked: high, or critical when her health's going in a fight. A force is
   out till one of its own actions is accepted, or 30 s have passed with none; no other is sent
   meanwhile, and what would have been forced is told aloud instead.
+- **Pausing is the stream's.** She has no pause of her own. While the game's paused from the
+  window or the console, what she sends is still answered: a look, her status and her settings
+  as ever, anything that would move her told the game's paused.
 - **The game is hers too.** She starts the game (level, skill, one level or straight on), moves
   on from the tally screen, and restarts a level that's going nowhere.
 
@@ -54,7 +57,6 @@ With `--stream --present` it's the stream's window with Doom's own screens. The
 | `doom_status` | health, armor, weapons, ammo, keys, the tally, what you're doing; in a fight, what against, what the fight's doing, and that she isn't shooting when she isn't and it'll last; a plan of her own in force |
 | `doom_go` | go to an area, item, door, switch or exit (a thing's picked up, pressed or opened); `explore` (none, sweep, secrets, everything) goes over the area, or a compass direction, as she gets there; `risky`, `rush` (to an area: till she's in it), `queue_up` |
 | `doom_exit` | leave the level by the nearest exit; with things left she's asked first; no answer and she stays, or leaves if her goal is `out` or her `explore` setting `speedy`. Going on to another level with health, armor or ammo she's seen and could still take with her, the question names them and its default is to stock up first (the supplies goal) |
-| `doom_pause` | pause the game, as stepping away (Doom's menu up on its own screens), till `on: false`; meanwhile only what doesn't move her is registered |
 | `doom_fight` | your say in the fight for a while, any together: `target`, `weapon`, `fire` (hold, free), `override_stance`, `retreat`, `cancel`; none given, what's holding |
 | `doom_goal` | two standing aims, neither playing for her: each puts what it's after first in what's suggested and in what she does on instinct. `finish`: when the level's done: `out`, or `kills`, `secrets`, `completionist` (asked if she's sure) and then out; `none`, she's asked. `prefer`: what comes first meanwhile, till she changes it: `health` (with no say while she's at 100 or more), `ammo` (none while what she holds, the BFG left out, would kill a cyberdemon), `hunt`, `unexplored`. How she explores stays her `explore` setting |
 | `doom_policy` | standing settings: stance, save, risk, powerups, explore, instinct |

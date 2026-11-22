@@ -513,8 +513,6 @@ struct Watch {
     options_tic: i64,
     speed: f64,
     paused: bool,
-    /// paused by her (doom_pause), not the watcher or the console
-    evil_paused: bool,
     /// the game's sound up (a window's), muted by M, and whether it's on now
     sound: bool,
     muted: bool,
@@ -681,9 +679,8 @@ fn headless(mut watch: Watch, w: &Wad, o: &WatchOptions) -> Result<(), String> {
                     }
                 }
             }
-            // (paused by her: what she sends answered, the game held; kept to time afresh after)
-            watch.evil_pause();
-            if watch.evil_paused {
+            // (paused: what she sends answered, the game held; kept to time afresh after)
+            if watch.serve_paused() {
                 std::thread::sleep(std::time::Duration::from_secs_f64(1.0 / TICRATE));
                 (began, first) = (Instant::now(), watch.engine.tic);
                 continue;
@@ -1084,7 +1081,7 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
                 retitle(&watch, &format!("evil-boom explorer: {}", watch.map_name));
             }
         }
-        watch.evil_pause();
+        watch.serve_paused();
         // (the sound only at the game's own speed: faster or slower it'd pile up or lag)
         let sound =
             watch.sound && !watch.muted && !watch.paused && (watch.speed - 1.0).abs() < 1e-9;
@@ -1405,7 +1402,6 @@ impl Watch {
             options_tic: -1_000_000_000,
             speed: 1.0,
             paused: false,
-            evil_paused: false,
             sound: false,
             muted: false,
             sound_on: false,
@@ -1420,42 +1416,24 @@ impl Watch {
         }
     }
 
-    /// Her pause (`doom_pause`): the game held, with Doom's menu up as a player's Esc brings it
-    /// (on Doom's own screens), and what she sends answered meanwhile. Played on by the
-    /// watcher or the console as well as by her: her pause is over then too.
-    fn evil_pause(&mut self) {
+    /// The game paused in a level (the watcher's space bar, the stream console): what she
+    /// sends is answered meanwhile, so nothing of hers hangs on a game that isn't running
+    /// (Neuro waits on an answer to every action, 20 s at most). Whether it's held.
+    fn serve_paused(&mut self) -> bool {
         let Some(n) = self.neuro.as_mut() else {
-            return;
+            return false;
         };
-        let in_level = self.obs.is_some()
+        let held = self.paused
+            && self.obs.is_some()
             && !self.engine.finished()
             && !self.engine.dead()
             && !self.engine.exited();
-        match n.take_pause() {
-            Some(true) if !self.paused && in_level => {
-                (self.paused, self.evil_paused) = (true, true);
-                if self.present.is_some() {
-                    self.engine.menu(0, 0);
-                }
-                self.frame = None;
-                self.agent.x_mut().log.push("she's paused the game".into());
-            }
-            Some(false) if self.evil_paused => self.paused = false,
-            _ => {}
-        }
-        if self.evil_paused && !self.paused {
-            self.evil_paused = false;
-            if self.present.is_some() {
-                self.engine.menu(3, 0);
-            }
-            self.frame = None;
-            self.agent.x_mut().log.push("the game's played on".into());
-        }
-        n.set_paused(self.evil_paused, self.engine.tic);
-        if let (true, Some(obs)) = (self.evil_paused, self.obs.as_ref()) {
+        n.set_paused(held, self.engine.tic);
+        if let (true, Some(obs)) = (held, self.obs.as_ref()) {
             let lines = n.tic_paused(&mut self.agent, obs);
             self.agent.x_mut().log.extend(lines);
         }
+        held
     }
 
     /// She's dead, in a loop that plays on by itself (no window, or a recording): the ultra
