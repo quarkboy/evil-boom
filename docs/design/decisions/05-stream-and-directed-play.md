@@ -3540,3 +3540,21 @@ Neither shown better. The commit is in for the fault it mends; the other on the 
 word, for what it saves: rounds, which this test doesn't count and three lives from a pistol
 seldom run short of for demons. Berserk ends with the level, the rounds don't: an episode,
 or a custom WAD with more of both, is where it would tell.
+
+## Plasma that can't get there: left in two seconds, not twenty (2026-11-21)
+
+Doom II MAP14, the maintainer watching (HMP, 205498993, 645 s and again 677 s): to and fro
+across 150 units for twenty seconds, twice. A shotgunner behind the red bars, the plasma
+in her hand and her own check saying it wouldn't get there (the gaps are narrower than
+the ball); with no shot she went stepping for one, back to her route, standing to fight,
+some ninety times, till `engage.close_give_up` left it "a while"; then the next of the
+row behind the same bars. Where there's no step to anywhere it would get there
+(`plasma_spot`), there's nothing to wait for: `engage.blocked_give_up`, two seconds.
+
+Tried first and dropped: another gun for it while the plasma's blocked. Her target changing
+among them, some in reach of it and some not, it was plasma and shotgun by turns every
+second or two.
+
+That run: the stepping and standing between 640 and 700 s, 324 lines to 13. The three-lives
+test, 544 runs: exits 287 -> 288 (2 runs more, 1 less), 37 runs differ, and the one run
+that has stood the hour all day (MAP14, UV, 205498993) is out in 1,323 s, no life lost.

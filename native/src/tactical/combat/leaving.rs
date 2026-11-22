@@ -168,7 +168,16 @@ impl Combat {
             self.patience.rest(Effort::NoShot, t.id);
             return false;
         }
-        let limit = self.tune.engage.close_give_up;
+        // Plasma that won't get to it, and no step from here to where it would (bars it's too
+        // wide for): there's nothing to wait for, and it's left much sooner. Waited out in
+        // full, each of a row of them behind bars was twenty seconds of stepping to and fro,
+        // not a round fired. (Doom II MAP14, the shotgunners behind the red bars; the
+        // maintainer watching.)
+        let limit = if blocked && self.plasma_spot(obs, t).is_none() {
+            self.tune.engage.blocked_give_up
+        } else {
+            self.tune.engage.close_give_up
+        };
         if self
             .patience
             .spent(Effort::NoShot, t.id, obs.tic, limit, None, Some(limit))

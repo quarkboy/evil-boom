@@ -213,6 +213,8 @@ impl Default for Senses {
 pub struct Engage {
     /// closing in on something out of reach this long without getting it in reach: left...
     pub close_give_up: i64,
+    /// ...and this long (tics) when it's plasma that won't get there and no step would mend it
+    pub blocked_give_up: i64,
     /// ...for this long
     pub given_up_tics: i64,
     /// closing in on something out of reach this long (tics) getting no nearer to it by
@@ -288,6 +290,7 @@ impl Default for Engage {
     fn default() -> Self {
         Engage {
             close_give_up: 20 * 35,
+            blocked_give_up: 2 * 35,
             close_stall: 3 * 35,
             close_gain: 48.0,
             given_up_tics: 30 * 35,
