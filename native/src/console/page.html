@@ -293,6 +293,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
             <label>ask what next, at most every (s)<input type="number" min="0" max="3600" step="0.5" id="ev-fnext"></label>
             <label title="Before a question's default is taken (0: till she answers).">a question waits (s)<input type="number" min="0" max="3600" step="0.5" id="ev-fwait"></label>
             <label title="Off: instinct stays on, and the setting's taken out of her doom_policy."><input type="checkbox" id="ev-finst"> she may turn instinct off</label>
+            <label title="On: asked what next, she picks without saying anything aloud about it (it comes often)."><input type="checkbox" id="ev-fquiet"> what next asked quietly</label>
           </div>
           <div class="row"><button id="ev-forceapply">Apply</button><span class="dim" style="font-size:12px;align-self:center">the stream's: a decision forced after she's waited, or left a question, this long</span></div>
         </div>
@@ -545,6 +546,7 @@ function renderEvil(e, n) {
   for (const el of $("evilcard").querySelectorAll("[data-p]")) if (!setsDirty && document.activeElement !== el && pol[el.dataset.p] != null) el.value = pol[el.dataset.p];
   // (how soon she's pushed, as the game has it, unless it's being changed here)
   if (!forceDirty) $("ev-finst").checked = !!e.instinct_hers;
+  if (!forceDirty) $("ev-fquiet").checked = !!e.next_silent;
   if (!forceDirty && document.activeElement !== $("ev-fwait") && e.answer_wait != null) $("ev-fwait").value = Math.round(e.answer_wait * 10) / 10;
   for (const el of $("evilcard").querySelectorAll('[data-p="instinct"]')) el.disabled = el.disabled || !e.instinct_hers;
   [["ev-fidle", 0], ["ev-fask", 1], ["ev-fnext", 2]].forEach(([id, i]) => { if (!forceDirty && document.activeElement !== $(id) && e.forcing) $(id).value = Math.round(e.forcing[i] * 10) / 10; });
@@ -756,10 +758,10 @@ $("ev-goalset").onclick = () => {
 };
 $("ev-goaldrop").onclick = () => order("doom_goal", { goal: "none" });
 for (const el of $("evilcard").querySelectorAll("[data-p]")) el.addEventListener("change", () => { setsDirty = true; });
-for (const id of ["ev-fidle", "ev-fask", "ev-fnext", "ev-fwait", "ev-finst"]) $(id).addEventListener("input", () => { forceDirty = true; });
+for (const id of ["ev-fidle", "ev-fask", "ev-fnext", "ev-fwait", "ev-finst", "ev-fquiet"]) $(id).addEventListener("input", () => { forceDirty = true; });
 $("ev-forceapply").onclick = async () => {
   const n = (id) => { const v = $(id).value.trim(); return v === "" ? null : Math.max(0, Number(v)); };
-  if (await cmd({ cmd: "forcing", idle: n("ev-fidle"), ask: n("ev-fask"), next: n("ev-fnext"), instinct: $("ev-finst").checked, answers: n("ev-fwait") })) forceDirty = false;
+  if (await cmd({ cmd: "forcing", idle: n("ev-fidle"), ask: n("ev-fask"), next: n("ev-fnext"), instinct: $("ev-finst").checked, answers: n("ev-fwait"), quiet: $("ev-fquiet").checked })) forceDirty = false;
 };
 $("ev-setapply").onclick = async () => {
   const data = {};

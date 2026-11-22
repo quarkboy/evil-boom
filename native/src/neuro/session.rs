@@ -72,6 +72,8 @@ pub struct Session {
     /// never): the moment waiting to be asked about ("step", "fight"), and when she was last
     /// asked or last acted
     next_force: i64,
+    /// ...and without a word aloud (the SDK's `silent`: it comes often)
+    next_silent: bool,
     next_due: Option<&'static str>,
     next_at: i64,
     /// instinct hers to turn off (`doom_policy instinct`); not (the console's say): it's on,
@@ -315,6 +317,7 @@ impl Session {
             idle_force: Directed::tics(c.idle_force),
             ask_force: Directed::tics(c.ask_force),
             next_force: Directed::tics(c.next_force),
+            next_silent: c.next_silent,
             after_look: Directed::tics(c.after_look),
             status_every: Directed::tics(c.status_every),
             moments: c.moments_a_minute,
@@ -404,6 +407,7 @@ impl Session {
                 self.next_force as f64 / 35.0,
             ],
             instinct_hers: self.instinct_hers,
+            next_silent: self.next_silent,
             answer_wait: self.director.answer_wait.map_or(0.0, |t| t as f64 / 35.0),
             ..EvilState::default()
         }
@@ -441,6 +445,11 @@ impl Session {
             self.exchanges.iter_mut().for_each(|e| e.tic -= back);
         }
         self.now_tic = tic;
+    }
+
+    /// Whether she's asked what next without a word aloud (the console's).
+    pub fn set_next_silent(&mut self, silent: bool) {
+        self.next_silent = silent;
     }
 
     /// How long a question waits for her answer before its default's taken, in seconds (the
@@ -718,7 +727,7 @@ impl Session {
                 state.push_str(&format!("\nSuggested: {p}.\n"));
             }
             state.push_str("\nUnsure? doom_look, or doom_list.\n");
-            self.force(
+            self.force_as(
                 obs.tic,
                 &state,
                 &query,
@@ -733,6 +742,7 @@ impl Session {
                     "doom_inspect",
                 ],
                 "low",
+                self.next_silent,
             );
             log.push(format!("neuro: asked what next ({due}): {query}"));
         }
@@ -847,6 +857,19 @@ impl Session {
     /// A decision forced, of those of `names` registered now.
     /// (One at a time: the callers look at `forced.out()` first.)
     fn force(&mut self, tic: i64, state: &str, query: &str, names: &[&str], priority: &str) {
+        self.force_as(tic, state, query, names, priority, false);
+    }
+
+    /// ...`silent`: picked without a word aloud.
+    fn force_as(
+        &mut self,
+        tic: i64,
+        state: &str,
+        query: &str,
+        names: &[&str],
+        priority: &str,
+        silent: bool,
+    ) {
         let names: Vec<&'static str> = self
             .registered
             .iter()
@@ -854,7 +877,7 @@ impl Session {
             .filter(|n| names.contains(n))
             .collect();
         if !names.is_empty() {
-            self.link.force(state, query, &names, priority);
+            self.link.force(state, query, &names, priority, silent);
             self.forced.sent(tic, names);
         }
     }

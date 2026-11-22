@@ -170,8 +170,13 @@ fn summary(text: &str) -> String {
                 .filter_map(Value::as_str)
                 .collect();
             format!(
-                "FORCE ({}) {}\n  options: {}\n{}",
+                "FORCE ({}{}) {}\n  options: {}\n{}",
                 s("priority"),
+                if d["silent"].as_bool() == Some(true) {
+                    ", silent"
+                } else {
+                    ""
+                },
                 s("query"),
                 names.join(", "),
                 s("state")

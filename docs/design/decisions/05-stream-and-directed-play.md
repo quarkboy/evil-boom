@@ -3764,3 +3764,12 @@ its state), and again whenever the last has gone unanswered its timeout. Timed b
 clock: off a level the game's own doesn't run. The tally screen isn't forced: it goes on by
 itself. Against the mock server: one force 6 s after the title's offer, the game started by
 its answer.
+
+### "What next" is asked quietly
+
+The SDK's `silent` on a force (documented 10 November): "for frequent or routine decisions
+that aren't worth commenting on, so she acts without talking about every one of them".
+"Carry on, or something else?" comes up to every 15 s. It goes out `silent: true` now
+(`directed.next_silent`; the stream console's "what next asked quietly" turns it off as it
+runs, and keeps the choice). The other forces are as they were: a wait, a question and a
+game to start are worth her word.

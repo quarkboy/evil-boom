@@ -71,8 +71,10 @@ impl Link {
         );
     }
 
-    pub fn force(&self, state: &str, query: &str, actions: &[&str], priority: &str) {
-        self.send("actions/force", Some(json!({ "state": state, "query": query, "ephemeral_context": true, "priority": priority, "action_names": actions })));
+    /// `silent`: she picks without saying anything aloud about it (the SDK's, for decisions
+    /// that come often and aren't worth a word each).
+    pub fn force(&self, state: &str, query: &str, actions: &[&str], priority: &str, silent: bool) {
+        self.send("actions/force", Some(json!({ "state": state, "query": query, "ephemeral_context": true, "priority": priority, "silent": silent, "action_names": actions })));
     }
 }
 

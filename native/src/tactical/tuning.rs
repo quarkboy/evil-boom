@@ -1007,6 +1007,8 @@ pub struct Directed {
     pub ask_force: f64,
     /// on with something by herself: asked what next at most this often (0: never)
     pub next_force: f64,
+    /// ...and without her saying anything aloud about it (the SDK's `silent` on a force)
+    pub next_silent: bool,
     /// after an action of hers that moves nothing (a look, a list): at least this long before a
     /// decision's forced
     pub after_look: f64,
@@ -1036,6 +1038,7 @@ impl Default for Directed {
             idle_force: 6.0,
             ask_force: 3.0,
             next_force: 15.0,
+            next_silent: true,
             after_look: 3.0,
             force_timeout: 30.0,
             answer_wait: 8.0,

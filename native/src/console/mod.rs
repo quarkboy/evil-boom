@@ -61,6 +61,9 @@ pub enum Command {
         /// answers)
         #[serde(default)]
         answers: Option<f64>,
+        /// asked what next without a word aloud (the SDK's `silent` force)
+        #[serde(default)]
+        quiet: Option<bool>,
     },
     /// who's at the console, as Evil's told of what they do and say
     ConsoleName {
@@ -275,6 +278,9 @@ pub struct EvilState {
     /// instinct hers to turn off (`doom_policy instinct`); not: on, the stream's say
     #[serde(default)]
     pub instinct_hers: bool,
+    /// asked what next without a word aloud
+    #[serde(default)]
+    pub next_silent: bool,
     /// seconds a question waits for her answer before its default's taken (0: till she answers)
     #[serde(default)]
     pub answer_wait: f64,
