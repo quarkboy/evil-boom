@@ -23,6 +23,7 @@ impl Director {
         if let Some(g) = self.goal_label() {
             out.push(format!("Your goal: {g}."));
         }
+        out.extend(self.plan_lines(agent));
         match &self.doing {
             None if self.auto_spent => {
                 out.push("Nothing more to do here by yourself: it's yours to say.".to_string());
@@ -68,6 +69,35 @@ impl Director {
                 line.push_str(&format!(", rather than {}", over.join(" or ")));
             }
             out.push(format!("{}{}.", line[..1].to_uppercase(), &line[1..]));
+            // (what's left alone for the deaths it's cost: a couple, by the id she'd act on)
+            let mut left: Vec<String> = Vec::new();
+            for p in &open {
+                let n = Self::deaths_at(agent, p);
+                if n == 0 {
+                    continue;
+                }
+                let pick = self.pick_of(agent, obs, p, String::new());
+                let e = Entry {
+                    id: pick.id,
+                    what: String::new(),
+                    at: pick.at,
+                };
+                let times = if n == 1 {
+                    "once".to_string()
+                } else {
+                    format!("{n} times")
+                };
+                let line = format!("{}, died there {times}", self.describe(&e, obs));
+                if !left.contains(&line) {
+                    left.push(line);
+                }
+                if left.len() == 2 {
+                    break;
+                }
+            }
+            if !left.is_empty() {
+                out.push(format!("Left for now: {}.", left.join("; ")));
+            }
         }
         // (the fight: how it stands, what it's doing, what with)
         if self.now.fighting() {

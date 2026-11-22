@@ -105,6 +105,8 @@ pub enum Event {
     // The bot.
     /// what instinct's taken up
     Instinct,
+    /// something she's settled by herself at the level's scale (`plans.rs`)
+    Plan,
     /// on by instinct from now
     OnInstinct,
     /// every kill, item and secret the level counts: done
@@ -177,6 +179,7 @@ impl Event {
             | E::NotJumping
             | E::Suggestion { loud: true }
             | E::RestartOpen
+            | E::Plan
             | E::UltraOver
             | E::LevelStart => Weight::Moment,
             E::Outcome

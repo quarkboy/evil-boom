@@ -1319,8 +1319,10 @@ impl Session {
                 }
                 // (a way that costs: asked; not to be retried as it is otherwise, the reason
                 // says what would do)
+                // (what she died after doing, hers to do again: done, with a word of it)
+                let note = self.director.death_note(agent, obs, r);
                 match self.director.ask_go(agent, obs, r, risky, rush, then) {
-                    Ok(None) => (true, "OK.".into()),
+                    Ok(None) => (true, note.map_or("OK.".into(), |n| format!("OK. {n}"))),
                     Ok(Some(q)) => (true, q),
                     Err(why) => (false, why),
                 }
@@ -1335,9 +1337,10 @@ impl Session {
                 }
                 match self.director.check_go(agent, obs, r, false) {
                     Ok(_) => {
+                        let note = self.director.death_note(agent, obs, r);
                         self.director
                             .order_with(Order::Go(r.to_string(), false), rush, then);
-                        (true, "OK.".into())
+                        (true, note.map_or("OK.".into(), |n| format!("OK. {n}")))
                     }
                     Err(why) => (false, why),
                 }

@@ -45,6 +45,8 @@ pub enum Then {
     Goal(&'static str),
     /// the run-jump lined up for not taken, nor that leap again
     DontJump(Box<crate::navigator::Jump>),
+    /// the invulnerability not fetched first (`plans.rs`)
+    NoSphere,
     /// nothing: as she was
     Nothing,
 }
@@ -565,6 +567,16 @@ impl Director {
             Then::DontJump(j) => {
                 agent.x_mut().decline(obs, &j);
                 self.tell(obs, Event::NotJumping, "Not jumping.".into());
+            }
+            Then::NoSphere => {
+                if let Some(p) = agent.player_mut() {
+                    p.no_sphere_first();
+                }
+                self.tell(
+                    obs,
+                    Event::Plan,
+                    "Going without the invulnerability.".into(),
+                );
             }
             Then::Stay => {
                 if matches!(self.doing, Some(Doing::Auto)) {

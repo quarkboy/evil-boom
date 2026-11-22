@@ -3801,3 +3801,32 @@ finish anyway, and its few seconds for an answer would have run out by then, the
 nothing; it's asked as she finishes. The urgent forces don't wait: their priority is what
 cuts her short. Against the mock server (which sends the message now: `speaking`, `spoken`
 in its file): the ask due at 15 s held till she was done at 25.8 s.
+
+### Her own level-scale choices are told her (`plans.rs`)
+
+Since the layer was last worked on the bot has taken to deciding things of the level's scale
+by itself on instinct: the invulnerability fetched before she does again what she died
+after doing (`errands.sphere_*`), a gun before any key on the pistol
+(`errands.key_unarmed`), places left alone for the deaths they've cost (`deaths.*`). The
+layer had no words for any of it, and plans of that scale are hers
+([macro planning is Evil's]). `Player::plans` gives them as they stand (`Plan`); the
+Director tells each as it's taken up:
+
+- **The sphere first:** a question with its default done, "You died to an arch-vile after
+  opening door-l149: getting the invulnerability first. a) get it (doing it) b) go
+  without", forced at medium; "go without" ends it for this life (`no_sphere_first`). With
+  a question open or the minute's spent it's told as a moment.
+- **Invulnerable and off with it:** "Invulnerable: straight to what killed you (an
+  arch-vile)", or "straight back to where you died".
+- **A gun before any key:** "Only the pistol: a gun first, keys after", once a level, and
+  only once she's been told of a key.
+- **`doom_why`** says each while it stands, and on instinct what's left alone: "Left for
+  now: item-t99 (N 1453), died there once".
+- **An order of hers** to go to or press what she died after setting off is carried out (it's
+  hers), its answer adding "You died to an arch-vile after this last time."
+
+Under an order of hers the sphere rule doesn't run (as before: `interrupt` is instinct's),
+which is why the note. MAP27 on UV against the mock server, seed 205498993: the question at
+her second go at the library door, the charge told, the lines in `doom_why`. The note on an
+order wasn't reached in that run (the door was open by then). The bot alone is as it was:
+parity, 24 of 24.

@@ -161,6 +161,27 @@ impl Cause {
     }
 }
 
+/// What she's settled by herself at the level's scale, for whoever directs her to be told
+/// (`Player::plans`): these are choices a player makes of the level, not reflexes of a fight.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Plan {
+    /// about to do again what she died after doing (the line she set off, and what came of
+    /// it): the invulnerability she knows of fetched first
+    SphereFirst { line: usize, by: String },
+    /// invulnerable, and off to what it's for: what came of something she set off (`by`), or
+    /// with none, where she died going for something
+    Charged { by: Option<String> },
+    /// only the pistol, and a gun to go for: keys wait
+    GunBeforeKey,
+}
+
+/// A deadly action's words as the journal has them, "line 12 (Archvile)": what came of it.
+fn came_of(what: &str) -> String {
+    what.split_once('(')
+        .map_or(what, |(_, by)| by.trim_end_matches(')'))
+        .to_string()
+}
+
 /// A death: where, and what she was going for.
 #[derive(Clone, Debug)]
 struct Death {
@@ -668,6 +689,64 @@ impl Player {
 
     pub fn combat(&self) -> &Combat {
         &self.fight.combat
+    }
+
+    /// What she's settled by herself at the level's scale, as things stand (`Plan`).
+    pub fn plans(&self) -> Vec<Plan> {
+        let f = &self.fight;
+        let mut out = Vec::new();
+        if f.sphere_first.is_some()
+            && let Some((line, _, what, ..)) = f.sphere_death().and_then(|d| d.action.as_ref())
+        {
+            out.push(Plan::SphereFirst {
+                line: *line,
+                by: came_of(what),
+            });
+        }
+        if let Some((_, what)) = f.charge.as_ref().filter(|_| f.combat.now.invulnerable) {
+            // (an action's words begin "line": else it's what she was going for)
+            let by = what.starts_with("line ").then(|| came_of(what));
+            out.push(Plan::Charged { by });
+        }
+        if f.gun_to_have && f.combat.now.firepower <= f.tune.errands.pistol_only {
+            out.push(Plan::GunBeforeKey);
+        }
+        out
+    }
+
+    /// The sphere not fetched first after all (whoever directs her says so): on with what
+    /// she was about, and not asked of it again this life.
+    pub fn no_sphere_first(&mut self) {
+        self.fight.sphere_first = None;
+        self.fight.sphere_tried = true;
+    }
+
+    /// How many deaths `obj` is left alone for on instinct (0: it isn't): died going for it,
+    /// or a place she's died at again and again (`Hooks::dangerous`'s own count).
+    pub fn deaths_at(&self, obj: &Objective) -> usize {
+        let f = &self.fight;
+        let died = f.died_for(obj);
+        let here = f
+            .deaths
+            .iter()
+            .filter(|d| d.why != Cause::Unarmed && dist(d.at, obj.goal) < f.tune.deaths.death_zone)
+            .count();
+        if died > 0 || here >= f.tune.deaths.death_zone_count {
+            died.max(here)
+        } else {
+            0
+        }
+    }
+
+    /// What came of setting off `line` in a life before, if she died of it (`Death::action`).
+    pub fn died_after(&self, line: usize) -> Option<String> {
+        self.fight
+            .deaths
+            .iter()
+            .rev()
+            .filter_map(|d| d.action.as_ref())
+            .find(|a| a.0 == line)
+            .map(|a| came_of(&a.2))
     }
 
     /// Monsters she's seen that are still about: (id, kind, where last seen, when, awake).

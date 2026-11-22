@@ -34,6 +34,7 @@ mod moments;
 mod news;
 mod open;
 mod orders;
+mod plans;
 mod policy;
 mod powers;
 mod restart;
@@ -458,6 +459,8 @@ pub struct Director {
     /// what's been told already: exits, switches and doors, items, monsters (ids), the health
     /// mark passed, keys and weapons held, dead
     told_exits: std::collections::BTreeSet<String>,
+    /// her own plans told her this life (`plans.rs`)
+    plans_told: Vec<crate::tactical::player::Plan>,
     told_items: std::collections::BTreeSet<i32>,
     /// items seen she couldn't get to (told when she can), and those told so
     out_of_reach: std::collections::BTreeSet<i32>,
@@ -657,6 +660,7 @@ impl Director {
     pub fn new_map(&mut self) {
         self.goal_new_map();
         self.overtaken("a new level");
+        self.plans_told.clear();
         // (a level's tics start again from nothing: no time kept from the old level's clock
         // is left to be measured against the new one's. What's timed across levels, the
         // questions a minute, is put back by the old level's length)
@@ -716,6 +720,9 @@ impl Director {
     /// are the attempt before's; the fight, her health's marks and what's killed start afresh.
     fn new_life(&mut self) {
         self.overtaken("the level begun again");
+        // (a gun before any key: told once a level, not each life of it)
+        self.plans_told
+            .retain(|p| *p == crate::tactical::player::Plan::GunBeforeKey);
         self.hurt.clear();
         self.running.clear();
         self.pools_had = None;
@@ -890,6 +897,7 @@ impl Director {
         self.more_moments(agent, obs);
         self.watch_progress(agent, obs);
         self.powers(obs);
+        self.plans(agent, obs);
         self.questions(agent, obs);
         self.apply_tactics(agent, obs);
         // (...once she's seen a way out this life: till then a sphere or a berserk she's no
