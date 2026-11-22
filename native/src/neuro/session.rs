@@ -34,8 +34,8 @@ pub struct Session {
     who: String,
     character: Character,
     pub director: Director,
-    /// a force out, not yet answered by an action; the question last forced
-    forced: bool,
+    /// the force out, if one is (`Forcing`: one at a time); the question last forced
+    forced: Forcing,
     forced_question: Option<u32>,
     /// when she last had nothing to do (or the last force or action)
     idle_since: i64,
@@ -86,6 +86,70 @@ pub struct Session {
     /// the game paused by her (as the watch has it), and her asking for it on or off
     pub paused: bool,
     pause_wanted: Option<bool>,
+}
+
+/// The force out, if one is. Neuro handles one at a time, and a second sent meanwhile "will
+/// cause problems" (the SDK's specification): so none is sent while one's out. It's over when
+/// she does one of its own actions and that's accepted (one refused, the server puts the force
+/// to her again by itself: it's still out), or when it's gone unanswered so long the server
+/// must have dropped it (its retries spent, or a result of ours it gave up waiting for: it
+/// doesn't say).
+struct Forcing {
+    out: Option<(i64, Vec<&'static str>)>,
+    timeout: i64,
+}
+
+impl Forcing {
+    fn new(timeout: i64) -> Forcing {
+        Forcing { out: None, timeout }
+    }
+
+    fn out(&self) -> bool {
+        self.out.is_some()
+    }
+
+    fn sent(&mut self, tic: i64, names: Vec<&'static str>) {
+        self.out = Some((tic, names));
+    }
+
+    /// An action of hers come in, accepted or not.
+    fn answered(&mut self, name: &str, ok: bool, tic: i64) {
+        let Some((at, names)) = self.out.as_mut() else {
+            return;
+        };
+        if !names.contains(&name) {
+            return; // (not this force's: something she did of her own accord meanwhile)
+        }
+        if ok {
+            self.out = None;
+        } else {
+            *at = tic; // (put to her again by the server: waited for afresh)
+        }
+    }
+
+    /// True once: unanswered past the timeout (0: never), and so no longer out.
+    fn expire(&mut self, tic: i64) -> bool {
+        let over = self.timeout > 0
+            && self
+                .out
+                .as_ref()
+                .is_some_and(|(at, _)| tic - at >= self.timeout);
+        if over {
+            self.out = None;
+        }
+        over
+    }
+
+    fn clear(&mut self) {
+        self.out = None;
+    }
+
+    /// The clock gone back (a new level).
+    fn back(&mut self, by: i64) {
+        if let Some((at, _)) = self.out.as_mut() {
+            *at -= by;
+        }
+    }
 }
 
 /// Every action's name, as `actions` has them.
@@ -229,7 +293,7 @@ impl Session {
             who: String::new(),
             character: Character::Unknown,
             director,
-            forced: false,
+            forced: Forcing::new(Directed::tics(c.force_timeout)),
             forced_question: None,
             idle_since: 0,
             told_status: (i64::MIN / 2, String::new()),
@@ -362,6 +426,7 @@ impl Session {
         if tic < self.now_tic {
             let back = self.now_tic - tic;
             self.idle_since -= back;
+            self.forced.back(back);
             self.next_at -= back;
             self.briefed_at -= back;
             self.told_status.0 -= back;
@@ -422,7 +487,7 @@ impl Session {
                     // (a new connection has nothing registered: what fits now, below)
                     self.registered.clear();
                     self.game_stale = false;
-                    self.forced = false;
+                    self.forced.clear();
                     self.idle_since = obs.tic;
                     if !self.briefed {
                         self.brief(obs.tic);
@@ -448,10 +513,9 @@ impl Session {
                     if self.briefed {
                         log.push(format!("neuro: connection lost ({why}); trying again"));
                     }
-                    self.forced = false;
+                    self.forced.clear();
                 }
                 Incoming::Action { id, name, data } => {
-                    self.forced = false;
                     if matches!(
                         name.as_str(),
                         "doom_go"
@@ -476,6 +540,7 @@ impl Session {
                             .max(obs.tic - self.idle_force + self.after_look);
                     }
                     let (ok, msg) = self.action(agent, obs, &name, data.as_deref());
+                    self.forced.answered(&name, ok, obs.tic);
                     log.push(format!(">> {name} {}", data.as_deref().unwrap_or("")));
                     log.push(format!(
                         "<< {}{}",
@@ -509,7 +574,7 @@ impl Session {
     pub fn set_paused(&mut self, on: bool, tic: i64) {
         if self.paused && !on {
             self.idle_since = tic;
-            self.forced = false;
+            self.forced.clear();
         }
         self.paused = on;
     }
@@ -529,6 +594,9 @@ impl Session {
             self.last_status = self.director.status(agent, obs);
         }
         self.tell_news(obs.tic, &mut log);
+        if self.forced.expire(obs.tic) {
+            log.push("neuro: the force went unanswered: taken as dropped".into());
+        }
         // (her status again when what she'd act on has changed: not a shell spent, nor a
         // monster's bearing)
         let gist = self.director.status_gist(agent, obs);
@@ -541,34 +609,37 @@ impl Session {
         // one that can't wait, its moment gone by the time a force is answered)
         // (no force while the link's down: it'd go out stale when it's back, and a reconnect
         // asks again anyway)
-        if let Some(q) = self
+        // (one force at a time: with another out, this one waits for it)
+        if let Some((id, line)) = self
             .director
             .question()
             .filter(|q| !q.now && self.connected)
-            && self.forced_question != Some(q.id)
-            && self.ask_force > 0
-            && obs.tic - q.opened >= self.ask_force
+            .filter(|q| self.forced_question != Some(q.id))
+            .filter(|q| self.ask_force > 0 && obs.tic - q.opened >= self.ask_force)
+            .map(|q| (q.id, q.line(obs.tic)))
+            && !self.forced.out()
         {
-            self.forced_question = Some(q.id);
-            self.forced = true;
+            self.forced_question = Some(id);
             self.force(
-                &q.line(obs.tic),
-                &format!("Answer q{}?", q.id),
+                obs.tic,
+                &line,
+                &format!("Answer q{id}?"),
                 &["doom_answer", "doom_go", "doom_explore", "doom_exit"],
                 "high",
             );
-            log.push(format!("neuro: q{} unanswered: decision forced", q.id));
+            log.push(format!("neuro: q{id} unanswered: decision forced"));
         }
         // (waiting on her: after a while, a decision forced; one at a time)
         if !self.director.idle(agent) {
             self.idle_since = obs.tic;
         } else if self.connected
-            && !self.forced
+            && !self.forced.out()
             && self.idle_force > 0
             && obs.tic - self.idle_since >= self.idle_force
         {
             let state = self.state(agent, obs);
             self.force(
+                obs.tic,
                 &state,
                 "You're waiting. What next?",
                 &[
@@ -583,7 +654,6 @@ impl Session {
                 ],
                 "medium",
             );
-            self.forced = true;
             log.push("neuro: waiting on her: decision forced".into());
         }
         // (on with something by herself, instinct's new step or after a fight: asked what
@@ -600,7 +670,7 @@ impl Session {
         }
         if let Some(due) = self.next_due.filter(|_| {
             self.connected
-                && !self.forced
+                && !self.forced.out()
                 && self.next_force > 0
                 && (self.next_due == Some("done") && agent.x().current.is_some()
                     || self.next_due != Some("done") && obs.tic - self.next_at >= self.next_force)
@@ -638,6 +708,7 @@ impl Session {
             }
             state.push_str("\nUnsure? doom_look, or doom_list.\n");
             self.force(
+                obs.tic,
                 &state,
                 &query,
                 &[
@@ -652,7 +723,6 @@ impl Session {
                 ],
                 "low",
             );
-            self.forced = true;
             log.push(format!("neuro: asked what next ({due}): {query}"));
         }
         let wanted = self.level_actions(agent);
@@ -764,14 +834,17 @@ impl Session {
     }
 
     /// A decision forced, of those of `names` registered now.
-    fn force(&self, state: &str, query: &str, names: &[&str], priority: &str) {
-        let names: Vec<&str> = names
+    /// (One at a time: the callers look at `forced.out()` first.)
+    fn force(&mut self, tic: i64, state: &str, query: &str, names: &[&str], priority: &str) {
+        let names: Vec<&'static str> = self
+            .registered
             .iter()
             .copied()
-            .filter(|n| self.registered.contains(n))
+            .filter(|n| names.contains(n))
             .collect();
         if !names.is_empty() {
             self.link.force(state, query, &names, priority);
+            self.forced.sent(tic, names);
         }
     }
 
@@ -824,7 +897,7 @@ impl Session {
                     // (a new connection has nothing registered: what fits now, below)
                     self.registered.clear();
                     self.game_stale = false;
-                    self.forced = false;
+                    self.forced.clear();
                     if !self.briefed {
                         self.brief(tic);
                     }
@@ -839,7 +912,7 @@ impl Session {
                     if self.briefed {
                         log.push(format!("neuro: connection lost ({why}); trying again"));
                     }
-                    self.forced = false;
+                    self.forced.clear();
                 }
                 Incoming::Action { id, name, data } => {
                     let args: Value = data
@@ -892,7 +965,7 @@ impl Session {
         self.link = Link::start(&self.url);
         self.registered.clear();
         self.connected = false;
-        self.forced = false;
+        self.forced.clear();
     }
 
     /// Which of the twins is playing, once the startup's been acknowledged: for what's worth
@@ -1363,6 +1436,29 @@ mod tests {
         assert!(!p.to_string().contains("instinct"), "{p}");
         assert!(p["schema"]["properties"]["explore"].is_object());
         assert!(p["description"].as_str().unwrap().contains(" hints: "));
+    }
+
+    /// One force at a time: out till one of its own actions is accepted, or it's timed out.
+    #[test]
+    fn one_force_at_a_time() {
+        let mut f = super::Forcing::new(30 * 35);
+        assert!(!f.out());
+        f.sent(100, vec!["doom_go", "doom_explore"]);
+        // (something else of hers meanwhile: still out)
+        f.answered("doom_status", true, 110);
+        assert!(f.out());
+        // (one of its own, refused: the server asks again, still out, the wait afresh)
+        f.answered("doom_go", false, 120);
+        assert!(f.out());
+        assert!(!f.expire(100 + 30 * 35));
+        // (accepted: over)
+        f.answered("doom_go", true, 130);
+        assert!(!f.out());
+        // (never answered: dropped after the timeout, said once)
+        f.sent(200, vec!["doom_answer"]);
+        assert!(!f.expire(200 + 30 * 35 - 1));
+        assert!(f.expire(200 + 30 * 35));
+        assert!(!f.out() && !f.expire(200 + 31 * 35));
     }
 
     /// Every action named for registering is one `actions` has, and every one it has is named.

@@ -3736,3 +3736,20 @@ How long she's waited for and how often she's put to were constants in three fil
 differ there and nowhere else. The stream console still changes the forcing times and the
 answer wait as it runs. The values are as they were: nothing she does changes (parity: 24 of
 24 the same).
+
+### One force at a time
+
+The SDK: "Neuro can only handle one action force at a time. Sending an action force while
+another one is in progress will cause problems." Ours kept a flag, and three things were
+wrong with it. The force for a question left unanswered didn't look at it (an ignored "what
+next" and then a real question: two out, 3 s apart). Any action of hers cleared it, one
+refused too, which the server puts to her again by itself (ours could be sent on top of its
+retry). And nothing ever cleared it but an action: a force the server had dropped (its
+retries spent, or a result it gave up on after 20 s; it doesn't tell the game) left her
+never forced again.
+
+`Forcing` (`session.rs`): a force is out till one of its own actions is accepted; refused,
+it's still out, waited for afresh; unanswered `directed.force_timeout` (30 s), it's taken
+as dropped. None is sent while one's out: a question's force waits its turn. Against the
+mock server with nobody answering, E1M1: forces at 15.0, 45.4 and 75.4 s, one out at a time
+(they'd been every 15 s, on top of each other).

@@ -1010,6 +1010,9 @@ pub struct Directed {
     /// after an action of hers that moves nothing (a look, a list): at least this long before a
     /// decision's forced
     pub after_look: f64,
+    /// a force unanswered this long is taken as dropped by the server, and another may be sent
+    /// (0: never; one at a time meanwhile)
+    pub force_timeout: f64,
     /// a question's default is taken after this long with no answer (0: she's waited for)
     pub answer_wait: f64,
     /// a question that can't wait (its default done at once) stays open this long for her to
@@ -1034,6 +1037,7 @@ impl Default for Directed {
             ask_force: 3.0,
             next_force: 15.0,
             after_look: 3.0,
+            force_timeout: 30.0,
             answer_wait: 8.0,
             now_open: 3.0,
             questions_a_minute: 3,
