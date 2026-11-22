@@ -253,7 +253,7 @@ pub fn actions_timed(c: &Directed) -> Vec<Value> {
     let s = |props: Value, required: &[&str]| json!({ "type": "object", "properties": props, "required": required });
     // (short: every word here is in Evil's context for the whole game)
     vec![
-        json!({ "name": "doom_look", "description": "What's round you: the room, what it leads to, monsters, items, doors and switches in sight, sounds, a suggestion." }),
+        json!({ "name": "doom_look", "description": "What's round you: the room, what it leads to, monsters, items, doors and switches in sight, sounds." }),
         json!({ "name": "doom_list", "description": "List known areas, doors, switches, items, monsters or exits, with ids, in the order you'd best take them. Areas: those left to explore or search for secrets, where you are, and named ones; all: every one.", "schema": s(json!({ "what": { "type": "string", "enum": ["areas", "doors", "switches", "items", "monsters", "exits"] }, "all": { "type": "boolean" } }), &["what"]) }),
         json!({ "name": "doom_press", "description": "Press a switch. rush: keep going mid-fight, shooting and dodging on the way. queue_up: queue this action up next, don't override current action.", "schema": s(json!({ "ref": { "type": "string" }, "rush": { "type": "boolean" }, "queue_up": { "type": "boolean" } }), &["ref"]) }),
         json!({ "name": "doom_inspect", "description": "What something is and where.", "schema": s(json!({ "ref": { "type": "string" } }), &["ref"]) }),

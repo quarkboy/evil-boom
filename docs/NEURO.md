@@ -48,7 +48,7 @@ With `--stream --present` it's the stream's window with Doom's own screens. The
 
 | action | what it does |
 |---|---|
-| `doom_look` | what's round you: the room, what it leads to, monsters, items, doors and switches in sight, sounds, a suggestion |
+| `doom_look` | what's round you: the room, what it leads to, monsters, items, doors and switches in sight, sounds (and the bot's suggestion, unless hints are off or she's fighting) |
 | `doom_list` | known areas, doors, switches, items, monsters or exits, with ids, likeliest first |
 | `doom_inspect` | what something is and where |
 | `doom_status` | health, armor, weapons, ammo, keys, the tally, what you're doing and fighting |
