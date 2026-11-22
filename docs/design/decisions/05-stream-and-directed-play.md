@@ -3874,3 +3874,13 @@ as suggestions, and she doesn't have to take them. The setting, its script comma
 `Hints` type are removed; the nudge keeps the times it had by default (30 s quietly, 60 s
 aloud). A `hints` a model still sends is dropped as any field she doesn't have. `doom_look`'s
 description no longer names the suggestion either (it isn't there in a fight).
+
+### One name for what an action's about; `queue_up` said once, shortly
+
+Going, pressing and inspecting took `ref`; exploring and searching took `target` for the
+same thing (what the action's about), and `doom_fight`'s `target` is a monster. Exploring
+and searching take `ref` now, so `target` means one thing, in the fight. `target`, `area` and
+`direction` are still read as `ref` there (`repair.rs`). A place given as lists give it ("SW
+305") is mended to an id for going and pressing only: for exploring it may be a direction, and
+is taken as it is. And "queue_up: queue this action up next, don't override current action",
+in four descriptions, is "queue_up: after what you're doing, not instead."

@@ -17,8 +17,8 @@ const ALIASES: &[(&str, &[&str])] = &[
     ("target", &["ref"]),
     ("object", &["ref", "target"]),
     ("item", &["ref"]),
-    ("area", &["target", "ref"]),
-    ("direction", &["target"]),
+    ("area", &["ref", "target"]),
+    ("direction", &["ref"]),
     ("switch", &["ref"]),
     ("door", &["ref"]),
     ("exit", &["ref"]),
@@ -183,7 +183,8 @@ mod tests {
             Value::String(r#"{"target": "N", "thorough": "3"}"#.into()),
             schema("doom_search").as_ref(),
         );
-        assert_eq!(v, json!({ "target": "N", "thorough": 3 }));
+        // (`target`, its field's name once, read as `ref`)
+        assert_eq!(v, json!({ "ref": "N", "thorough": 3 }));
         let (v, _) = repair(
             json!({ "fire": "Hold", "gun": "shotgun", "stance": "Bold", "seconds": 4.6 }),
             schema("doom_fight").as_ref(),

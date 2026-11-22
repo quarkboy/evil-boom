@@ -123,7 +123,7 @@ evil-boom watch doom E1M1 --neuro ws://127.0.0.1:8000
 ```
 
 A stand-in Neuro server: it sends the actions you append to the file, one a line
-(`doom_explore {"target": "north"}`, `doom_exit`, or `wait-for TEXT` to hold the rest until the game
+(`doom_explore {"ref": "north"}`, `doom_exit`, or `wait-for TEXT` to hold the rest until the game
 says something with TEXT in it; `speaking` and `spoken` send her `speech_finished`, a part and
 the end), and logs everything the game sends to `FILE.log`, each force with its priority and
 whether it's silent.
