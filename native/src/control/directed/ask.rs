@@ -129,7 +129,8 @@ impl Question {
     /// As she reads it: "[ask q3] Leave with 3 to explore? a) leave anyway b) stay (default, in
     /// 8 s). doom_answer."
     pub fn line(&self, tic: i64) -> String {
-        if self.now {
+        // (a jump waits for her as any question does, and reads so)
+        if self.now && !matches!(self.about, About::Jump(_)) {
             let opts: Vec<String> = self
                 .choices
                 .iter()
@@ -257,7 +258,16 @@ impl Director {
                 choices,
                 default,
                 told: false,
-                deadline: Some(obs.tic + Directed::tics(self.clocks.now_open)),
+                // (a jump: she's held at it for the answer, as long as any question waits)
+                deadline: Some(
+                    obs.tic
+                        + match about {
+                            About::Jump(_) => self
+                                .answer_wait
+                                .unwrap_or(Directed::tics(self.clocks.answer_wait)),
+                            _ => Directed::tics(self.clocks.now_open),
+                        },
+                ),
                 about,
                 now: true,
                 priority,

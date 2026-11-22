@@ -235,6 +235,16 @@ impl RouteFollower {
             self.jumps.push(JumpNews::Going(jump.clone()));
         }
         let lineup = *self.jump.lineup_tic.get_or_insert(obs.tic);
+        // (asked of whoever directs her, a jump that costs: she waits at the line-up for the
+        // answer, as a player stops at an edge to think)
+        if self.jump_held || (self.jump_asked && obs.tic == lineup) {
+            self.progress_tic = obs.tic;
+            return self.motion.hold(
+                obs,
+                ((jump.runup.0 - obs.x) * 0.3, (jump.runup.1 - obs.y) * 0.3),
+                Some(face),
+            );
+        }
         // (settling longer than a second: go anyway, if near enough on the spot; much longer:
         // from wherever)
         let near = dist(obs.pos(), jump.runup) < 6.0;

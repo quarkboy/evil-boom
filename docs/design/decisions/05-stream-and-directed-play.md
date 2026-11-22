@@ -3982,3 +3982,20 @@ her action waited on a game that wasn't running, and Neuro waits 20 s at most), 
 move her as ever, the rest told "The game's paused by the stream". Her actions stay
 registered through it. Untried against a real pause: there's no pausing a headless game, and
 the window's wasn't opened for it.
+
+### A jump that costs waits for her
+
+The question about a run-jump with a hurting floor or a long drop under it ("Jumping for it:
+161 across to area-125 (SW), a floor that hurts below") went out as she began lining up, its
+default "jump" already under way: settled within a second or so, sprinting, in the air. An
+answer of "don't" had half a second to two, by the code, and after takeoff does nothing. The
+maintainer's: hold her at the jump till she answers.
+
+So she stands at the line-up while that question is open (`RouteFollower::jump_held`; and
+under direction never starts the sprint on the tic the line-up begins, before the question
+could be put). It's over with her answer, with the question's time (`answer_wait`, 8 s: it
+reads as any question now, "a) jump (default, in 8 s) b) don't"), or with a fight or an
+order of hers taking her off it. Each such jump is asked about once a level; after that it's
+told, and jumped. MAP24 against the mock server: asked at 22.8 s, "don't" at 22.9 s, no
+jump; unanswered ones jumped 8.0 s after the asking; the same jump again later, told and
+taken at once. The bot alone has no one to ask: parity 24 of 24.

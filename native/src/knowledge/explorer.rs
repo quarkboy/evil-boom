@@ -769,6 +769,10 @@ pub struct Explorer {
     /// directed: the objective in hand is pressed on with mid-fight, shooting and dodging on
     /// the way, not stopped for the fight (a rush)
     pub press_on: bool,
+    /// directed: a jump that costs is asked about first (`RouteFollower::jump_asked`), and
+    /// she's held at its line-up while it is
+    pub jump_asked: bool,
+    pub jump_held: bool,
     suspecting: Suspecting,
     /// walls pressed round about since there was last anything else to do (the 100% runs)
     panic_tries: usize,
@@ -954,6 +958,8 @@ impl Explorer {
             ways_back: BTreeMap::new(),
             wedge_jumps: BTreeSet::new(),
             press_on: false,
+            jump_asked: false,
+            jump_held: false,
             panic_tries: 0,
             strong_only: false,
             waiting_reopen: false,
@@ -1192,6 +1198,7 @@ impl Explorer {
         // of her pace, 5 health a second, 70 in all)
         f.motion.any_way = self.sector.is_some_and(|s| self.knowledge.damaging(s))
             && !self.knowledge.protected(obs.tic);
+        (f.jump_asked, f.jump_held) = (self.jump_asked, self.jump_held);
         let out = f.act(obs);
         // What the follower had to say: jumps, waits, trouble.
         for ev in &f.log.events[self.follower_seen.min(f.log.events.len())..] {

@@ -283,6 +283,10 @@ fn last_point(path: &Path) -> Option<Point> {
 
 pub struct RouteFollower {
     pub view: Rc<View>,
+    /// whoever directs her is asked about a jump that costs: not off the tic its line-up
+    /// begins (before they could be), and held at the line-up while `jump_held`
+    pub jump_asked: bool,
+    pub jump_held: bool,
     pub steps: Vec<Step>,
     /// the plan only goes through doors she can open
     doors: Doors,
@@ -427,6 +431,8 @@ impl RouteFollower {
         let sinking = view.sinking();
         let mut f = RouteFollower {
             view,
+            jump_asked: false,
+            jump_held: false,
             steps,
             doors,
             lift_sectors,

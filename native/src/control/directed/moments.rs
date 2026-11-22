@@ -47,6 +47,9 @@ pub(super) struct Moments {
     told_start: bool,
     /// the big jumps told (by key), and when
     jumps_told: BTreeMap<String, i64>,
+    /// the jumps that cost she's been asked about on this level: each once (she's held at
+    /// its edge for the answer; the second time she's told, and jumps)
+    jumps_asked: std::collections::BTreeSet<String>,
     /// where she was last tic, and when she last teleported
     was_at: Option<Point>,
     teleported: Option<i64>,
@@ -168,8 +171,10 @@ impl Director {
                     }
                     if let Some((line, costly)) = self.big_jump(agent, obs, &j) {
                         m.jumps_told.insert(key.clone(), obs.tic);
-                        // (a miss that costs: taken, unless she says not to in time)
+                        // (a miss that costs: she waits at its edge for her answer, the first
+                        // time it comes up on this level)
                         let asked = costly
+                            && !m.jumps_asked.contains(&key)
                             && self.ask_now(
                                 agent,
                                 obs,
@@ -187,7 +192,9 @@ impl Director {
                                 0,
                                 (super::ask::About::Jump(key), "high"),
                             );
-                        if !asked {
+                        if asked {
+                            m.jumps_asked.insert(j.key());
+                        } else {
                             self.tell(obs, Event::JumpAhead, line);
                         }
                     }

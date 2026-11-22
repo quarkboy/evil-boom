@@ -931,6 +931,12 @@ impl Director {
         self.plans(agent, obs);
         self.held_fire_news(agent, obs);
         self.questions(agent, obs);
+        // (a jump that costs is asked about, and she waits at its line-up while it is)
+        let x = agent.x_mut();
+        x.jump_asked = true;
+        x.jump_held = self
+            .question()
+            .is_some_and(|q| matches!(q.about, About::Jump(_)));
         self.apply_tactics(agent, obs);
         // (...once she's seen a way out this life: till then a sphere or a berserk she's no
         // need of is left for when she might, as without the goal. One known only from a life
