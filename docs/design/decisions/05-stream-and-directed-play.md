@@ -3841,3 +3841,25 @@ lost Gary the idle and question forces too); and `tools/neuro/gary.sh` plays wit
 `config/gary.json` (`directed.next_silent` false). With it, 75 s of E1M1: four "what next"
 forces, each answered by the model in 0.6 to 3 s (a look first, some of them), none on top
 of another, no diagnostics.
+
+### `doom_fight` by fields; `doom_policy`'s help out of her context
+
+The SDK: "Keep descriptions to a sentence or two. Longer rules belong in context messages",
+and one action with a slightly bigger schema over a chain of them. Two of ours were neither.
+
+**`doom_fight`** was one `do` of ten values with a `ref` that meant a monster for one and a
+gun for another: cryptic (the maintainer's word), and a target, a gun and a stance three
+actions. It's fields now, any given together (the maintainer's shape): `target` (an id or a
+kind, shot first; `none`), `weapon` (a gun she holds; `auto`), `fire` (`hold`, `free`),
+`override_stance` (the maintainer's name: it's over her policy's, for a while), `retreat`,
+`cancel` (was `auto`: everything of hers dropped), `seconds`. None given answers what's
+holding. Each is taken in turn and one that can't be doesn't stop the rest: "Holding fire,
+10 s. But: No cyberdemon known of right now. Known now: 2 zombiemen (ids: doom_list
+monsters)." A word that won't do is answered with what would (the SDK's rule for a free
+string): the kinds she knows of, the guns she holds. The old form still reads (`ref` as
+`target`, `gun` as `weapon`, `stance` as `override_stance`: `repair.rs`). GLM 5.3, first
+fight with it: `{"fire":"free","target":"zombieman"}`.
+
+**`doom_policy`**'s description carried every value's meaning, 895 characters in her context
+the whole game. It's two sentences (116); the meanings are what it answers with nothing
+given. Its schema's enums were always there.

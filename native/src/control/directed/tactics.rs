@@ -30,22 +30,46 @@ impl Director {
         match what {
             "target" => {
                 let r = r.ok_or("target what: a monster's id or a kind (\"archvile\")")?;
+                if r == "none" {
+                    self.tactics.target = None;
+                    return Ok("Your target by reflex again.".into());
+                }
+                // (what would do, for a word that doesn't: the kinds she knows of now)
+                let about = || {
+                    let mut kinds: std::collections::BTreeMap<&str, usize> = Default::default();
+                    for m in &known {
+                        *kinds.entry(m.1).or_insert(0) += 1;
+                    }
+                    if kinds.is_empty() {
+                        "No monsters known of right now.".to_string()
+                    } else {
+                        let all: Vec<String> = kinds.iter().map(|(n, c)| some(*c, n)).collect();
+                        format!("Known now: {} (ids: doom_list monsters).", all.join(", "))
+                    }
+                };
                 let id = self.resolve(r);
                 let (aim, called) = if let Some(n) = id
                     .strip_prefix("monster-")
                     .and_then(|n| n.parse::<i32>().ok())
                 {
                     let Some((_, name, ..)) = known.iter().find(|m| m.0 == n) else {
-                        return Err(format!("No {id} known (dead, or never seen)."));
+                        return Err(format!("No {id} known (dead, or never seen). {}", about()));
                     };
                     (Aim::One(n), format!("{id} ({})", called(name)))
                 } else if let Some(kind) = monster_kind(r) {
                     if !known.iter().any(|m| m.1 == kind) {
-                        return Err(format!("No {kind} known of right now."));
+                        return Err(format!(
+                            "No {} known of right now. {}",
+                            called(kind),
+                            about()
+                        ));
                     }
-                    (Aim::Kind(kind), kind.to_string())
+                    (Aim::Kind(kind), called(kind).to_string())
                 } else {
-                    return Err(format!("\"{r}\" isn't a monster or a kind of one."));
+                    return Err(format!(
+                        "\"{r}\" isn't a monster or a kind of one. {}",
+                        about()
+                    ));
                 };
                 let (secs, until) = hold(tactic, TACTIC_MOST);
                 let said = format!("Targeting {called} first, {secs:.0} s.");
@@ -58,13 +82,31 @@ impl Director {
                     self.tactics.gun = None;
                     return Ok("Your gun by reflex again.".into());
                 }
-                let gun = gun_named(r).ok_or_else(|| format!("\"{r}\" isn't a gun."))?;
+                // (what would do: the guns she holds)
+                let held = || {
+                    let mut guns: Vec<&str> = obs
+                        .owned
+                        .iter()
+                        .flatten()
+                        .filter(|g| **g != 0)
+                        .map(|g| gun_called(*g))
+                        .collect();
+                    if obs.berserk == Some(true) {
+                        guns.push("fist");
+                    }
+                    format!("You hold: {}.", guns.join(", "))
+                };
+                let gun = gun_named(r).ok_or_else(|| format!("\"{r}\" isn't a gun. {}", held()))?;
                 // (the fist only with a berserk pack this level: without, no gun worth the name)
                 if gun == 0 && obs.berserk != Some(true) {
                     return Err("Not the fist without a berserk pack this level.".into());
                 }
                 if gun != 0 && !obs.owned.as_ref().is_some_and(|o| o.contains(&gun)) {
-                    return Err(format!("You haven't got the {}.", gun_called(gun)));
+                    return Err(format!(
+                        "You haven't got the {}. {}",
+                        gun_called(gun),
+                        held()
+                    ));
                 }
                 let (secs, until) = hold(tactic, TACTIC_MOST);
                 self.tactics.gun = Some((gun, until));
@@ -110,7 +152,7 @@ impl Director {
             }
             other => {
                 let (name, over) = stance(other).ok_or(
-                    "fight: target REF, weapon NAME|auto, retreat, hold_fire, fire, bold, careful, avoid, steady, auto",
+                    "fight: target, weapon, hold_fire, fire, retreat, bold, careful, avoid, steady, auto",
                 )?;
                 let (secs, until) = hold(stance_secs, STANCE_MOST);
                 agent

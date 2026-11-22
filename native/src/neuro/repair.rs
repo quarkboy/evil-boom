@@ -22,9 +22,12 @@ const ALIASES: &[(&str, &[&str])] = &[
     ("switch", &["ref"]),
     ("door", &["ref"]),
     ("exit", &["ref"]),
-    ("monster", &["ref"]),
+    ("monster", &["ref", "target"]),
+    ("enemy", &["target"]),
     ("weapon", &["ref"]),
-    ("gun", &["ref"]),
+    ("gun", &["weapon", "ref"]),
+    ("stance", &["override_stance"]),
+    ("hold_fire", &["fire"]),
     ("type", &["what"]),
     ("kind", &["what"]),
     ("list", &["what"]),
@@ -182,10 +185,13 @@ mod tests {
         );
         assert_eq!(v, json!({ "target": "N", "thorough": 3 }));
         let (v, _) = repair(
-            json!({ "do": "Hold Fire", "seconds": 4.6 }),
+            json!({ "fire": "Hold", "gun": "shotgun", "stance": "Bold", "seconds": 4.6 }),
             schema("doom_fight").as_ref(),
         );
-        assert_eq!(v, json!({ "do": "hold_fire", "seconds": 5 }));
+        assert_eq!(
+            v,
+            json!({ "fire": "hold", "weapon": "shotgun", "override_stance": "bold", "seconds": 5 })
+        );
         let (v, _) = repair(json!({ "what": "Doors" }), schema("doom_list").as_ref());
         assert_eq!(v, json!({ "what": "doors" }));
         // (an id given as a number)

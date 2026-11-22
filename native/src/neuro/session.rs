@@ -261,8 +261,8 @@ pub fn actions_timed(c: &Directed) -> Vec<Value> {
         json!({ "name": "doom_explore", "description": "Explore an area or a compass direction, the likeliest secret walls too; paused while you're fighting. queue_up: queue this action up next, don't override current action.", "schema": s(json!({ "target": { "type": "string" }, "queue_up": { "type": "boolean" } }), &["target"]) }),
         json!({ "name": "doom_search", "description": "Search an area or a compass direction for secrets: thorough 2 (most suspicious walls, default) or 3 (every one, slow). queue_up: queue this action up next, don't override current action.", "schema": s(json!({ "target": { "type": "string" }, "thorough": { "type": "integer", "enum": [2, 3] }, "queue_up": { "type": "boolean" } }), &["target"]) }),
         json!({ "name": "doom_exit", "description": "Leave the level. sure: even with things left.", "schema": s(json!({ "sure": { "type": "boolean" } }), &[]) }),
-        json!({ "name": "doom_fight", "description": format!("Who you fight and how: target, weapon or hold_fire for the next {tactic:.0}s; bold, careful, avoid or steady for {stance:.0}s (or seconds, if given). target: ref a monster id or kind, shot first. weapon: ref a gun, or auto. retreat: to cover. hold_fire / fire. bold / careful / avoid (keep clear: to get past) / steady: how you fight. auto: end this, fight as usual."), "schema": s(json!({ "do": { "type": "string", "enum": ["target", "weapon", "retreat", "hold_fire", "fire", "bold", "careful", "avoid", "steady", "auto"] }, "ref": { "type": "string" }, "seconds": { "type": "integer" } }), &["do"]) }),
-        json!({ "name": "doom_policy", "description": format!("Your settings, kept till you change them. Give any to change them; none to hear them all. {}{INSTINCT_HELP} hints: when you get suggestions: off, on_stall (when you're stuck) or always.", crate::control::directed::policy_help()), "schema": s(json!({ "stance": { "type": "string", "enum": ["careful", "steady", "bold", "avoid", "yolo"] }, "save": { "type": "string", "enum": ["cells", "none"] }, "risk": { "type": "string", "enum": ["careful", "normal", "bold"] }, "powerups": { "type": "string", "enum": ["need", "now"] }, "explore": { "type": "string", "enum": ["normal", "methodical", "speedy"] }, "instinct": { "type": "string", "enum": ["on", "off"] }, "hints": { "type": "string", "enum": ["off", "on_stall", "always"] } }), &[]) }),
+        json!({ "name": "doom_fight", "description": format!("Your say in the fight, for a while; give any together. target: a monster id or kind to shoot first ({tactic:.0}s; none ends it). weapon: a gun you hold, used while it has a shot ({tactic:.0}s; auto ends it). fire: hold, or free ({tactic:.0}s). override_stance: how hard you fight, over your policy's ({stance:.0}s). retreat: fall back to cover now. cancel: drop all of these. seconds: a different length. None given: what's holding now."), "schema": s(json!({ "target": { "type": "string" }, "weapon": { "type": "string" }, "fire": { "type": "string", "enum": ["hold", "free"] }, "override_stance": { "type": "string", "enum": ["bold", "careful", "avoid", "steady"] }, "retreat": { "type": "boolean" }, "cancel": { "type": "boolean" }, "seconds": { "type": "integer" } }), &[]) }),
+        json!({ "name": "doom_policy", "description": "Your settings, kept till you change them. Give any to change them; none to hear them all and what each does.", "schema": s(json!({ "stance": { "type": "string", "enum": ["careful", "steady", "bold", "avoid", "yolo"] }, "save": { "type": "string", "enum": ["cells", "none"] }, "risk": { "type": "string", "enum": ["careful", "normal", "bold"] }, "powerups": { "type": "string", "enum": ["need", "now"] }, "explore": { "type": "string", "enum": ["normal", "methodical", "speedy"] }, "instinct": { "type": "string", "enum": ["on", "off"] }, "hints": { "type": "string", "enum": ["off", "on_stall", "always"] } }), &[]) }),
         json!({ "name": "doom_game", "description": "The game itself, when it's yours. start: a game, when you're offered one (map; skill 1 easiest to 4 hardest; play single level or continuous). next: on to the next level from the tally screen. restart: this level from its start, after a while with nothing new.", "schema": s(json!({ "do": { "type": "string", "enum": ["start", "next", "restart"] }, "map": { "type": "string" }, "skill": { "type": "integer", "enum": [1, 2, 3, 4] }, "play": { "type": "string", "enum": ["single", "continuous"] } }), &["do"]) }),
         json!({ "name": "doom_answer", "description": "Answer a question ([ask q3] ...): id, and choice by its letter.", "schema": s(json!({ "id": { "type": "string" }, "choice": { "type": "string" } }), &["id", "choice"]) }),
         json!({ "name": "doom_pause", "description": "Pause the game, as stepping away from it: the menu comes up and nothing moves till you play on (on: false). on: true by default.", "schema": s(json!({ "on": { "type": "boolean" } }), &[]) }),
@@ -272,7 +272,8 @@ pub fn actions_timed(c: &Directed) -> Vec<Value> {
     ]
 }
 
-/// `doom_policy`'s word on instinct: left out when it isn't hers to turn off.
+/// `doom_policy`'s word on instinct, in what it answers with nothing given: left out when it
+/// isn't hers to turn off.
 const INSTINCT_HELP: &str = " instinct: on (an action done, you carry on by yourself and are asked what next), off (you stand and wait).";
 
 /// `doom_policy` with no word of instinct: not hers to turn off.
@@ -280,9 +281,6 @@ fn without_instinct(all: &mut [Value]) {
     let Some(p) = all.iter_mut().find(|a| a["name"] == "doom_policy") else {
         return;
     };
-    if let Some(d) = p["description"].as_str() {
-        p["description"] = json!(d.replace(INSTINCT_HELP, ""));
-    }
     if let Some(props) = p["schema"]["properties"].as_object_mut() {
         props.remove("instinct");
     }
@@ -1288,14 +1286,34 @@ impl Session {
                     Some(_) => "carry on by instinct when an action's done".to_string(),
                     None => "wait for the next action (instinct off)".to_string(),
                 };
-                (
-                    true,
-                    format!(
-                        "Your policy: {}. You {idle}; hints {}.",
-                        self.director.policy.line(),
-                        self.director.hints.name()
-                    ),
-                )
+                let now = format!(
+                    "Your policy: {}. You {idle}; hints {}.",
+                    self.director.policy.line(),
+                    self.director.hints.name()
+                );
+                // (none given: what each does with it; her action's description doesn't
+                // carry that, it'd sit in her context the whole game)
+                let asked = [
+                    "stance", "save", "risk", "powerups", "explore", "instinct", "hints",
+                ]
+                .iter()
+                .any(|k| args.get(*k).is_some());
+                if asked {
+                    (true, now)
+                } else {
+                    let instinct = if self.instinct_hers {
+                        INSTINCT_HELP
+                    } else {
+                        ""
+                    };
+                    (
+                        true,
+                        format!(
+                            "{now}\n{}{instinct} hints: when you get suggestions: off, on_stall (when you're stuck) or always.",
+                            crate::control::directed::policy_help()
+                        ),
+                    )
+                }
             }
             "doom_inspect" => {
                 let Some(r) = arg("ref") else {
@@ -1404,17 +1422,55 @@ impl Session {
                 }
             }
             "doom_fight" => {
-                let Some(what) = arg("do") else {
+                let seconds = args.get("seconds").and_then(Value::as_f64);
+                let flag = |k: &str| args.get(k).and_then(Value::as_bool).unwrap_or(false);
+                let fire = match arg("fire") {
+                    Some("hold") => Some("hold_fire"),
+                    Some("free") => Some("fire"),
+                    Some(_) => return (false, "fire: hold or free.".into()),
+                    None => None,
+                };
+                let stance = arg("override_stance");
+                if stance.is_some_and(|s| !["bold", "careful", "avoid", "steady"].contains(&s)) {
                     return (
                         false,
-                        "do: target, weapon, hold_fire, fire, bold, careful, steady or auto."
-                            .into(),
+                        "override_stance: bold, careful, avoid or steady.".into(),
                     );
-                };
-                let seconds = args.get("seconds").and_then(Value::as_f64);
-                match self.director.fight(agent, obs, what, arg("ref"), seconds) {
-                    Ok(said) => (true, said),
-                    Err(why) => (false, why),
+                }
+                // (each of her words in turn, as `Director::fight` has them: dropping what
+                // was hers first, falling back last)
+                let mut steps: Vec<(&str, Option<&str>)> = Vec::new();
+                if flag("cancel") {
+                    steps.push(("auto", None));
+                }
+                if let Some(t) = arg("target") {
+                    steps.push(("target", Some(t)));
+                }
+                if let Some(w) = arg("weapon") {
+                    steps.push(("weapon", Some(w)));
+                }
+                steps.extend(fire.map(|f| (f, None)));
+                steps.extend(stance.map(|s| (s, None)));
+                if flag("retreat") {
+                    steps.push(("retreat", None));
+                }
+                if steps.is_empty() {
+                    let holding = self.director.calls(obs.tic).join("; ");
+                    return (true, format!("Holding now: {holding}."));
+                }
+                // (one that can't be done doesn't stop the rest: what was taken is said, and
+                // what wasn't, why)
+                let (mut said, mut not): (Vec<String>, Vec<String>) = (Vec::new(), Vec::new());
+                for (what, r) in steps {
+                    match self.director.fight(agent, obs, what, r, seconds) {
+                        Ok(s) => said.push(s),
+                        Err(why) => not.push(why),
+                    }
+                }
+                match (said.is_empty(), not.is_empty()) {
+                    (_, true) => (true, said.join(" ")),
+                    (true, false) => (false, not.join(" ")),
+                    (false, false) => (false, format!("{} But: {}", said.join(" "), not.join(" "))),
                 }
             }
             "doom_pause" => {
@@ -1566,7 +1622,8 @@ mod tests {
         let p = all.iter().find(|a| a["name"] == "doom_policy").unwrap();
         assert!(!p.to_string().contains("instinct"), "{p}");
         assert!(p["schema"]["properties"]["explore"].is_object());
-        assert!(p["description"].as_str().unwrap().contains(" hints: "));
+        // (and what each does isn't in the description at all: it's what an empty call answers)
+        assert!(p["description"].as_str().unwrap().len() < 160);
     }
 
     /// One force at a time: out till one of its own actions is accepted, or it's timed out.

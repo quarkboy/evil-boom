@@ -59,7 +59,7 @@ With `--stream --present` it's the stream's window with Doom's own screens. The
 | `doom_press` | press a switch |
 | `doom_exit` | leave the level; with things left she's asked first (`sure: true` doesn't ask); no answer and she stays, or leaves if her goal is `out` or her `explore` setting `speedy`. Going on to another level with health, armor or ammo she's seen and could still take with her, the question names them and its default is to stock up first (the supplies goal) |
 | `doom_pause` | pause the game, as stepping away (Doom's menu up on its own screens), till `on: false`; meanwhile only what doesn't move her is registered |
-| `doom_fight` | your say in the fight for a while: a target, a weapon, hold fire, a stance |
+| `doom_fight` | your say in the fight for a while, any together: `target`, `weapon`, `fire` (hold, free), `override_stance`, `retreat`, `cancel`; none given, what's holding |
 | `doom_goal` | a standing aim, till met. It doesn't play for her: it puts what it's after first in what's suggested to her and in what she does on instinct: out, completionist (100%, then out; she's asked if she's sure), a key, kills, supplies, secrets. A goal says what she's after, not how she explores: that stays her `explore` setting |
 | `doom_policy` | standing settings: stance, save, risk, powerups, explore, instinct, hints |
 | `doom_answer` | answer one of the bot's questions |
@@ -76,6 +76,9 @@ life; off a level (the title card, the tally, a finale, game over), `doom_game`,
 a stray field) are mended against the schema (`neuro/repair.rs`).
 
 ### Settings (`doom_policy`)
+
+Its description is two sentences; what each value does is what it answers with nothing given
+(it would otherwise sit in her context the whole game).
 
 - **stance:** `careful` (the default: backs off sooner), `steady` (stands and fights more),
   `bold` (fights more still, finishes fewer levels), `avoid` (keeps clear of fights), `yolo`
