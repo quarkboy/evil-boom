@@ -1517,6 +1517,11 @@ impl Watch {
         }
         let tally = crate::control::directed::Tally::of(self.engine.tally());
         let gibbed = self.engine.gibbed();
+        // (the ultra instinct on: and what she has left of it, where it's hers by dying)
+        let ultra = self.ultra.is_some().then(|| {
+            self.ultra_earned
+                .then(|| (self.ultra_charge / TICRATE).floor())
+        });
         let hits = std::mem::take(&mut self.hits);
         let level = crate::control::directed::Level {
             map: self.map_name.clone(),
@@ -1527,6 +1532,7 @@ impl Watch {
             feed.director.tally = tally;
             feed.director.level = level.clone();
             feed.director.restart_allowed = self.choices.restart;
+            feed.director.ultra = ultra;
             feed.director.gibbed.clone_from(&gibbed);
             feed.director.hits.clone_from(&hits);
             for l in feed.tic(&mut self.agent, &obs) {
@@ -1538,6 +1544,7 @@ impl Watch {
             neuro.director.tally = tally;
             neuro.director.level = level;
             neuro.director.restart_allowed = self.choices.restart;
+            neuro.director.ultra = ultra;
             neuro.director.gibbed = gibbed;
             neuro.director.hits = hits;
             for l in neuro.tic(&mut self.agent, &obs) {

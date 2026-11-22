@@ -531,6 +531,9 @@ pub struct Director {
     /// (for the runner to do); progress lately, (what it was, since when), and her told it's hers
     pub restart_allowed: bool,
     pub restart_wanted: bool,
+    /// the ultra instinct is fighting for her now (the watch's to say each tic), and the
+    /// seconds of it she has left where it's earned by dying (None: no limit to it)
+    pub ultra: Option<Option<f64>>,
     /// questions to her (`ask.rs`), and how long one waits for her answer before its default
     /// (None: as long as it takes)
     asking: ask::Asking,
@@ -826,8 +829,14 @@ impl Director {
         let plan = self
             .plan_words(agent, obs)
             .map_or(String::new(), |p| format!("; {p}"));
+        // (the ultra instinct fighting for her: she'd not know it from the fight's own words)
+        let ultra = match self.ultra {
+            Some(Some(secs)) => format!("; Ultra Instinct on, {secs:.0} s left"),
+            Some(None) => "; Ultra Instinct on".to_string(),
+            None => String::new(),
+        };
         // (short: what Evil reads costs her context)
-        format!("{}; {}; {doing}{plan}", kit(obs), self.tally.line())
+        format!("{}; {}; {doing}{plan}{ultra}", kit(obs), self.tally.line())
     }
 
     /// What in her status she'd act on, to tell whether it's changed: health and armor by tens,
@@ -835,7 +844,7 @@ impl Director {
     /// round spent, nor where what's fighting her has got to.)
     pub fn status_gist(&self, agent: &Agent, obs: &Observation) -> String {
         format!(
-            "{} {} {:?} {:?} {} {} {} {:?} {:?}",
+            "{} {} {:?} {:?} {} {} {} {:?} {:?} {}",
             (self.now.health / 10.0).floor(),
             (self.now.armor / 10.0).floor(),
             obs.weapons,
@@ -844,7 +853,8 @@ impl Director {
             self.now.fighting(),
             self.tally.line(),
             self.now.fighting().then(|| self.now.doing()),
-            self.not_shooting(agent)
+            self.not_shooting(agent),
+            self.ultra.is_some()
         )
     }
 
