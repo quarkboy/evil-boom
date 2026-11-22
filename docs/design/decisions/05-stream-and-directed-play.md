@@ -3830,3 +3830,14 @@ which is why the note. MAP27 on UV against the mock server, seed 205498993: the 
 her second go at the library door, the charge told, the lines in `doom_why`. The note on an
 order wasn't reached in that run (the door was open by then). The bot alone is as it was:
 parity, 24 of 24.
+
+### Gary and `silent`
+
+The first session with a model (Gary's custom build, GLM 5.3 by OpenRouter, E1M1): every
+"what next" force came back `prot/invalid_message`, "Unrecognized key: silent", the whole
+force thrown away. Gary 1.0.6 is from before the field. Two things: a force that isn't silent
+no longer carries the key at all (it was sent as `false` on every force, which would have
+lost Gary the idle and question forces too); and `tools/neuro/gary.sh` plays with
+`config/gary.json` (`directed.next_silent` false). With it, 75 s of E1M1: four "what next"
+forces, each answered by the model in 0.6 to 3 s (a look first, some of them), none on top
+of another, no diagnostics.

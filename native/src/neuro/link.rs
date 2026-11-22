@@ -77,7 +77,13 @@ impl Link {
     /// `silent`: she picks without saying anything aloud about it (the SDK's, for decisions
     /// that come often and aren't worth a word each).
     pub fn force(&self, state: &str, query: &str, actions: &[&str], priority: &str, silent: bool) {
-        self.send("actions/force", Some(json!({ "state": state, "query": query, "ephemeral_context": true, "priority": priority, "silent": silent, "action_names": actions })));
+        let mut d = json!({ "state": state, "query": query, "ephemeral_context": true, "priority": priority, "action_names": actions });
+        // (only when it's so: a server from before the field, Gary's for one, throws the whole
+        // force away for a key it doesn't know)
+        if silent {
+            d["silent"] = json!(true);
+        }
+        self.send("actions/force", Some(d));
     }
 }
 

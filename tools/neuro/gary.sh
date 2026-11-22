@@ -70,4 +70,7 @@ fi
 
 [ $# -ge 2 ] || exit 0
 # shellcheck disable=SC2086
-exec out/build/release/evil-boom watch "$1" "$2" $headless --speed 1 --neuro ws://127.0.0.1:8000 "${@:3}"
+# (config/gary.json: Gary 1.0.6 is from before the SDK's `silent` on a force, and throws away a
+# force that has it; a --tuning of yours after it is the one used)
+exec out/build/release/evil-boom watch "$1" "$2" $headless --speed 1 --neuro ws://127.0.0.1:8000 \
+  --tuning config/gary.json "${@:3}"
