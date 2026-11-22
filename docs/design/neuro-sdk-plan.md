@@ -1,6 +1,6 @@
 # Evil's control of the game: the full Neuro SDK layer
 
-> **Status:** built through stage 7 (2026-11-12); what exists is described in [../NEURO.md](../NEURO.md). Kept as the design, with the notes from directing levels by hand.
+> **Status:** built through stage 7 (2026-11-12). **Reworked 2026-11-22**: the action set (sixteen to ten), the forcing, and what she's told were gone over against the SDK of 11 November and a model that answers in under a second. [Section 10](#10-as-it-stands-2026-11-22) is how it stands; where sections 2 to 9 differ from it, 10 is right and they're the plan as it was written. What exists is described in [../NEURO.md](../NEURO.md); each change and its reason is in [decisions/05](decisions/05-stream-and-directed-play.md) ("The Neuro layer against the SDK of 11 November" onward). Kept as the design, with the notes from directing levels by hand.
 
 Date: 2026-11-11. Status: a plan, for the maintainer to cut down or redirect; stage 0 (driving the
 existing layer by hand to find what's missing) is under way.
@@ -38,6 +38,8 @@ Three rules follow, and everything below keeps to them:
    outcomes in every list, event, question and answer (section 5).
 
 ## 2. The decision map
+
+> The "hers through" columns name actions as planned. Several are folded or gone since (`doom_press`, `doom_explore` and `doom_search` into `doom_go`; `doom_list` and `doom_inspect` into `doom_query`; `doom_fight`'s verbs into fields): section 10 has today's.
 
 Every decision the bot makes today, where it's made, its class, and what she gets. "Level"
 is the grain of control from section 3 that reaches it. Decisions marked **new seam** need a
@@ -163,6 +165,8 @@ what can't be undone`, so dead air never lasts and she's never shut out.
 
 ## 4. The actions
 
+> As planned. The set as it stands, ten actions, is in section 10: 4.1 to 4.5 and 4.7 are kept for what each was meant to do, not for its name or shape.
+
 Sixteen at most, registered for the whole game but for `doom_cheat` (descriptions as terse as today's: every word is in
 her context throughout). The nine that exist keep their shape.
 
@@ -275,7 +279,8 @@ One shape for every time the bot wants her say:
   alternative and how long it's open: "[ask q18] Archvile, 600 E. Going for cover (default).
   a) cover b) rush it c) keep on to the exit. Open 3 s." An answer in time switches; after,
   it gets "too late: q18 closed (she's in cover)". Never forced: a force that arrives after the
-  moment is worse than none.
+  moment is worse than none. **(Changed 2026-11-22: forced the tic it's asked, at `high` or
+  `critical`; with an answer in under a second the moment isn't gone. Section 10.)**
 - **At most one open question**, at most a few a minute (a budget; over it, the default is
   just taken and logged). A question is asked only where the options are **close or the stake
   is high**: the journal already has each rule's options and scores, so "close" is the margin
@@ -710,7 +715,8 @@ planned. After MAP07: tactics move up to straight after 1a, with the telling of 
    5. So the deadlines (4.6) are: **class T, 3 s** (the bot's default acts first and an answer
    in 3 s overrides it); **class D, 8 s** (covers all but the rare slow answer; the default
    then, said). The 15 s and 6 s guesses are gone.
-3. **Sixteen actions is fine.** No folding.
+3. **Sixteen actions is fine.** No folding. **(Changed 2026-11-22, the maintainer's: folded to
+   ten, going through each description and schema as she receives them. Section 10.)**
 4. **`doom_style` free text needs a Jev-like model**: a plan of its own after this one is
    mostly done, maybe an experimental mode. Out of this plan's stages.
 5. **Meta control**:
@@ -732,3 +738,71 @@ planned. After MAP07: tactics move up to straight after 1a, with the telling of 
      may start", "Skills she may choose", "Play she may choose"; `--choices` for a watch).
    - **skill**: not asked; stays behind the console's switch, off.
    - **cheats**: held off. `doom_cheat` stays planned, not built, till you say.
+
+## 10. As it stands (2026-11-22)
+
+A day's work on the layer, the maintainer going through it action by action. Two things drove
+it: the SDK's own advice (its copy of 11 November: one force at a time, descriptions of a
+sentence or two, few and distinct actions, `silent` forces, `speech_finished`), and the
+maintainer's word that she answers in under half a second, one to two at worst. Section 1's
+classes stand; what moved is where the line between them falls, and how much she has to ask
+for against how much she's told.
+
+### 10.1 The actions
+
+Ten in a level (`doom_exit` once she's seen an exit, `doom_game` where a restart is hers):
+
+| action | fields | what it was |
+|---|---|---|
+| `doom_look` | none | as planned (4.1); its description no longer promises a suggestion |
+| `doom_query` | `all` (areas, doors, switches, items, monsters, exits), `ref`, `include_explored` | `doom_list` and `doom_inspect`. A list is 15 lines at most and says when it's cut; monsters nearest first; an entry says "died there once" where instinct leaves it alone |
+| `doom_status` | none | as planned; in a fight it says what the fight's doing and, when she isn't shooting for a reason that lasts, that; and a plan of her own in force |
+| `doom_go` | `ref`, `explore` (none, sweep, secrets, everything), `risky`, `rush`, `queue_up` | `doom_go`, `doom_press`, `doom_explore`, `doom_search`. A direction is swept. `rush` with a sweep gets her to the area and no further. `sure` is gone: the question does it |
+| `doom_exit` | none | `doom_exit [sure]` |
+| `doom_fight` | `target`, `weapon`, `fire` (hold, free), `override_stance`, `retreat`, `cancel`, `seconds` | 4.3's one `do` with a `ref`, as fields given together. `push`, `hold` and `ignore` were never built: the stances cover them |
+| `doom_policy` | `stance`, `save`, `risk`, `powerups`, `explore`, `instinct` | 4.4, as cut down in `policy-survey.md`. `hints` is gone: suggestions are always given. Its help is its answer with nothing given, not its description |
+| `doom_goal` | `finish` (none, out, kills, secrets, completionist), `prefer` (none, health, ammo, hunt, unexplored) | 4.2's `doom_goal`, split in two: when the level's done, and what instinct puts first meanwhile. The `key` goal is gone; `supplies` is only what "stock up first?" sets |
+| `doom_answer` | `id`, `choice` | as planned (4.5) |
+| `doom_game` | `do` (start, next, restart), `map`, `skill`, `play` | as built (4.7, section 9); a level named loosely is taken |
+
+Gone outright: `doom_why` (she can't ask why of what she can't see: what it knew that bears
+on a decision is in her status and the news; the console's "Why" panel still has the rest),
+`doom_pause` (the stream's to do; her actions are answered while it's paused), `doom_stop`
+and `doom_name` (never registered for her). `doom_cheat` and `doom_style` stay unbuilt.
+
+Old names and shapes a model may still send are mended where they can be (`repair.rs`:
+`target` as `ref`, `what` as `all`, `goal` as `finish`, `gun` as `weapon`, and so on), and
+told back.
+
+### 10.2 Forcing
+
+- **One force at a time** (`Forcing`): out till one of its own actions is accepted, or 30 s
+  with none. A refused action leaves it out: the server retries by itself.
+- **When**: waiting with nothing to do, 6 s (medium); a question unanswered 3 s (high); a
+  game hers to start and not started (medium, off a level); "what next" on instinct (low,
+  `silent`, not while she's mid-sentence: `speech_finished` is read).
+- **Class T is forced** the tic it's asked: `high` for an arch-vile, a boss, outmatched, a
+  jump that costs; `critical` for health going in a fight; `medium` for the sphere plan. The
+  default's still done at once and the old path is the fallback (4.6's "never forced" is
+  gone). A jump that costs is the exception to "done at once": she waits at its edge for the
+  answer, once a level for each jump.
+- The clocks are the tuning's `directed` group, a file for each model that plays her.
+
+### 10.3 Told, not asked for
+
+- **Her own plans** (`plans.rs`): the invulnerability fetched before what killed her (a
+  question), where she's off to with it, a gun before any key.
+- **Not shooting**, when it'll last: in her status, and once a fight as news.
+- **What a preference is doing**: in the suggestion's words ("you prefer: ...").
+
+### 10.4 Still open
+
+- An urgent force waits behind an unanswered routine one (one at a time). To be decided: let
+  it replace the other, which the SDK's best practices allow and its specification warns of.
+- The questions want pruning (the two "sure?" of her own settings; four ways of asking
+  "leave?" beside `finish`).
+- The default stance writes its own copies of five tuning numbers over the run's.
+- The tally screen isn't forced; `actions/reregister_all` isn't answered.
+- None of 10.1 has had a long session with a model: the mock server and short runs against
+  Gary only.
+
