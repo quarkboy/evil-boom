@@ -3584,3 +3584,47 @@ again after a minute, at a life's cost).
 (The first test of this was no test: its name, `cross1`, was a folder of two days before,
 and `run.sh` plays no run whose row is on file. Names carry the date since, and `run.sh`
 keeps the build's hash by its rows and refuses another's.)
+
+## Where a switch is pressed from (2026-11-22)
+
+Doom II MAP14, the maintainer watching: a lift's face pressed three times to no effect
+(152 s), then forty seconds pushed against a parapet 12 short of the spot she'd been sent
+to press its other faces from (180 to 220 s).
+
+Two things wrong, both in how a use line's ground is judged:
+
+- **From where a press gets there** was tried from the poly's middle or its nearest corner
+  (`use_gates_on` from `near` and `c`), which can be 170 units from a line her press reaches
+  64 to. A yard counted as ground to press the lift from whose only spot within reach has
+  a block of wall between. Now a poly counts only if it has a spot her box can stand at
+  from which the trace reaches the part of the line she'd aim at (`press_point_in`: within
+  62, nothing between that never opens), and the spots are kept (`Navigator::press_spots`).
+- **Where she stands** was 20 units out from the line's middle wherever that fell (here the
+  8-wide sill of a door beside the lift), or the poly's nearest point. Now the spot in
+  front is taken only if her box fits there; else one of the kept spots.
+
+Got wrong twice on the way, each caught by the three-lives test and the counts beside it:
+
+- *The kept spot nearest the line, always.* Nearest is beside the line's end, in line with
+  its face: MAP19 and E4M1, switches that had worked given up after three presses. The
+  spot in front stays first; a kept spot must be square to the line (30 degrees off its
+  face) and within 54, for the few units she stops short by.
+- *Those two held to for "can it be pressed from here" as well.* E3M6's secret exit is
+  pressed from the floor below it, 60 off and at an angle, and it works: three exits lost
+  for not knowing it. The two questions have their own tests: 62 and nothing between for
+  whether, 54 and square for where; and where no spot is square and near, one that
+  reaches.
+
+Each of the 544 runs replayed with its presses and its "stuck" lines counted:
+
+                     exits   given up after 3   stuck   timed out
+    before           289     21                 2564    214
+    nearest spot     287     16                 2220    197
+    held to both     288     15                 2303    228
+    as kept          291     26                 2270    194
+
+As kept, 60 runs differ; exits 289 -> 291 (5 more, 3 less), lives lost a run 1.107 -> 1.096.
+The stuck lines are MAP14's (366 -> 57; the rest 2198 -> 2213). MAP14's presses given up
+go 6 -> 9: what she was stuck at for forty seconds she now presses from where it doesn't
+quite reach, and leaves in two. Left: a spot that reaches only if she gets right to it,
+and a follower that stops short.

@@ -264,6 +264,13 @@ type Gates = (
 pub type StandGates = Vec<Vec<(usize, usize)>>;
 /// the places kept for a press from one poly
 const STAND_PLACES: usize = 6;
+/// a press reaches this far from her centre (the game's 64, less a little)
+const PRESS_REACH: f64 = 62.0;
+/// ...and a spot she's sent to press from is this near at most, for the units she stops short
+const SPOT_REACH: f64 = 54.0;
+/// ...and this square to the line: the sine of the angle between her aim and the line (0.5:
+/// thirty degrees off its face at least)
+const SPOT_SQUARE: f64 = 0.5;
 
 pub(super) struct Analysis<'a> {
     m: &'a MapData,
@@ -280,6 +287,8 @@ pub(super) struct Analysis<'a> {
     /// switch line -> its face (`switch_face`)
     pub(super) switch_faces: HashMap<usize, crate::nav::SwitchFace>,
     stand_gates: HashMap<(usize, usize), StandGates>,
+    /// (use line, poly) -> where in the poly it's pressed from (`press_point_in`)
+    press_spots: HashMap<(usize, usize), Vec<Point>>,
 }
 
 impl<'a> Analysis<'a> {
@@ -316,6 +325,7 @@ impl<'a> Analysis<'a> {
             shot_floors: HashMap::default(),
             switch_faces: HashMap::default(),
             stand_gates: HashMap::default(),
+            press_spots: HashMap::default(),
         }
     }
 
@@ -326,6 +336,10 @@ impl<'a> Analysis<'a> {
             std::mem::take(&mut self.shot_floors),
             std::mem::take(&mut self.stand_gates),
         )
+    }
+
+    pub(super) fn take_press_spots(&mut self) -> HashMap<(usize, usize), Vec<Point>> {
+        std::mem::take(&mut self.press_spots)
     }
 
     fn affected(&self, li: usize, info: &LineSpecial) -> Vec<usize> {
@@ -583,7 +597,7 @@ impl<'a> Analysis<'a> {
             }
             // ...and somewhere in it the box can stand within use range (a floor below the one in
             // front of a door can be out of reach of it)
-            let Some(stand) = self.press_point_in(pi, poly, a, b) else {
+            let Some((stand, spots)) = self.press_point_in(li, pi, poly, a, b) else {
                 continue;
             };
             // The use trace stops at the first line with no opening: a switch behind shut bars
@@ -607,6 +621,7 @@ impl<'a> Analysis<'a> {
                 continue;
             };
             out.insert(pi);
+            self.press_spots.insert((li, pi), spots);
             if !stand.is_empty() {
                 self.stand_gates.insert((li, pi), stand);
             }
@@ -625,10 +640,48 @@ impl<'a> Analysis<'a> {
     /// clear of everything; else, for each, the lines of moving sectors that are walls to it
     /// there as the map starts (a post of a fence that comes down: the switch behind is
     /// pressed from the gap once it has).
-    fn press_point_in(&self, pi: usize, poly: &Poly, a: Point, b: Point) -> Option<StandGates> {
+    fn press_point_in(
+        &self,
+        li: usize,
+        pi: usize,
+        poly: &Poly,
+        a: Point,
+        b: Point,
+    ) -> Option<(StandGates, Vec<Point>)> {
         let vs = &poly.vertices;
         let n = vs.len();
         let mut places: StandGates = Vec::new();
+        let mut spots: Vec<Point> = Vec::new();
+        // (...and from there the press gets to it: the line in the trace's reach, and nothing
+        // that never opens between. A poly reaches round a corner the trace doesn't: judged
+        // from its middle, a lift's face behind a block of wall was "pressable" from a yard
+        // whose only spot in reach has the block in the way. Doom II MAP14.)
+        // (to the part of it she aims at: the nearest, 8 in from its ends, as the follower's
+        // `line_aim` has it)
+        let length = dist(a, b).max(1e-6);
+        let f = 0.5f64.min(8.0 / length);
+        let inner = (a.0 + (b.0 - a.0) * f, a.1 + (b.1 - a.1) * f);
+        let inner2 = (b.0 + (a.0 - b.0) * f, b.1 + (a.1 - b.1) * f);
+        let reaches = |q: Point| {
+            let on = closest_point(q, inner, inner2);
+            dist(q, on) <= PRESS_REACH && self.use_gates_on(q, on, li).is_some()
+        };
+        // A spot to send her to (`Navigator::press_spots`) is held to more than one the line
+        // can be pressed from at all: nearer (she stops some units short of where she's sent:
+        // sent to one 59 off she pressed three times from 66), and square to the line (from
+        // beside its end, in line with its face, the trace runs along it and never crosses:
+        // MAP19 and E4M1, three presses each). Held to as much, ground a line is in fact
+        // pressed from is lost: E3M6's secret exit, from the floor below it.
+        let good = |q: Point| {
+            let on = closest_point(q, inner, inner2);
+            let d = dist(q, on);
+            let across = ((on.0 - q.0) * (b.1 - a.1) - (on.1 - q.1) * (b.0 - a.0)).abs()
+                / (d.max(1e-6) * length);
+            d <= SPOT_REACH && across >= SPOT_SQUARE
+        };
+        let mut clear = false;
+        // (the spots that reach it and aren't good ones: sent to for want of a good one)
+        let mut loose: Vec<Point> = Vec::new();
         for i in 0..n {
             let (p1, p2) = (vs[i], vs[(i + 1) % n]);
             for k in 0..9 {
@@ -665,13 +718,18 @@ impl<'a> Analysis<'a> {
                     if segment_distance(a, b, q, q) <= USE_REACH + 16.0
                         && self.mesh.poly_at(q) == Some(pi)
                         && !self.box_on_wall(q)
+                        && reaches(q)
                     {
                         let over = self.moving_walls_at(q, poly.sector);
                         if over.is_empty() {
-                            return Some(Vec::new());
-                        }
-                        if !places.contains(&over) && places.len() < STAND_PLACES {
+                            clear = true;
+                        } else if !places.contains(&over) && places.len() < STAND_PLACES {
                             places.push(over);
+                        }
+                        if good(q) && spots.len() < STAND_PLACES {
+                            spots.push(q);
+                        } else if loose.len() < STAND_PLACES {
+                            loose.push(q);
                         }
                     }
                 }
@@ -698,20 +756,31 @@ impl<'a> Analysis<'a> {
                     && self.mesh.poly_at(q) == Some(pi)
                     && crate::mesh::inside(vs, x, y)
                     && !self.box_on_wall(q)
+                    && reaches(q)
                 {
                     let over = self.moving_walls_at(q, poly.sector);
                     if over.is_empty() {
-                        return Some(Vec::new());
-                    }
-                    if !places.contains(&over) && places.len() < STAND_PLACES {
+                        clear = true;
+                    } else if !places.contains(&over) && places.len() < STAND_PLACES {
                         places.push(over);
+                    }
+                    if good(q) && spots.len() < STAND_PLACES {
+                        spots.push(q);
+                    } else if loose.len() < STAND_PLACES {
+                        loose.push(q);
                     }
                 }
                 y += step;
             }
             x += step;
         }
-        (!places.is_empty()).then_some(places)
+        if spots.is_empty() {
+            spots = loose;
+        }
+        if clear {
+            return Some((Vec::new(), spots));
+        }
+        (!places.is_empty()).then_some((places, spots))
     }
 
     /// The lines under the box at q, standing in `sector`, that are walls to it as the map

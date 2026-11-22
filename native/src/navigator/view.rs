@@ -524,7 +524,25 @@ impl Navigator {
                 return c;
             }
         }
+        // In front of its middle, if her box can be there. Where it can't (20 units out from a
+        // lift's face can be the sill of a door beside it, 8 wide, which she walks at and never
+        // reaches: Doom II MAP14), a spot the press was found to get there from when the level
+        // was looked over (`press_spots`).
+        let spare = || {
+            in_reach
+                .iter()
+                .filter_map(|pi| self.press_spots.get(&(li, *pi)))
+                .flatten()
+                .copied()
+                .min_by(|x, y| dist(*x, pos).total_cmp(&dist(*y, pos)))
+        };
         if ok.contains(&front) {
+            if self.jump_lab.fits_at(front).0 || !t.info.trigger.used() {
+                return front;
+            }
+            if let Some(q) = spare() {
+                return q;
+            }
             return front;
         }
         // the spot nearest the line in any poly it can be used from...
@@ -542,6 +560,13 @@ impl Navigator {
         if let Some((d, spot)) = best
             && d <= USE_REACH + 12.0
         {
+            // (likewise where her box can't be at the nearest spot)
+            if t.info.trigger.used()
+                && !self.jump_lab.fits_at(spot).0
+                && let Some(q) = spare()
+            {
+                return q;
+            }
             return spot;
         }
         // ...unless that's out of reach: then a spot in reach the box can stand at, nearest the

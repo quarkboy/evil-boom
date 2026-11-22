@@ -255,6 +255,8 @@ pub struct Navigator {
     /// (switch line, poly) -> where it can be stood for there, each place by the lines of moving
     /// sectors the box must be clear over (`analysis::StandGates`)
     pub stand_gates: HashMap<(usize, usize), analysis::StandGates>,
+    /// (use line, poly) -> spots in the poly a press of it gets there from (`press_point_in`)
+    pub press_spots: HashMap<(usize, usize), Vec<Point>>,
     pub triggers: Vec<TriggerLine>,
     pub teleports: Vec<Teleport>,
     pub jumps: Vec<Jump>,
@@ -324,6 +326,7 @@ impl Navigator {
         let mut a = analysis::Analysis::new(&map, &mesh, &movers, &obstacle_grid, skill);
         let mut triggers = a.find_triggers();
         let (use_gates, use_line_gates, shot_floors, stand_gates) = a.take_gates();
+        let press_spots = a.take_press_spots();
         let switch_faces = std::mem::take(&mut a.switch_faces);
         for t in &mut triggers {
             t.effects = with_trenches(&movers, &trenches, &t.effects);
@@ -398,6 +401,7 @@ impl Navigator {
             shot_floors,
             switch_faces,
             stand_gates,
+            press_spots,
             triggers,
             teleports,
             jumps: Vec::new(),
