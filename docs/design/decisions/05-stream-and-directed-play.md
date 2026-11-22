@@ -3135,8 +3135,8 @@ bounded by the patience they have, 20 s a bout, and are still as they were.
 
 ### Off a floor that's going up, onto a ledge it passes (2026-11-20)
 
-The other contributor's patch (docs/patches/rising-platform-jumps.patch, from its MAP20 and
-E1M5 experiments; docs/design/normal-bot-experiment-handoff.md), ported as it stood. The
+The other contributor's rising-platform patch, from its MAP20 and E1M5 experiments, ported
+as it stood (the patch and its handoff note weren't kept in the repository). The
 finder looks again at each floor that goes up under her, at the heights of the fixed ledges
 near it; such a jump is planned only while she's riding and feels the floor at or past
 where there's time to line up, and taken when the floor will be at the ledge's height as
@@ -3162,7 +3162,7 @@ she reaches the edge, else given up ("takeoff too low") and planned again.
 
 ### The other contributor's pilots, each on the three-lives test (2026-11-20)
 
-Its archive (docs/experiments/) has one finished patch, the rising platform (above), and
+Its archive (not kept in the repository) has one finished patch, the rising platform (above), and
 small pilot diffs behind its experiments. Each was applied to main and tested alone,
 against 8992745:
 
