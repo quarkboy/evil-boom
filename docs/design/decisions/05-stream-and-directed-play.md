@@ -3999,3 +3999,25 @@ order of hers taking her off it. Each such jump is asked about once a level; aft
 told, and jumped. MAP24 against the mock server: asked at 22.8 s, "don't" at 22.9 s, no
 jump; unanswered ones jumped 8.0 s after the asking; the same jump again later, told and
 taken at once. The bot alone has no one to ask: parity 24 of 24.
+
+### Which action answers a force (the first end-to-end run, 2026-11-22)
+
+Doom episode 1 on skill 2 through Gary with GLM 5.3 (83 minutes, 1207 actions, no deaths):
+Gary flagged `prot/force/multiple` 42 times, a force sent with another still pending. The
+protocol doesn't say which action answers a force, and `Forcing` took the first accepted one
+on its list. But an action begun of her own accord before the force reached her comes first:
+of 229 forces, 173 had an unforced act before the forced one (the forced one a median 1.8 s
+after the force), and where that act was on the list (`doom_go`, mostly) the next force went
+out on top.
+
+The rule now: only a `doom_answer` naming the question forced ends the force at once.
+Another of its actions accepted, it's out `directed.force_settle` more. At 5 s, episode 1
+on skill 4: 7 flags in 275 forces (42 in 229 and 36 in 250 before, skills 2 and 3), each a
+low-priority force Gary answered 6 to 9 s after it, behind acts of her own. So 8 s (the
+forced act came within 8 s of the overtaking one 96 times in 100). Off a level, where no clock runs,
+any accepted action ends it as before. A force with no question in it ("what next?" while
+she waits) always takes the settle.
+
+Left alone: Gary's note that schemas lack `additionalProperties: false` (the SDK's
+specification lists the keyword among those "probably not supported well"), and an action
+arriving as the program closes going unanswered.

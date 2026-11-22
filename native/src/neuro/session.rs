@@ -104,18 +104,34 @@ pub struct Session {
 
 /// The force out, if one is. Neuro handles one at a time, and a second sent meanwhile "will
 /// cause problems" (the SDK's specification): so none is sent while one's out. It's over when
-/// she does one of its own actions and that's accepted (one refused, the server puts the force
-/// to her again by itself: it's still out), or when it's gone unanswered so long the server
-/// must have dropped it (its retries spent, or a result of ours it gave up waiting for: it
-/// doesn't say).
+/// she answers it and that's accepted (one refused, the server puts the force to her again by
+/// itself: it's still out), or when it's gone unanswered so long the server must have dropped
+/// it (its retries spent, or a result of ours it gave up waiting for: it doesn't say).
+///
+/// Which of her actions is its answer the protocol doesn't say, and one of its own done of her
+/// own accord often comes first (begun before the force reached her; against Gary, three
+/// forces in four): only the answer to the question forced is surely it. Another of its
+/// actions accepted, the force is still out for `settle` more, for the answer to come.
 struct Forcing {
-    out: Option<(i64, Vec<&'static str>)>,
+    out: Option<Out>,
     timeout: i64,
+    settle: i64,
+}
+
+struct Out {
+    at: i64,
+    names: Vec<&'static str>,
+    /// over at this tic: one of its actions accepted that may not have been its answer
+    over: Option<i64>,
 }
 
 impl Forcing {
-    fn new(timeout: i64) -> Forcing {
-        Forcing { out: None, timeout }
+    fn new(timeout: i64, settle: i64) -> Forcing {
+        Forcing {
+            out: None,
+            timeout,
+            settle,
+        }
     }
 
     fn out(&self) -> bool {
@@ -123,31 +139,42 @@ impl Forcing {
     }
 
     fn sent(&mut self, tic: i64, names: Vec<&'static str>) {
-        self.out = Some((tic, names));
+        self.out = Some(Out {
+            at: tic,
+            names,
+            over: None,
+        });
     }
 
-    /// An action of hers come in, accepted or not.
-    fn answered(&mut self, name: &str, ok: bool, tic: i64) {
-        let Some((at, names)) = self.out.as_mut() else {
+    /// An action of hers come in, accepted or not. `surely`: it can only be the force's answer
+    /// (the question forced, answered by its id; or no clock runs to wait by).
+    fn answered(&mut self, name: &str, surely: bool, ok: bool, tic: i64) {
+        let Some(out) = self.out.as_mut() else {
             return;
         };
-        if !names.contains(&name) {
+        if !out.names.contains(&name) {
             return; // (not this force's: something she did of her own accord meanwhile)
         }
-        if ok {
+        if !ok {
+            out.at = tic; // (put to her again by the server: waited for afresh)
+        } else if surely || self.settle == 0 {
             self.out = None;
-        } else {
-            *at = tic; // (put to her again by the server: waited for afresh)
+        } else if out.over.is_none() {
+            out.over = Some(tic + self.settle);
         }
     }
 
-    /// True once: unanswered past the timeout (0: never), and so no longer out.
+    /// The clock's tick. True once: unanswered past the timeout (0: never), and so no longer
+    /// out. (Settled meanwhile: no longer out either, and nothing to say.)
     fn expire(&mut self, tic: i64) -> bool {
-        let over = self.timeout > 0
-            && self
-                .out
-                .as_ref()
-                .is_some_and(|(at, _)| tic - at >= self.timeout);
+        let Some(out) = self.out.as_ref() else {
+            return false;
+        };
+        if out.over.is_some_and(|t| tic >= t) {
+            self.out = None;
+            return false;
+        }
+        let over = self.timeout > 0 && tic - out.at >= self.timeout;
         if over {
             self.out = None;
         }
@@ -160,10 +187,22 @@ impl Forcing {
 
     /// The clock gone back (a new level).
     fn back(&mut self, by: i64) {
-        if let Some((at, _)) = self.out.as_mut() {
-            *at -= by;
+        if let Some(out) = self.out.as_mut() {
+            out.at -= by;
+            out.over = out.over.map(|t| t - by);
         }
     }
+}
+
+/// The question a `doom_answer` names (`{"id":"q4",...}`: "4"), if it's readable.
+fn answered_id(data: Option<&str>) -> Option<String> {
+    let v: Value = serde_json::from_str(data?).ok()?;
+    let id = &v["id"];
+    let id = id
+        .as_str()
+        .map(str::to_string)
+        .or_else(|| id.as_u64().map(|n| n.to_string()))?;
+    Some(id.trim().trim_start_matches(['q', 'Q']).to_string())
 }
 
 /// Every action's name, as `actions` has them.
@@ -302,7 +341,10 @@ impl Session {
             who: String::new(),
             character: Character::Unknown,
             director,
-            forced: Forcing::new(Directed::tics(c.force_timeout)),
+            forced: Forcing::new(
+                Directed::tics(c.force_timeout),
+                Directed::tics(c.force_settle),
+            ),
             forced_question: None,
             idle_since: 0,
             told_status: (i64::MIN / 2, String::new()),
@@ -570,8 +612,13 @@ impl Session {
                             .idle_since
                             .max(obs.tic - self.idle_force + self.after_look);
                     }
+                    // (the question forced, answered by its id: the force's answer for sure)
+                    let surely = name == "doom_answer"
+                        && self.forced_question.is_some_and(|q| {
+                            answered_id(data.as_deref()).is_some_and(|id| id == q.to_string())
+                        });
                     let (ok, msg) = self.action(agent, obs, &name, data.as_deref());
-                    self.forced.answered(&name, ok, obs.tic);
+                    self.forced.answered(&name, surely, ok, obs.tic);
                     log.push(format!(">> {name} {}", data.as_deref().unwrap_or("")));
                     log.push(format!(
                         "<< {}{}",
@@ -1032,7 +1079,8 @@ impl Session {
                     } else {
                         (false, idle.to_string())
                     };
-                    self.forced.answered(&name, ok, tic);
+                    // (no level's clock to wait by here)
+                    self.forced.answered(&name, true, ok, tic);
                     // (whatever she did: waited for afresh)
                     self.off_since = offer.map(|_| now);
                     log.push(format!(">> {name} {}", data.as_deref().unwrap_or("")));
@@ -1625,27 +1673,38 @@ mod tests {
         assert!(p["description"].as_str().unwrap().len() < 160);
     }
 
-    /// One force at a time: out till one of its own actions is accepted, or it's timed out.
+    /// One force at a time: out till it's answered for sure, a while after another of its own
+    /// actions is accepted, or it's timed out.
     #[test]
     fn one_force_at_a_time() {
-        let mut f = super::Forcing::new(30 * 35);
+        let mut f = super::Forcing::new(30 * 35, 5 * 35);
         assert!(!f.out());
-        f.sent(100, vec!["doom_go", "doom_exit"]);
+        f.sent(100, vec!["doom_answer", "doom_go"]);
         // (something else of hers meanwhile: still out)
-        f.answered("doom_status", true, 110);
+        f.answered("doom_status", false, true, 110);
         assert!(f.out());
         // (one of its own, refused: the server asks again, still out, the wait afresh)
-        f.answered("doom_go", false, 120);
+        f.answered("doom_go", false, false, 120);
         assert!(f.out());
         assert!(!f.expire(100 + 30 * 35));
-        // (accepted: over)
-        f.answered("doom_go", true, 130);
+        // (one of its own accepted, maybe of her own accord: out a while yet, then not)
+        f.answered("doom_go", false, true, 130);
+        f.answered("doom_go", false, true, 200);
+        assert!(!f.expire(130 + 5 * 35 - 1) && f.out());
+        assert!(!f.expire(130 + 5 * 35) && !f.out());
+        // (the question forced answered: over at once)
+        f.sent(400, vec!["doom_answer", "doom_go"]);
+        f.answered("doom_answer", true, true, 410);
         assert!(!f.out());
         // (never answered: dropped after the timeout, said once)
-        f.sent(200, vec!["doom_answer"]);
-        assert!(!f.expire(200 + 30 * 35 - 1));
-        assert!(f.expire(200 + 30 * 35));
-        assert!(!f.out() && !f.expire(200 + 31 * 35));
+        f.sent(500, vec!["doom_answer"]);
+        assert!(!f.expire(500 + 30 * 35 - 1));
+        assert!(f.expire(500 + 30 * 35));
+        assert!(!f.out() && !f.expire(500 + 31 * 35));
+        assert_eq!(
+            super::answered_id(Some(r#"{"choice":"a","id":"q4"}"#)).as_deref(),
+            Some("4")
+        );
     }
 
     /// Every action named for registering is one `actions` has, and every one it has is named.

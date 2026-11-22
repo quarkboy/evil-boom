@@ -95,7 +95,8 @@ Its description is two sentences; what each value does is what it answers with n
 
 How long she's waited for and how often she's put to are the tuning's `directed` group, in
 seconds (`evil-boom tuning` prints them): `idle_force` 6, `ask_force` 3, `next_force` 15 and
-`next_silent`, `after_look` 3, `force_timeout` 30, `speech_stale` 20, `answer_wait` 8,
+`next_silent`, `after_look` 3, `force_timeout` 30, `force_settle` 8,
+`speech_stale` 20, `answer_wait` 8,
 `now_open` 3, `questions_a_minute` 3, `moments_a_minute` 6, `status_every` 20, `tactic` 10,
 `stance` 30. A fast model and a slow stand-in each want their own: `--tuning FILE` with just
 that group. The console changes the forcing times, the answer wait and the quiet asking as

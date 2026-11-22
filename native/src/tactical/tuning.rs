@@ -1018,6 +1018,9 @@ pub struct Directed {
     /// a force unanswered this long is taken as dropped by the server, and another may be sent
     /// (0: never; one at a time meanwhile)
     pub force_timeout: f64,
+    /// one of a force's actions accepted that may not be its answer (done of her own accord
+    /// as the force came): the force is still out this long, for the answer (0: over at once)
+    pub force_settle: f64,
     /// a question's default is taken after this long with no answer (0: she's waited for)
     pub answer_wait: f64,
     /// a question that can't wait (its default done at once) stays open this long for her to
@@ -1044,6 +1047,7 @@ impl Default for Directed {
             next_silent: true,
             after_look: 3.0,
             force_timeout: 30.0,
+            force_settle: 8.0,
             speech_stale: 20.0,
             answer_wait: 8.0,
             now_open: 3.0,
