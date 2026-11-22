@@ -508,6 +508,8 @@ pub struct Director {
     /// first meanwhile (its `prefer`)
     goal: Option<goal::Goal>,
     prefer: Option<goal::Prefer>,
+    /// ...which has no say just now: she has enough of it (`has_enough`)
+    prefer_lull: bool,
     told_auto_tic: Option<i64>,
     /// on her own she found nothing more to do: not taken up again till an order's been given
     auto_spent: bool,

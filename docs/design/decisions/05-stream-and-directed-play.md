@@ -3954,7 +3954,9 @@ gone (keys rank high as it is: the maintainer's), and `supplies` is no longer he
 still what "stock up first?" answers with).
 
 **`prefer`** (the maintainer's list): what instinct and the suggestions put first, a boost to
-their ranking and nothing more, till it's had or the level ends:
+their ranking and nothing more. (First built to end when had, or with the level; the
+maintainer's second thought, the same day, is how it stands: it never ends, and health and
+ammo simply have no say while she has enough. "Over" below reads "no say".)
 
 - `health`: health that would add anything (stimpacks, medikits, bonuses; the spheres stay
   her `powerups`), as she goes for it when hurt. Over at 100.

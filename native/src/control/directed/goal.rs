@@ -4,7 +4,7 @@
 //! `doom_goal`, which does two things. `finish`: when the level's done (out by the first exit;
 //! or every kill, every secret, or everything first, and then out), standing across levels.
 //! `prefer`: what comes first meanwhile (health, ammo, the hunt, new ground), till she changes
-//! it or the level ends. Neither plays for her: each puts what it's after first in what's
+//! it; health and ammo with no say while she has enough. Neither plays for her: each puts what it's after first in what's
 //! suggested to her (`Director::pick`) and in what she does on instinct
 //! (`Explorer::focus`); a thorough finish lets go of the last resorts, and `out` gives instinct
 //! the exit. How she explores meanwhile stays her `explore` setting's.
@@ -213,19 +213,16 @@ impl Director {
     /// The goal: met, or with nothing more to do for it on instinct, ended and said; on
     /// instinct, what it needs set. It never starts her off (always false: the tic goes on).
     pub(super) fn goal_tick(&mut self, agent: &mut Agent, obs: &Observation) -> bool {
+        // (what she prefers and has enough of for now, health or ammo: nothing put first
+        // for it till she's short again; worked out once a second)
+        if obs.tic % 35 == 0 {
+            self.prefer_lull = self.prefer.is_some_and(|p| self.has_enough(p, agent, obs));
+        }
         // (what's first on instinct: hers to prefer, else her goal's)
         let (focus, things) = (self.focus_now(), self.preferred_things(obs));
         let x = agent.x_mut();
         x.focus = focus;
         x.focus_things = things;
-        // (what she prefers, had: it's over, and said)
-        if obs.tic % 35 == 0
-            && let Some(p) = self.prefer
-            && let Some(said) = self.prefer_met(p, agent, obs)
-        {
-            self.prefer = None;
-            self.tell(obs, Event::GoalDone, said);
-        }
         let Some(goal) = self.goal.clone() else {
             return false;
         };
@@ -343,29 +340,27 @@ impl Director {
         let p = Prefer::parse(&what).ok_or_else(|| {
             format!("prefer: no \"{what}\". health, ammo, hunt, unexplored or none.")
         })?;
-        // (had already: said, and not set to be dropped a moment after)
-        if self.prefer_met(p, agent, obs).is_some() {
-            return Ok(match p {
-                Prefer::Health => "Not set: your health's 100 already.",
-                Prefer::Ammo => "Not set: you've ammo enough for a cyberdemon already.",
-                Prefer::Hunt => "Not set: nothing you know of is alive.",
-                Prefer::Unexplored => "Not set: no new ground you know a way to.",
-            }
-            .into());
-        }
         self.prefer = Some(p);
+        self.prefer_lull = self.has_enough(p, agent, obs);
         // (an action of hers: instinct may take up again after it, with that first)
         self.auto_spent = false;
         self.idle_since = None;
-        Ok(format!("From now, {}.", p.label()))
+        Ok(match (p, self.prefer_lull) {
+            (Prefer::Health, true) => "Health first, whenever you're under 100.".into(),
+            (Prefer::Ammo, true) => {
+                "Ammo first, whenever you've less than a cyberdemon's worth.".into()
+            }
+            _ => format!("From now, {}.", p.label()),
+        })
     }
 
-    /// What she prefers, had (None: not yet). Health: 100 of it. Ammo: enough, with the guns
-    /// she holds and the BFG left out, to kill a cyberdemon (the fight's own reckoning of what
-    /// her ammo's worth, `Combat::ammo_short_for`). The hunt: nothing she knows of left alive.
-    /// New ground: none she knows a way to left unseen.
-    fn prefer_met(&self, p: Prefer, agent: &mut Agent, obs: &Observation) -> Option<String> {
-        let done = match p {
+    /// Enough of what she prefers for now, so that it's no say in her choices till she's
+    /// short again (it stays set). Health: 100 of it. Ammo: enough, with the guns she holds
+    /// and the BFG left out, to kill a cyberdemon, by the fight's own count of what her ammo's
+    /// worth (`Combat::ammo_short_for`). The hunt and new ground have no such line: with
+    /// nothing to hunt or nowhere new there's nothing of theirs to put first.
+    fn has_enough(&self, p: Prefer, agent: &Agent, obs: &Observation) -> bool {
+        match p {
             Prefer::Health => obs.health.unwrap_or(0.0) >= 100.0,
             Prefer::Ammo => agent.player().is_some_and(|pl| {
                 let mut o = obs.clone();
@@ -375,26 +370,8 @@ impl Director {
                     .map(|w| w.iter().copied().filter(|g| *g != 7).collect());
                 !pl.combat().ammo_short_for(&o, &["Cyberdemon"])
             }),
-            Prefer::Hunt => agent
-                .player()
-                .is_some_and(|pl| pl.known_monsters().is_empty()),
-            Prefer::Unexplored => {
-                let none = std::collections::BTreeSet::new();
-                !self
-                    .open_objectives(agent, obs)
-                    .iter()
-                    .any(|o| Focus::Unexplored.wants(o, &none))
-            }
-        };
-        done.then(|| {
-            match p {
-                Prefer::Health => "Health 100: no longer health first.",
-                Prefer::Ammo => "Ammo enough for a cyberdemon: no longer ammo first.",
-                Prefer::Hunt => "Nothing you know of left alive: the hunt's over.",
-                Prefer::Unexplored => "No new ground left that you know a way to.",
-            }
-            .to_string()
-        })
+            Prefer::Hunt | Prefer::Unexplored => false,
+        }
     }
 
     /// She's said what she'd have first.
@@ -405,6 +382,7 @@ impl Director {
     /// What's put first now: what she prefers, else what her goal's after.
     pub(super) fn focus_now(&self) -> Focus {
         self.prefer
+            .filter(|_| !self.prefer_lull)
             .map(Prefer::focus)
             .or_else(|| self.goal.as_ref().map(Goal::focus))
             .unwrap_or(Focus::None)
@@ -413,7 +391,7 @@ impl Director {
     /// The pickups she prefers now (health, or ammo, that would add anything): for the
     /// explorer to offer and put first.
     pub(super) fn preferred_things(&self, obs: &Observation) -> BTreeSet<i32> {
-        let Some(p) = self.prefer else {
+        let Some(p) = self.prefer.filter(|_| !self.prefer_lull) else {
             return BTreeSet::new();
         };
         obs.things
@@ -424,8 +402,8 @@ impl Director {
             .collect()
     }
 
-    /// A new level: what she preferred was the last one's.
+    /// A new level: her goal and what she prefers stand (both are hers till she changes them).
     pub(super) fn goal_new_map(&mut self) {
-        self.prefer = None;
+        self.prefer_lull = false;
     }
 }
