@@ -3558,3 +3558,29 @@ second or two.
 That run: the stepping and standing between 640 and 700 s, 324 lines to 13. The three-lives
 test, 544 runs: exits 287 -> 288 (2 runs more, 1 less), 37 runs differ, and the one run
 that has stood the hour all day (MAP14, UV, 205498993) is out in 1,323 s, no life lost.
+
+## A walk-over line her centre can't get across (2026-11-22)
+
+Doom II MAP14: an hour stood, "nothing left to do". Two run-jumps along the ledges and a
+drop of 32 into a pocket of the courtyard shut in by ledges, the red bars and a door, on the
+strength of a way out: walk over line 1366, which opens the door. It can't be walked over
+from in there. A walk-over line goes off when her centre crosses it, the bars begin 16
+units past it, and her box meets them with her centre on the line and not over. It's
+there to be crossed the other way, the bars lowered. ("could not cross line 1366" three
+times, the line given up from that ground, the walls pressed, and nothing.)
+
+The planner knew this of a line between two sectors (`View::cross_sides`: the far one
+must be one she can step into) and passed over a line with the one sector both sides. Now,
+as the level's analysed, each such line is tried just across on either side all along its
+length (`analysis::walk_far_sides`): where something's under her box wherever she tries,
+the lowest such sector is what the far side is, and `cross_sides` holds her to it like any
+other. One line in MAP14 of the six levels looked at, none in the other five.
+
+The three-lives test, 544 runs: only MAP14's eight differ; exits 288 -> 289.
+
+Left: stood with nothing to do, a watched run still stands (the test begins the level
+again after a minute, at a life's cost).
+
+(The first test of this was no test: its name, `cross1`, was a folder of two days before,
+and `run.sh` plays no run whose row is on file. Names carry the date since, and `run.sh`
+keeps the build's hash by its rows and refuses another's.)

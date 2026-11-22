@@ -1059,3 +1059,98 @@ impl<'a> Analysis<'a> {
             .collect()
     }
 }
+
+/// How far past a walk-over line her centre is put, to see whether it can get there.
+const ACROSS: f64 = 2.0;
+
+/// For a walk-over line with the one sector on both its sides: (the line, which side: its
+/// left?) -> the sector that stands in her box's way just across it on that side, wherever
+/// along the line she tries (the lowest such, as the map starts). A walk-over line goes off
+/// only when her centre gets across, and a row of bars a few units past it, or a ledge, takes
+/// her box before her centre is over: from this side it can't be set off till that sector is
+/// one she could step onto (`View::cross_sides`, as a line between two sectors already is).
+/// A side with room anywhere along it has no entry. (Doom II MAP14: the line in front of
+/// the red bars, crossed from the far side to open the door behind her; dropped in on its
+/// near side she counted on it for the way out, and stood there the hour.)
+pub(super) fn walk_far_sides(
+    m: &MapData,
+    movers: &MoverModel,
+    triggers: &[TriggerLine],
+) -> HashMap<(usize, bool), usize> {
+    let mut out = HashMap::default();
+    for t in triggers {
+        let Some(li) = t.linedef() else { continue };
+        if !t.info.trigger.walked() {
+            continue;
+        }
+        let (Some(f), Some(b)) = m.sides(li) else {
+            continue;
+        };
+        if f != b {
+            continue;
+        }
+        let (p1, p2) = m.line_seg(li);
+        let length = dist(p1, p2);
+        if length < 1.0 {
+            continue;
+        }
+        let along = ((p2.0 - p1.0) / length, (p2.1 - p1.1) / length);
+        let left = (-along.1, along.0);
+        for side in [true, false] {
+            let sign = if side { 1.0 } else { -1.0 };
+            let mut free = false;
+            let mut lowest: Option<usize> = None;
+            let steps = (length / 8.0).ceil() as usize;
+            for k in 0..=steps {
+                let d = (k as f64 * 8.0).min(length);
+                let c = (
+                    p1.0 + along.0 * d + left.0 * sign * ACROSS,
+                    p1.1 + along.1 * d + left.1 * sign * ACROSS,
+                );
+                // what's under her box there besides the line's own sector: the highest of it
+                let mut wall = false;
+                let mut top: Option<usize> = None;
+                for l in &m.linedefs {
+                    if l.index == li
+                        || !box_hits_segment(c.0, c.1, PLAYER_RADIUS, m.line_seg(l.index))
+                    {
+                        continue;
+                    }
+                    match m.sides(l.index) {
+                        (Some(x), Some(y)) => {
+                            for s in [x, y] {
+                                if s != f
+                                    && top.is_none_or(|t| {
+                                        movers.initial[s].floor > movers.initial[t].floor
+                                    })
+                                {
+                                    top = Some(s);
+                                }
+                            }
+                        }
+                        _ => wall = true,
+                    }
+                }
+                if wall {
+                    continue;
+                }
+                match top {
+                    None => {
+                        free = true;
+                        break;
+                    }
+                    Some(s) => {
+                        if lowest.is_none_or(|l| movers.initial[s].floor < movers.initial[l].floor)
+                        {
+                            lowest = Some(s);
+                        }
+                    }
+                }
+            }
+            if let (false, Some(s)) = (free, lowest) {
+                out.insert((li, side), s);
+            }
+        }
+    }
+    out
+}

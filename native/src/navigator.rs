@@ -273,6 +273,9 @@ pub struct Navigator {
     sight_grid: HashMap<Cell, Vec<(Point, Point, usize)>>,
     /// sectors moving under the player once stepped on
     pub sinking: BTreeSet<usize>,
+    /// walk-over lines with one sector both sides: what's in her box's way just across, by
+    /// side (`analysis::walk_far_sides`)
+    pub walk_far: HashMap<(usize, bool), usize>,
     pub jump_lab: Arc<JumpLab>,
     caches: RefCell<Caches>,
     /// the flood fill, path-finding and plan core, set up for one view at a time
@@ -349,6 +352,7 @@ impl Navigator {
             &widths::obstacle_grid(&map, skill, false),
         );
         let sinking = sinking_sectors(&map, &movers, &triggers);
+        let walk_far = analysis::walk_far_sides(&map, &movers, &triggers);
         let jump_lab = Arc::new(JumpLab::new(
             Arc::clone(&map),
             Arc::clone(&mesh),
@@ -405,6 +409,7 @@ impl Navigator {
             obstacle_grid,
             sight_grid,
             sinking,
+            walk_far,
             jump_lab,
             caches: RefCell::new(Caches::default()),
             core: RefCell::new(core),

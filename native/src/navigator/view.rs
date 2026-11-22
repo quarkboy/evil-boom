@@ -919,6 +919,20 @@ impl View {
                     continue;
                 };
                 if f == b {
+                    // (the one sector both sides: what her box meets just across, if anything
+                    // does all along it, `Navigator::walk_far`)
+                    let (p1, p2) = m.line_seg(li);
+                    for &p in &t.activators {
+                        if self.nav.sector_of_poly(p) != f {
+                            continue;
+                        }
+                        let c = self.nav.mesh.center(p);
+                        let on_left =
+                            (p2.0 - p1.0) * (c.1 - p1.1) - (p2.1 - p1.1) * (c.0 - p1.0) > 0.0;
+                        if let Some(&far) = self.nav.walk_far.get(&(li, !on_left)) {
+                            out.insert((li, p), far);
+                        }
+                    }
                     continue;
                 }
                 for &p in &t.activators {
