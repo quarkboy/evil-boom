@@ -1346,7 +1346,7 @@ pub fn bearing(s: &str) -> Option<f64> {
 /// A way (and a distance) given where an id was wanted: said so.
 fn place_not_id(r: &str) -> Option<String> {
     bearing(r).map(|_| {
-        format!("\"{r}\" is a way, not an id: nothing listed there; ids come from doom_list.")
+        format!("\"{r}\" is a way, not an id: nothing listed there; ids come from doom_query.")
     })
 }
 

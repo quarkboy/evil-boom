@@ -28,10 +28,14 @@ const ALIASES: &[(&str, &[&str])] = &[
     ("gun", &["weapon", "ref"]),
     ("stance", &["override_stance"]),
     ("hold_fire", &["fire"]),
-    ("type", &["what"]),
-    ("kind", &["what"]),
-    ("list", &["what"]),
-    ("topic", &["what"]),
+    ("what", &["all"]),
+    ("type", &["all"]),
+    ("kind", &["all"]),
+    ("list", &["all"]),
+    ("topic", &["all"]),
+    ("category", &["all"]),
+    ("explored", &["include_explored"]),
+    ("show_completed_areas", &["include_explored"]),
     ("action", &["do"]),
     ("mode", &["do"]),
     ("command", &["do"]),
@@ -193,10 +197,11 @@ mod tests {
             v,
             json!({ "fire": "hold", "weapon": "shotgun", "override_stance": "bold", "seconds": 5 })
         );
-        let (v, _) = repair(json!({ "what": "Doors" }), schema("doom_list").as_ref());
-        assert_eq!(v, json!({ "what": "doors" }));
+        // (`what`, the field's name once, read as `all`)
+        let (v, _) = repair(json!({ "what": "Doors" }), schema("doom_query").as_ref());
+        assert_eq!(v, json!({ "all": "doors" }));
         // (an id given as a number)
-        let (v, _) = repair(json!({ "ref": 12 }), schema("doom_inspect").as_ref());
+        let (v, _) = repair(json!({ "ref": 12 }), schema("doom_query").as_ref());
         assert_eq!(v, json!({ "ref": "12" }));
     }
 
@@ -209,10 +214,10 @@ mod tests {
         // (a value that isn't one of the enum's, or a word that isn't a number, left for the
         // action to refuse)
         let (v, _) = repair(
-            json!({ "what": "barrels", "all": "maybe" }),
-            schema("doom_list").as_ref(),
+            json!({ "all": "barrels", "include_explored": "maybe" }),
+            schema("doom_query").as_ref(),
         );
-        assert_eq!(v, json!({ "what": "barrels", "all": "maybe" }));
+        assert_eq!(v, json!({ "all": "barrels", "include_explored": "maybe" }));
         // (an action with no schema: as given)
         assert_eq!(repair(json!({ "x": 1 }), None).0, json!({ "x": 1 }));
     }

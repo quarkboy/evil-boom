@@ -339,7 +339,7 @@ struct Reply {
 }
 
 /// Actions that only look: after one, she may go on to act.
-const LOOKS: [&str; 3] = ["doom_list", "doom_inspect", "doom_status"];
+const LOOKS: [&str; 2] = ["doom_query", "doom_status"];
 
 /// The model's side: the conversation, and when to ask the model.
 struct Brain<F: Fn(String)> {

@@ -3884,3 +3884,18 @@ and searching take `ref` now, so `target` means one thing, in the fight. `target
 305") is mended to an id for going and pressing only: for exploring it may be a direction, and
 is taken as it is. And "queue_up: queue this action up next, don't override current action",
 in four descriptions, is "queue_up: after what you're doing, not instead."
+
+### `doom_query`: lists and one thing by one action
+
+`doom_list` (a kind of thing) and `doom_inspect` (one thing) were one verb, "what do I know
+of this", as two actions: the SDK warns of near-identical actions. They're `doom_query` (the
+maintainer's shape and names): `all` a kind (areas, doors, switches, items, monsters, exits),
+or `ref` one thing; with both, the one thing; with neither, told which. Fifteen actions for
+sixteen.
+
+The old `all: true` said "every one" and wasn't: it only stopped hiding areas with nothing
+left, and the list was cut at 15 either way, without a word. It's `include_explored` now,
+which says what it does. The cut stays at 15 (the maintainer's: a level can have a hundred
+areas) and is said: "(15 of 40 shown: the first to take)". The description says the order,
+and that monsters come nearest first (kept so: the maintainer's). `what`, `type`, `kind` and
+`category` are read as `all` (`repair.rs`).

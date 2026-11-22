@@ -166,9 +166,8 @@ impl Forcing {
 /// Every action's name, as `actions` has them.
 const ALL_ACTIONS: &[&str] = &[
     "doom_look",
-    "doom_list",
+    "doom_query",
     "doom_press",
-    "doom_inspect",
     "doom_go",
     "doom_explore",
     "doom_search",
@@ -197,8 +196,7 @@ const OFF_LEVEL: &[&str] = &[
 const PAUSED: &[&str] = &[
     "doom_pause",
     "doom_look",
-    "doom_list",
-    "doom_inspect",
+    "doom_query",
     "doom_status",
     "doom_why",
     "doom_answer",
@@ -254,9 +252,8 @@ pub fn actions_timed(c: &Directed) -> Vec<Value> {
     // (short: every word here is in Evil's context for the whole game)
     vec![
         json!({ "name": "doom_look", "description": "What's round you: the room, what it leads to, monsters, items, doors and switches in sight, sounds." }),
-        json!({ "name": "doom_list", "description": "List known areas, doors, switches, items, monsters or exits, with ids, in the order you'd best take them. Areas: those left to explore or search for secrets, where you are, and named ones; all: every one.", "schema": s(json!({ "what": { "type": "string", "enum": ["areas", "doors", "switches", "items", "monsters", "exits"] }, "all": { "type": "boolean" } }), &["what"]) }),
+        json!({ "name": "doom_query", "description": "What you know of. all: the areas, doors, switches, items, monsters or exits you know of, with ids, the first to take first (monsters: nearest first), 15 at most. ref: one thing by its id or name: what it is and where. include_explored: areas with nothing left in them too.", "schema": s(json!({ "all": { "type": "string", "enum": ["areas", "doors", "switches", "items", "monsters", "exits"] }, "ref": { "type": "string" }, "include_explored": { "type": "boolean" } }), &[]) }),
         json!({ "name": "doom_press", "description": "Press a switch. rush: keep going mid-fight, shooting and dodging on the way. queue_up: after what you're doing, not instead.", "schema": s(json!({ "ref": { "type": "string" }, "rush": { "type": "boolean" }, "queue_up": { "type": "boolean" } }), &["ref"]) }),
-        json!({ "name": "doom_inspect", "description": "What something is and where.", "schema": s(json!({ "ref": { "type": "string" } }), &["ref"]) }),
         json!({ "name": "doom_go", "description": "Go to an area, item, door, switch or exit. risky: cross hurting floors if survivable. sure: exit even with things left. rush: keep going mid-fight, shooting and dodging on the way. queue_up: after what you're doing, not instead.", "schema": s(json!({ "ref": { "type": "string" }, "risky": { "type": "boolean" }, "sure": { "type": "boolean" }, "rush": { "type": "boolean" }, "queue_up": { "type": "boolean" } }), &["ref"]) }),
         json!({ "name": "doom_explore", "description": "Explore an area or a compass direction, the likeliest secret walls too; paused while you're fighting. queue_up: after what you're doing, not instead.", "schema": s(json!({ "ref": { "type": "string" }, "queue_up": { "type": "boolean" } }), &["ref"]) }),
         json!({ "name": "doom_search", "description": "Search an area or a compass direction for secrets: thorough 2 (most suspicious walls, default) or 3 (every one, slow). queue_up: after what you're doing, not instead.", "schema": s(json!({ "ref": { "type": "string" }, "thorough": { "type": "integer", "enum": [2, 3] }, "queue_up": { "type": "boolean" } }), &["ref"]) }),
@@ -289,7 +286,7 @@ fn without_instinct(all: &mut [Value]) {
 /// The rules, told on connecting and at each level. Everything she's told is told to her as
 /// the one playing ("you found a secret"), never of a player she directs ("she found").
 const BRIEFING: &str = "You're playing Doom. Moving, fighting and taking spare health, armor and ammo you do by reflex; you choose where you go. \
-Ids come from doom_list; your names work as ids. \"NE 400\": north-east of you, 400 units away. (tally): counts for the items %. An action done, you carry on by instinct, not leaving the level, and you're asked what next (doom_policy instinct).";
+Ids come from doom_query; your names work as ids. \"NE 400\": north-east of you, 400 units away. (tally): counts for the items %. An action done, you carry on by instinct, not leaving the level, and you're asked what next (doom_policy instinct).";
 
 impl Session {
     pub fn new(url: &str, c: &Directed) -> Session {
@@ -709,8 +706,7 @@ impl Session {
                     "doom_go",
                     "doom_exit",
                     "doom_look",
-                    "doom_list",
-                    "doom_inspect",
+                    "doom_query",
                     "doom_status",
                 ],
                 "medium",
@@ -770,7 +766,7 @@ impl Session {
             if let Some(p) = self.director.pick_line(agent, obs) {
                 state.push_str(&format!("\nSuggested: {p}.\n"));
             }
-            state.push_str("\nUnsure? doom_look, or doom_list.\n");
+            state.push_str("\nUnsure? doom_look, or doom_query.\n");
             self.force_as(
                 obs.tic,
                 &state,
@@ -782,8 +778,7 @@ impl Session {
                     "doom_go",
                     "doom_exit",
                     "doom_look",
-                    "doom_list",
-                    "doom_inspect",
+                    "doom_query",
                 ],
                 "low",
                 self.next_silent,
@@ -1161,7 +1156,7 @@ impl Session {
         self.reply = Some((n, name.to_string(), ok, msg.clone()));
         if !matches!(
             name,
-            "doom_list" | "doom_look" | "doom_inspect" | "doom_status" | "doom_why"
+            "doom_query" | "doom_look" | "doom_status" | "doom_why"
         ) {
             let first = msg.lines().next().unwrap_or("");
             self.tell(
@@ -1229,20 +1224,41 @@ impl Session {
             .and_then(Value::as_bool)
             .unwrap_or(false);
         match name {
-            "doom_list" => {
-                let Some(topic) = arg("what").and_then(Topic::parse) else {
+            "doom_query" => {
+                // (one thing, by its id or name: what it is and where)
+                if let Some(r) = arg("ref") {
+                    return match self.director.find(agent, obs, r) {
+                        Some(e) => (true, self.director.describe(&e, obs)),
+                        None => (false, self.director.not_found(agent, obs, r)),
+                    };
+                }
+                let Some(topic) = arg("all").and_then(Topic::parse) else {
                     return (
                         false,
-                        "what: areas, doors, switches, items, monsters or exits.".into(),
+                        "all: areas, doors, switches, items, monsters or exits; or ref: an id or name."
+                            .into(),
                     );
                 };
-                let all = args.get("all").and_then(Value::as_bool).unwrap_or(false);
-                let l = self.director.listing(agent, obs, topic, all, LIST_MAX);
-                let mut more = if l.hidden > 0 {
-                    format!("\n(+{} explored; all: true lists them)", l.hidden)
-                } else {
-                    String::new()
-                };
+                let explored = args
+                    .get("include_explored")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                let l = self.director.listing(agent, obs, topic, explored, LIST_MAX);
+                let mut more = String::new();
+                // (a list cut short says so: she isn't left thinking that's all there is)
+                if l.known > l.lines.len() {
+                    more.push_str(&format!(
+                        "\n({} of {} shown: the first to take)",
+                        l.lines.len(),
+                        l.known
+                    ));
+                }
+                if l.hidden > 0 {
+                    more.push_str(&format!(
+                        "\n(+{} with nothing left in them: include_explored: true)",
+                        l.hidden
+                    ));
+                }
                 if let Some(p) = &l.pick {
                     more.push_str(&format!("\nSuggested: {p}."));
                 }
@@ -1301,15 +1317,6 @@ impl Session {
                             crate::control::directed::policy_help()
                         ),
                     )
-                }
-            }
-            "doom_inspect" => {
-                let Some(r) = arg("ref") else {
-                    return (false, "ref: an id or name.".into());
-                };
-                match self.director.find(agent, obs, r) {
-                    Some(e) => (true, self.director.describe(&e, obs)),
-                    None => (false, self.director.not_found(agent, obs, r)),
                 }
             }
             "doom_go" => {

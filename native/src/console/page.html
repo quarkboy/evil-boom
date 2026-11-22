@@ -305,8 +305,8 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
           <h3>Ask the game, as hers</h3>
           <div class="row">
             <button data-q="doom_look">Look</button><button data-q="doom_status">Status</button><button data-q="doom_why">Why</button>
-            <button data-q="doom_list" data-d='{"what":"areas"}'>Areas</button><button data-q="doom_list" data-d='{"what":"doors"}'>Doors</button>
-            <button data-q="doom_list" data-d='{"what":"items"}'>Items</button><button data-q="doom_list" data-d='{"what":"exits"}'>Exits</button>
+            <button data-q="doom_query" data-d='{"all":"areas"}'>Areas</button><button data-q="doom_query" data-d='{"all":"doors"}'>Doors</button>
+            <button data-q="doom_query" data-d='{"all":"items"}'>Items</button><button data-q="doom_query" data-d='{"all":"exits"}'>Exits</button>
           </div>
           <div class="row">
             <button data-q="doom_fight" data-d='{"fire":"hold"}'>Hold fire</button><button data-q="doom_fight" data-d='{"fire":"free"}'>Fire</button>
@@ -318,7 +318,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
           <div class="row">
             <select id="e-action" style="width:auto">
               <option>doom_go</option><option>doom_explore</option><option>doom_search</option><option>doom_press</option><option>doom_exit</option><option>doom_pause</option>
-              <option>doom_list</option><option>doom_inspect</option><option>doom_look</option><option>doom_status</option><option>doom_why</option>
+              <option>doom_query</option><option>doom_look</option><option>doom_status</option><option>doom_why</option>
               <option>doom_goal</option><option>doom_policy</option><option>doom_fight</option><option>doom_answer</option><option>doom_game</option>
             </select>
             <input id="e-data" placeholder='{"ref": "door-3"}' style="flex:1;min-width:10em">

@@ -230,8 +230,7 @@ impl Stream {
                 }
             } else if let Some(order) = l.strip_prefix(">> ").filter(|o| {
                 o.starts_with("doom_")
-                    && !o.starts_with("doom_list")
-                    && !o.starts_with("doom_inspect")
+                    && !o.starts_with("doom_query")
                     && !o.starts_with("doom_status")
             }) {
                 self.event(

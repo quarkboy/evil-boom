@@ -4,7 +4,7 @@
 //! A stand-in Neuro server (`evil-boom neuro-mock`): the game connects to it as it would to Neuro.
 //! What the game sends (registrations, context, forces with their state, results) is written to a
 //! log, readable; actions are sent from a file as lines are added to it, one a line:
-//! `doom_explore {"target": "north"}`, `doom_list {"what": "areas"}`, `doom_exit`; and
+//! `doom_explore {"ref": "north"}`, `doom_query {"all": "areas"}`, `doom_exit`; and
 //! `wait-for TEXT`: the lines after it held till the game says something with TEXT in it;
 //! `speaking` and `spoken`: a `speech_finished` not final, and the final one.
 //! Whoever writes the file plays Evil, by hand or by script.

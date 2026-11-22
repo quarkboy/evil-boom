@@ -44,7 +44,10 @@ impl Director {
                         "No monsters known of right now.".to_string()
                     } else {
                         let all: Vec<String> = kinds.iter().map(|(n, c)| some(*c, n)).collect();
-                        format!("Known now: {} (ids: doom_list monsters).", all.join(", "))
+                        format!(
+                            "Known now: {} (ids: doom_query all: monsters).",
+                            all.join(", ")
+                        )
                     }
                 };
                 let id = self.resolve(r);
