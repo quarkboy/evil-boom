@@ -63,6 +63,9 @@ fn priority(name: &str, d: f64) -> f64 {
     }
 }
 
+/// a target wider than this (an imp's 20) is one most of a shotgun's spread should land on
+const SPREAD_WIDE: f64 = 20.0;
+
 impl Combat {
     pub(super) fn pick_target(&mut self, obs: &Observation) -> Option<Thing> {
         let pos = obs.pos();
@@ -281,6 +284,35 @@ impl Combat {
             // stepped for, the route goes on)
             self.give_up(obs, t.id);
         }
+        // A shotgun's shots at something wide standing still, and most of each not landing:
+        // not one side of the spread lost on a corner, which is common and still half a
+        // shot, but both sides of it, the middle only getting there. Bars, a grate. After a
+        // few shots (`aim.spread_shots`) with under `aim.spread_share` of what they should
+        // have done, it's left from where she stands, as rounds that do nothing are.
+        // (Looked for before firing, each pellet's way reckoned, it made her worse; so it's
+        // found out by firing. The maintainer's, from Doom II MAP14: shells by the dozen at
+        // an arachnotron through the bars.)
+        if held == 3 && !info.boss && info.radius > SPREAD_WIDE {
+            let fresh = (t.id, t.health, gun_ammo, (t.x, t.y));
+            let at = self.trigger.spread_at.get_or_insert(fresh);
+            if at.0 != t.id
+                || gun_ammo > at.2
+                || dist(at.3, (t.x, t.y)) > self.tune.aim.wasted_still
+            {
+                *at = fresh;
+            }
+            let shots = f64::from(at.2 - gun_ammo) / f64::from(w.ammo_per_shot.max(1));
+            let due = shots * w.damage * w.hits(info.radius, d);
+            if shots >= self.tune.aim.spread_shots
+                && f64::from(at.1 - t.health) < self.tune.aim.spread_share * due
+            {
+                self.trigger.no_effect = Some((t.id, pos, obs.tic + self.tune.aim.wasted_tics));
+                self.trigger.spread_at = None;
+                self.give_up(obs, t.id);
+            }
+        } else {
+            self.trigger.spread_at = None;
+        }
         let no_effect = self.trigger.no_effect.is_some_and(|(id, from, till)| {
             id == t.id && obs.tic < till && dist(from, pos) < self.tune.aim.wasted_room
         });
@@ -290,7 +322,7 @@ impl Combat {
             Some(HeldFire::OutOfReach)
         } else if held == 5 && (!self.rocket_safe(obs, t) || blocked) {
             Some(HeldFire::RocketNotSafe)
-        } else if no_effect && !w.hitscan {
+        } else if no_effect && (!w.hitscan || held == 3) {
             Some(HeldFire::NoEffect)
         } else if plasma_blocked {
             Some(HeldFire::PlasmaBlocked)

@@ -496,6 +496,7 @@ impl Combat {
             trigger: Trigger {
                 shot_at: None,
                 no_effect: None,
+                spread_at: None,
                 ammo_log: std::collections::VecDeque::new(),
                 blocked_at: None,
                 held: false,

@@ -577,6 +577,11 @@ pub struct Aim {
     pub wasted_room: f64,
     /// ...the target within this of where it stood all the while
     pub wasted_still: f64,
+    /// a shotgun's shots at one wide thing standing still: after this many...
+    pub spread_shots: f64,
+    /// ...with under this share of what they should have done landed (one side of the spread
+    /// lost is about half; this is both), it's left as rounds that do nothing are
+    pub spread_share: f64,
     /// ...counting a round this long after it would have got there (tics)
     pub wasted_land: i64,
     /// ...and her plasma reckoned not to reach it within this long before (tics)
@@ -609,6 +614,8 @@ impl Default for Aim {
             wasted_tics: 30 * 35,
             wasted_room: 96.0,
             wasted_still: 48.0,
+            spread_shots: 3.0,
+            spread_share: 0.35,
             wasted_land: 12,
             wasted_waver: 70,
             wasted_far: 512.0,

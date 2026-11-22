@@ -45,6 +45,9 @@ pub struct Trigger {
     /// no more fired at this one from where she stood then, till this tic: her rounds weren't
     /// getting there (`aim.wasted`)
     pub(super) no_effect: Option<(i32, crate::geom::Point, i64)>,
+    /// a shotgun's shots at one standing still, since she began at it: it, its health then,
+    /// her shells then, where it stood (`aim_and_fire`, the pellets that aren't getting there)
+    pub(super) spread_at: Option<(i32, i32, i32, crate::geom::Point)>,
     /// the target her plasma was last reckoned not to reach, and when
     pub(super) blocked_at: Option<(i32, i64)>,
     /// her rounds for the gun in hand, by the tic, a few seconds of it (for which of them have

@@ -3703,3 +3703,16 @@ both meet something. One side on a pillar is still a shot; a slot is none, at an
 
 The three-lives test, 544 runs: exits 287 -> 293 (8 runs more, 2 less), lives lost a run
 1.110 -> 1.103, none stood the hour; 63 runs differ. E4M8 +2, MAP25 -2, six others +1.
+
+## A shotgun that isn't landing is put down (2026-11-22)
+
+Doom II MAP14, the maintainer watching (1,020 s): shell after shell at an arachnotron behind
+bars, a pellet or two of seven getting through. Trying the fan's ways before firing was
+tried earlier and made things a good deal worse (a clipped corner is common, and a fine
+shot). The maintainer's instead, after the fact: at something wider than an imp, not a boss,
+standing where it stood, `aim.spread_shots` (3) shots that did under `aim.spread_share`
+(0.35) of what they should have are a slot; she holds fire at it from there (`no_effect`)
+and the fight gives it up. A corner takes one side of the fan and leaves over the share.
+
+MAP14's eight runs: 49 such holds. The three-lives test, 544 runs, against the plasma rule
+alone: exits 293 -> 292 (MAP21, one run), 13 runs differ, none stood: level.
