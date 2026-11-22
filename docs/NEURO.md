@@ -30,6 +30,17 @@ With `--stream --present` it's the stream's window with Doom's own screens. The
 - **Questions with defaults.** When the bot faces a choice that's hers (leave with things left,
   take a costly way, a fight turning bad) it asks with a default and a clock. No answer in time,
   and the default is taken. Urgent ones are done at once, with a few seconds to change them.
+- **Her plans are hers to hear.** What the bot settles by itself at the level's scale is told
+  her as it's taken up: the invulnerability fetched before she does again what she died after
+  doing (a question: get it, or go without), where she's off to with it, a gun before any key
+  on the pistol. `doom_why` says each, and what's left alone for the deaths it cost.
+- **One force at a time** (the SDK's rule). A decision's forced when she's waited with nothing
+  to do (medium), when a question's gone unanswered (high), when a game's hers to start and she
+  hasn't (medium), and, quietly (`silent`), to ask what next while she's on by instinct (low,
+  and not while she's mid-sentence: `speech_finished` is read). A question that can't wait is
+  forced the tic it's asked: high, or critical when her health's going in a fight. A force is
+  out till one of its own actions is accepted, or 30 s have passed with none; no other is sent
+  meanwhile, and what would have been forced is told aloud instead.
 - **The game is hers too.** She starts the game (level, skill, one level or straight on), moves
   on from the tally screen, and restarts a level that's going nowhere.
 
@@ -77,6 +88,16 @@ a stray field) are mended against the schema (`neuro/repair.rs`).
 - **instinct** (`on`, `off`: she waits for each action), **hints** (`off`, `on_stall`, `always`). How long
   a question waits for her answer is the stream's (the console), not hers.
 
+### The clocks (`directed` in a tuning file)
+
+How long she's waited for and how often she's put to are the tuning's `directed` group, in
+seconds (`evil-boom tuning` prints them): `idle_force` 6, `ask_force` 3, `next_force` 15 and
+`next_silent`, `after_look` 3, `force_timeout` 30, `speech_stale` 20, `answer_wait` 8,
+`now_open` 3, `questions_a_minute` 3, `moments_a_minute` 6, `status_every` 20, `tactic` 10,
+`stance` 30. A fast model and a slow stand-in each want their own: `--tuning FILE` with just
+that group. The console changes the forcing times, the answer wait and the quiet asking as
+it runs.
+
 ## Testing without Neuro
 
 ### By hand: a directed script
@@ -98,7 +119,9 @@ evil-boom watch doom E1M1 --neuro ws://127.0.0.1:8000
 
 A stand-in Neuro server: it sends the actions you append to the file, one a line
 (`doom_explore {"target": "north"}`, `doom_exit`, or `wait-for TEXT` to hold the rest until the game
-says something with TEXT in it), and logs everything the game sends to `FILE.log`.
+says something with TEXT in it; `speaking` and `spoken` send her `speech_finished`, a part and
+the end), and logs everything the game sends to `FILE.log`, each force with its priority and
+whether it's silent.
 
 ### A language model as Evil
 
