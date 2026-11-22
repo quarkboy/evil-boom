@@ -188,12 +188,28 @@ impl Director {
         let pick = (topic != Topic::Monsters)
             .then(|| self.pick(agent, obs))
             .flatten();
+        // (what instinct leaves alone for the deaths it's cost, said on its line: hers to go
+        // for all the same, knowing)
+        let died: BTreeMap<String, usize> = if topic == Topic::Monsters {
+            BTreeMap::new()
+        } else {
+            self.open_objectives(agent, obs)
+                .iter()
+                .map(|o| (id_of(o), Self::deaths_at(agent, o)))
+                .filter(|(_, n)| *n > 0)
+                .collect()
+        };
         let mut marked = false;
         let lines = entries
             .iter()
             .take(max)
             .map(|e| {
                 let line = self.describe(e, obs);
+                let line = match died.get(&e.id) {
+                    Some(1) => format!("{line}, died there once"),
+                    Some(n) => format!("{line}, died there {n} times"),
+                    None => line,
+                };
                 match pick.as_ref().filter(|p| p.id == e.id) {
                     Some(p) => {
                         marked = true;

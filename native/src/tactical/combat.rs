@@ -950,6 +950,14 @@ impl Combat {
         self.trigger.held_fire.map(|h| h.label())
     }
 
+    /// ...only when it's for a reason that lasts (`HeldFire::lasting`).
+    pub fn holding_fire_long(&self) -> Option<&'static str> {
+        self.trigger
+            .held_fire
+            .filter(|h| h.lasting())
+            .map(|h| h.label())
+    }
+
     /// Has she given up on getting at id a while?
     pub(super) fn given_up_on(&self, obs: &Observation, id: i32) -> bool {
         self.patience.given_up(id, obs.tic)

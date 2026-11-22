@@ -187,6 +187,9 @@ struct Fight {
     against: BTreeMap<&'static str, usize>,
     /// asked her about it, once it turned bad
     asked: bool,
+    /// fire held for a reason that lasts: which, and since when; and those told her this fight
+    held: Option<(&'static str, i64)>,
+    held_told: Vec<&'static str>,
 }
 
 /// What she had a tic ago.
@@ -791,12 +794,27 @@ impl Director {
     pub fn status(&self, agent: &Agent, obs: &Observation) -> String {
         let doing = self.doing(agent);
         // (in a fight: what's in sight, the nearest; an order then is held up by it unless rushed)
+        // (...and what the fight's doing, and that she isn't shooting when she isn't and it'll
+        // last: she has no picture of it, and can't ask why of what she doesn't know)
         let doing = match fighting(&engaged(agent, obs), obs) {
-            Some(what) => format!("{doing}; fighting {what}"),
+            Some(what) => {
+                match self.not_shooting(agent) {
+                    // (not "shooting on the way, not shooting")
+                    Some(why) => format!(
+                        "{doing}; fighting {what}: {}; not shooting: {why}",
+                        self.now.doing().replace(", shooting on the way", "")
+                    ),
+                    None => format!("{doing}; fighting {what}: {}", self.now.doing()),
+                }
+            }
             None => doing,
         };
+        // (a plan of her own in force: what she's about, beyond the errand in hand)
+        let plan = self
+            .plan_words(agent, obs)
+            .map_or(String::new(), |p| format!("; {p}"));
         // (short: what Evil reads costs her context)
-        format!("{}; {}; {doing}", kit(obs), self.tally.line())
+        format!("{}; {}; {doing}{plan}", kit(obs), self.tally.line())
     }
 
     /// What in her status she'd act on, to tell whether it's changed: health and armor by tens,
@@ -804,14 +822,16 @@ impl Director {
     /// round spent, nor where what's fighting her has got to.)
     pub fn status_gist(&self, agent: &Agent, obs: &Observation) -> String {
         format!(
-            "{} {} {:?} {:?} {} {} {}",
+            "{} {} {:?} {:?} {} {} {} {:?} {:?}",
             (self.now.health / 10.0).floor(),
             (self.now.armor / 10.0).floor(),
             obs.weapons,
             obs.keys.unwrap_or_default().iter().count(),
             self.doing(agent),
             self.now.fighting(),
-            self.tally.line()
+            self.tally.line(),
+            self.now.fighting().then(|| self.now.doing()),
+            self.not_shooting(agent)
         )
     }
 
@@ -896,6 +916,7 @@ impl Director {
         self.watch_progress(agent, obs);
         self.powers(obs);
         self.plans(agent, obs);
+        self.held_fire_news(agent, obs);
         self.questions(agent, obs);
         self.apply_tactics(agent, obs);
         // (...once she's seen a way out this life: till then a sphere or a berserk she's no

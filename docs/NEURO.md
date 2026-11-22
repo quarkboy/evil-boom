@@ -33,7 +33,8 @@ With `--stream --present` it's the stream's window with Doom's own screens. The
 - **Her plans are hers to hear.** What the bot settles by itself at the level's scale is told
   her as it's taken up: the invulnerability fetched before she does again what she died after
   doing (a question: get it, or go without), where she's off to with it, a gun before any key
-  on the pistol. `doom_why` says each, and what's left alone for the deaths it cost.
+  on the pistol. Her status says the one in force, and a list says what's been left alone for
+  the deaths it cost ("died there once").
 - **One force at a time** (the SDK's rule). A decision's forced when she's waited with nothing
   to do (medium), when a question's gone unanswered (high), when a game's hers to start and she
   hasn't (medium), and, quietly (`silent`), to ask what next while she's on by instinct (low,
@@ -50,8 +51,7 @@ With `--stream --present` it's the stream's window with Doom's own screens. The
 |---|---|
 | `doom_look` | what's round you: the room, what it leads to, monsters, items, doors and switches in sight, sounds (and the bot's suggestion, unless she's fighting) |
 | `doom_query` | what she knows of: `all` (areas, doors, switches, items, monsters or exits, with ids, the first to take first; monsters nearest first; 15 at most, and a cut list says so), or `ref` (one thing: what it is and where); `include_explored` for areas with nothing left |
-| `doom_status` | health, armor, weapons, ammo, keys, the tally, what you're doing and fighting |
-| `doom_why` | why you're doing what you're doing: the aim and what it was chosen over, the fight, why you're not shooting, the last action that failed |
+| `doom_status` | health, armor, weapons, ammo, keys, the tally, what you're doing; in a fight, what against, what the fight's doing, and that she isn't shooting when she isn't and it'll last; a plan of her own in force |
 | `doom_go` | go to an area, item, door, switch or exit (`risky`, `sure`, `rush`, `queue_up`) |
 | `doom_explore` | explore an area or a direction |
 | `doom_search` | search an area or a direction for secrets (thorough 2 or 3) |

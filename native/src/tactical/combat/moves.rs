@@ -177,6 +177,20 @@ pub enum HeldFire {
 }
 
 impl HeldFire {
+    /// Held for as long as things stay as they are (what's in the way, where it stands): worth
+    /// telling whoever directs her, who can do something about it. The others are a moment's
+    /// (a rocket not safe just now, a barrel in the line, a boss mid-death).
+    pub fn lasting(self) -> bool {
+        matches!(
+            self,
+            HeldFire::OutOfReach
+                | HeldFire::PlasmaBlocked
+                | HeldFire::NoEffect
+                | HeldFire::NoShot
+                | HeldFire::LeftToBoss
+        )
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             HeldFire::OutOfReach => "out of reach",

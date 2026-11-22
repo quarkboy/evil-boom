@@ -179,7 +179,6 @@ const ALL_ACTIONS: &[&str] = &[
     "doom_pause",
     "doom_status",
     "doom_goal",
-    "doom_why",
 ];
 
 /// Off a level (the title, a game over, the tally, a finale): the game itself, her answers, her
@@ -198,7 +197,6 @@ const PAUSED: &[&str] = &[
     "doom_look",
     "doom_query",
     "doom_status",
-    "doom_why",
     "doom_answer",
     "doom_policy",
     "doom_goal",
@@ -265,7 +263,6 @@ pub fn actions_timed(c: &Directed) -> Vec<Value> {
         json!({ "name": "doom_pause", "description": "Pause the game, as stepping away from it: the menu comes up and nothing moves till you play on (on: false). on: true by default.", "schema": s(json!({ "on": { "type": "boolean" } }), &[]) }),
         json!({ "name": "doom_status", "description": "Your current status." }),
         json!({ "name": "doom_goal", "description": "A standing aim, till met. It doesn't play for you: what's suggested to you, and your instinct when you leave it to that, put it first: out, completionist (100% then out: slow, asked first), key (ref: a colour or key id), kills, supplies, secrets; none to drop it.", "schema": s(json!({ "goal": { "type": "string", "enum": ["out", "completionist", "key", "kills", "supplies", "secrets", "none"] }, "ref": { "type": "string" } }), &["goal"]) }),
-        json!({ "name": "doom_why", "description": "Why you're doing what you're doing: the aim and what it was chosen over, the fight, why you're not shooting, the last action that failed." }),
     ]
 }
 
@@ -1488,6 +1485,7 @@ impl Session {
                 )
             }
             "doom_status" => (true, self.director.status(agent, obs)),
+            // (not one of hers any more: the stream console's "Why" button asks it)
             "doom_why" => (true, self.director.why(agent, obs)),
             "doom_goal" => {
                 let Some(g) = arg("goal") else {

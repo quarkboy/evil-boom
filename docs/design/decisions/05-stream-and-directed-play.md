@@ -3899,3 +3899,24 @@ which says what it does. The cut stays at 15 (the maintainer's: a level can have
 areas) and is said: "(15 of 40 shown: the first to take)". The description says the order,
 and that monsters come nearest first (kept so: the maintainer's). `what`, `type`, `kind` and
 `category` are read as `all` (`repair.rs`).
+
+### `doom_why` is gone; what it knew that mattered is told her
+
+An action she has to think to call, for why she's doing what she's doing. In the sessions
+with a model it was never called, and the maintainer's point settles it: she has no picture
+of the game, so she can't know she isn't shooting to ask why. What changes a decision is
+pushed; the rest was commentary. It's out of her actions (fourteen now; the stream console's
+"Why" still asks the same code), and three things it knew go where she looks:
+
+- **Her status in a fight** says what the fight's doing and, when she isn't shooting for a
+  reason that lasts (`HeldFire::lasting`: out of reach, plasma blocked, shots not getting
+  there, no shot, left to the boss; not a moment's, a rocket unsafe or a barrel in line),
+  that: "fighting 1 shotgun guy (E 1136): falling back; not shooting: no shot: too steep, or
+  something in the way". And a plan of her own in force: "; the invulnerability first".
+- **News**, once a fight for each such reason held three seconds: "Not shooting: plasma
+  wouldn't get there." It's hers to mend: another gun, another place, or leaving it.
+- **A list's entry** says what instinct leaves alone for its deaths: ", died there once".
+
+Dropped with the action: each objective's "because", the "rather than" alternatives, the
+fight's "because you're outmatched and hurt", the last order that failed (told when it
+did). The console's panel has them still. Parity: 24 of 24.

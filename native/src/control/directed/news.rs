@@ -315,6 +315,8 @@ impl Director {
                 spent: [0; 4],
                 against: BTreeMap::new(),
                 asked: false,
+                held: None,
+                held_told: Vec::new(),
             });
         }
         if let (Some(f), Some(was)) = (self.fight.as_mut(), self.was.as_ref()) {

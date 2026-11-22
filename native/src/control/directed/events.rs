@@ -107,6 +107,8 @@ pub enum Event {
     Instinct,
     /// something she's settled by herself at the level's scale (`plans.rs`)
     Plan,
+    /// she isn't shooting, and won't be as things stand (`plans.rs`)
+    HeldFire,
     /// on by instinct from now
     OnInstinct,
     /// every kill, item and secret the level counts: done
@@ -180,6 +182,7 @@ impl Event {
             | E::Suggestion { loud: true }
             | E::RestartOpen
             | E::Plan
+            | E::HeldFire
             | E::UltraOver
             | E::LevelStart => Weight::Moment,
             E::Outcome
