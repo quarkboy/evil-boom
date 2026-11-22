@@ -29,6 +29,9 @@ pub enum Incoming {
         name: String,
         data: Option<String>,
     },
+    /// `speech_finished`: a part of what she's saying is said (`last`: all of it; cut off
+    /// counts, the server sends a final one then too)
+    Speech { last: bool },
     /// lost the connection (it's tried again)
     Lost(String),
 }
@@ -174,6 +177,13 @@ fn parse(text: &str) -> Option<Incoming> {
                 data: d.get("data").and_then(Value::as_str).map(str::to_string),
             })
         }
+        "speech_finished" => Some(Incoming::Speech {
+            // (no word of it: taken as the end, so she's never thought talking for ever)
+            last: data
+                .and_then(|d| d.get("isFinal"))
+                .and_then(Value::as_bool)
+                .unwrap_or(true),
+        }),
         "startup" => {
             let s = data?.get("session")?;
             Some(Incoming::Hello {
@@ -197,6 +207,18 @@ fn parse(text: &str) -> Option<Incoming> {
 mod tests {
     use super::{parse, Incoming};
     use crate::neuro::session::Character;
+
+    /// She's talking till the final `speech_finished`.
+    #[test]
+    fn speech_parts() {
+        let part = r#"{"command":"speech_finished","data":{"isFinal":false}}"#;
+        let end = r#"{"command":"speech_finished","data":{"isFinal":true,"cancelled":true,"reason":"interrupted"}}"#;
+        assert!(matches!(
+            parse(part),
+            Some(Incoming::Speech { last: false })
+        ));
+        assert!(matches!(parse(end), Some(Incoming::Speech { last: true })));
+    }
 
     /// The startup's acknowledgement, as the stand-ins send it, says who's playing.
     #[test]

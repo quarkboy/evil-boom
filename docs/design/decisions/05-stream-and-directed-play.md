@@ -3790,3 +3790,14 @@ The fallback is what was there: the default's done whatever she does, a late ans
 it's too late, and with another force out (one at a time) it's told aloud as before and not
 forced. Against the mock server, MAP07 on UV: "Outmatched: 1 mancubus" forced (high) at
 3.5 s and 98.8 s; the ones between, with a force out unanswered, told aloud.
+
+### She's heard to be talking
+
+The SDK's `speech_finished` (from her, several a response; `isFinal` true on the last, and on
+one cut off) was dropped unread. It's read now: she's talking from a part that isn't final
+till the final one, or `directed.speech_stale` (20 s) after the last heard with no end. One
+use so far: "what next" isn't asked mid-sentence. At low priority it would wait for her to
+finish anyway, and its few seconds for an answer would have run out by then, the ask spent on
+nothing; it's asked as she finishes. The urgent forces don't wait: their priority is what
+cuts her short. Against the mock server (which sends the message now: `speaking`, `spoken`
+in its file): the ask due at 15 s held till she was done at 25.8 s.

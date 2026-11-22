@@ -1012,6 +1012,9 @@ pub struct Directed {
     /// after an action of hers that moves nothing (a look, a list): at least this long before a
     /// decision's forced
     pub after_look: f64,
+    /// she's told to be talking (`speech_finished`, not final): taken as done this long after
+    /// with no end heard
+    pub speech_stale: f64,
     /// a force unanswered this long is taken as dropped by the server, and another may be sent
     /// (0: never; one at a time meanwhile)
     pub force_timeout: f64,
@@ -1041,6 +1044,7 @@ impl Default for Directed {
             next_silent: true,
             after_look: 3.0,
             force_timeout: 30.0,
+            speech_stale: 20.0,
             answer_wait: 8.0,
             now_open: 3.0,
             questions_a_minute: 3,

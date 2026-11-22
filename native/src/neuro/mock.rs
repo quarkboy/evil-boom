@@ -5,7 +5,8 @@
 //! What the game sends (registrations, context, forces with their state, results) is written to a
 //! log, readable; actions are sent from a file as lines are added to it, one a line:
 //! `doom_explore {"target": "north"}`, `doom_list {"what": "areas"}`, `doom_exit`; and
-//! `wait-for TEXT`: the lines after it held till the game says something with TEXT in it.
+//! `wait-for TEXT`: the lines after it held till the game says something with TEXT in it;
+//! `speaking` and `spoken`: a `speech_finished` not final, and the final one.
 //! Whoever writes the file plays Evil, by hand or by script.
 
 use std::io::Write;
@@ -85,6 +86,20 @@ pub fn serve(port: u16, actions: &Path) -> Result<(), String> {
                         if let Some(w) = line.strip_prefix("wait-for ") {
                             say(format!("(waiting for \"{w}\")"));
                             waiting = Some(w.to_string());
+                            continue;
+                        }
+                        // (she's talking: a part of it done, or all of it)
+                        if let Some(part) = match line {
+                            "speaking" => Some(false),
+                            "spoken" => Some(true),
+                            _ => None,
+                        } {
+                            say(format!("EVIL speech_finished isFinal: {part}"));
+                            ws.send(Message::text(
+                                json!({ "command": "speech_finished", "data": { "isFinal": part } })
+                                    .to_string(),
+                            ))
+                            .map_err(|e| e.to_string())?;
                             continue;
                         }
                         let (name, data) = line

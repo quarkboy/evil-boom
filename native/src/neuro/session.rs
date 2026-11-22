@@ -74,6 +74,8 @@ pub struct Session {
     next_force: i64,
     /// ...and without a word aloud (the SDK's `silent`: it comes often)
     next_silent: bool,
+    /// her talking taken as over this long (tics) after its last part with no end heard
+    speech_stale: i64,
     next_due: Option<&'static str>,
     next_at: i64,
     /// instinct hers to turn off (`doom_policy instinct`); not (the console's say): it's on,
@@ -92,6 +94,9 @@ pub struct Session {
     /// (the wall's clock: the game's doesn't run there)
     off_since: Option<std::time::Instant>,
     off_forced: Option<std::time::Instant>,
+    /// she's mid-sentence (`speech_finished`, not the final one yet): since when it was last
+    /// heard of
+    speaking: Option<i64>,
 }
 
 /// The force out, if one is. Neuro handles one at a time, and a second sent meanwhile "will
@@ -318,6 +323,7 @@ impl Session {
             ask_force: Directed::tics(c.ask_force),
             next_force: Directed::tics(c.next_force),
             next_silent: c.next_silent,
+            speech_stale: Directed::tics(c.speech_stale),
             after_look: Directed::tics(c.after_look),
             status_every: Directed::tics(c.status_every),
             moments: c.moments_a_minute,
@@ -331,6 +337,7 @@ impl Session {
             pause_wanted: None,
             off_since: None,
             off_forced: None,
+            speaking: None,
         }
     }
 
@@ -437,6 +444,7 @@ impl Session {
             let back = self.now_tic - tic;
             self.idle_since -= back;
             self.forced.back(back);
+            self.speaking = self.speaking.map(|t| t - back);
             self.next_at -= back;
             self.briefed_at -= back;
             self.told_status.0 -= back;
@@ -445,6 +453,12 @@ impl Session {
             self.exchanges.iter_mut().for_each(|e| e.tic -= back);
         }
         self.now_tic = tic;
+    }
+
+    /// She's talking: the last heard of what she's saying wasn't its end, and that not long
+    /// ago (an end that never came isn't waited for for ever).
+    fn speaking(&self, tic: i64) -> bool {
+        self.speaking.is_some_and(|t| tic - t < self.speech_stale)
     }
 
     /// Whether she's asked what next without a word aloud (the console's).
@@ -529,7 +543,9 @@ impl Session {
                         log.push(format!("neuro: connection lost ({why}); trying again"));
                     }
                     self.forced.clear();
+                    self.speaking = None;
                 }
+                Incoming::Speech { last } => self.speaking = (!last).then_some(obs.tic),
                 Incoming::Action { id, name, data } => {
                     if matches!(
                         name.as_str(),
@@ -718,6 +734,9 @@ impl Session {
         if let Some(due) = self.next_due.filter(|_| {
             self.connected
                 && !self.forced.out()
+                // (mid-sentence: asked when she's done. It'd wait for her anyway, and its
+                // few seconds for an answer would be gone by then)
+                && !self.speaking(obs.tic)
                 && self.next_force > 0
                 && (self.next_due == Some("done") && agent.x().current.is_some()
                     || self.next_due != Some("done") && obs.tic - self.next_at >= self.next_force)
@@ -1000,7 +1019,9 @@ impl Session {
                         log.push(format!("neuro: connection lost ({why}); trying again"));
                     }
                     self.forced.clear();
+                    self.speaking = None;
                 }
+                Incoming::Speech { last } => self.speaking = (!last).then_some(tic),
                 Incoming::Action { id, name, data } => {
                     let args: Value = data
                         .as_deref()
