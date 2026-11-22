@@ -361,6 +361,10 @@ pub struct RouteFollower {
     crossed: bool,
     item: Option<Point>,
     press_tries: i32,
+    /// closing on a line to press it (`close_for_press`): the nearest she's been to where
+    /// she aims, and the tic she last got nearer; None before she's begun, or done with it
+    press_close: Option<(f64, i64)>,
+    press_closed: bool,
     before: Option<Vec<(usize, Option<Heights>)>>,
     cross_tic: Option<i64>,
     height_wait: Option<i64>,
@@ -507,6 +511,8 @@ impl RouteFollower {
             crossed: false,
             item: None,
             press_tries: 0,
+            press_close: None,
+            press_closed: false,
             before: None,
             cross_tic: None,
             height_wait: None,
@@ -810,6 +816,7 @@ impl RouteFollower {
         self.crossed = false;
         self.item = self.item_of();
         self.press_tries = 0;
+        (self.press_close, self.press_closed) = (None, false);
         self.before = None;
         self.cross_tic = None;
         self.height_wait = None;

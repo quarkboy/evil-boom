@@ -10,7 +10,9 @@ use crate::geom::{cells, closest_point, dist, segments_cross, Point};
 use crate::mesh::Portal;
 use crate::motor::{fmt_live, BRAKE};
 use crate::nav::{can_cross, Heights};
-use crate::navigator::{closest_on_portal, rep, TriggerLine, PLAYER_HEIGHT, PLAYER_RADIUS};
+use crate::navigator::{
+    closest_on_portal, rep, TriggerLine, MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS,
+};
 use crate::specials::{Category, Key, Trigger};
 use crate::walkthrough::{fmt_heights, Action, Expect, Step};
 use std::collections::BTreeSet;
@@ -45,6 +47,18 @@ const DOOR_STANDOFF: f64 = 36.0;
 
 /// presses (creeping closer) before giving up on a switch
 const PRESS_TRIES: i32 = 3;
+
+/// closing on a line to press it: this far from where she aims is near enough (the press
+/// reaches 64)...
+const PRESS_CLOSE: f64 = 52.0;
+/// ...at this many units a tic at most...
+const CLOSE_SPEED: f64 = 2.0;
+/// ...and given up as near as there is when she's got no nearer (by this much) for this
+/// many tics
+const CLOSE_GAIN: f64 = 0.25;
+const CLOSE_STALL: i64 = 10;
+/// ...and not on to where, this far ahead, her floor would be gone from under her
+const CLOSE_LOOK: f64 = 6.0;
 
 impl RouteFollower {
     /// Does a shot from `from` at `to` (on line `target`) get there: no wall, nor a sector shut
@@ -894,6 +908,16 @@ impl RouteFollower {
             // it wasn't shooting, the press came with her turned off the line, or never came)
             self.press_tic = Some(obs.tic);
         }
+        // A press reaches 64 from her centre and no further, and she's "there" within a dozen
+        // units of the end of her way, which itself keeps clear of the walls: so where the line
+        // is only just in reach she closes the last of it, straight at the part she's aiming
+        // at, till it's well inside her reach or she gets no nearer.
+        if matches!(step.action, Action::Use | Action::Exit)
+            && self.action_tic.is_none()
+            && let Some(c) = self.close_for_press(obs, aim, look)
+        {
+            return c;
+        }
         if step.action == Action::Face {
             // walk up to it and look at it; pressing is left to a person
             if facing {
@@ -998,6 +1022,55 @@ impl RouteFollower {
         );
         self.next_step(obs.tic);
         Controls::default()
+    }
+
+    /// The last units to a line she's to press: straight at the point of it she aims at, a
+    /// unit or two a tic, till it's `PRESS_CLOSE` off or she's got no nearer for
+    /// `CLOSE_STALL` tics (a wall, a parapet: as near as there is). Never over an edge: where
+    /// the next step would have her box off her floor by more than a step, that's as near
+    /// as there is too. None: near enough, or done; press.
+    ///
+    /// (Doom II MAP14: a lift's face 59 from the spot she was sent to and 66 from where she
+    /// stopped, 7 short of it; three presses and "nothing went off".)
+    fn close_for_press(&mut self, obs: &Observation, aim: Point, look: f64) -> Option<Controls> {
+        if self.press_closed {
+            return None;
+        }
+        let pos = obs.pos();
+        let d = dist(pos, aim);
+        if d <= PRESS_CLOSE {
+            self.press_closed = true;
+            return None;
+        }
+        let (best, since) = self.press_close.unwrap_or((f64::INFINITY, obs.tic));
+        let (best, since) = if d < best - CLOSE_GAIN {
+            (d, obs.tic)
+        } else {
+            (best, since)
+        };
+        self.press_close = Some((best, since));
+        let way = ((aim.0 - pos.0) / d, (aim.1 - pos.1) / d);
+        let lab = &self.view.nav.jump_lab;
+        let here = lab.fits_at(pos).1;
+        let ahead = (pos.0 + way.0 * CLOSE_LOOK, pos.1 + way.1 * CLOSE_LOOK);
+        let edge = lab.fits_at(ahead).1 < here - MAX_STEP;
+        if edge || obs.tic - since > CLOSE_STALL {
+            self.press_closed = true;
+            if d > PRESS_RANGE {
+                self.log.add(
+                    obs.tic,
+                    format!("as near as there is to the line: {d:.0} from it"),
+                );
+            }
+            return None;
+        }
+        let speed = CLOSE_SPEED.min(0.25 * (d - PRESS_CLOSE) + 0.5);
+        self.progress_tic = obs.tic;
+        self.step_tic = obs.tic;
+        Some(
+            self.motion
+                .hold(obs, (way.0 * speed, way.1 * speed), Some(look)),
+        )
     }
 
     /// Where on line `li` to aim, and how wide the line is from here (degrees): the nearest

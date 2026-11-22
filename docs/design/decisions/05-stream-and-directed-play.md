@@ -3628,3 +3628,25 @@ The stuck lines are MAP14's (366 -> 57; the rest 2198 -> 2213). MAP14's presses 
 go 6 -> 9: what she was stuck at for forty seconds she now presses from where it doesn't
 quite reach, and leaves in two. Left: a spot that reaches only if she gets right to it,
 and a follower that stops short.
+
+**The last units to a switch, and no pressing from under a ledge (the same day).** Two more
+of the same family, from MAP14's presses still given up:
+
+- *She stops short.* "There" is within a dozen units of the end of her way, and her way
+  keeps clear of walls; a lift's face 59 from the spot she was sent to was pressed from 66.
+  `RouteFollower::close_for_press`: with the part of the line she aims at more than 52 off,
+  she walks straight at it, 2 units a tic at most, till it's 52 off, or she's got no nearer
+  for ten tics (a wall: as near as there is), or the next step would be off her floor.
+- *A spot under a ledge isn't one.* `press_point_in` took spots where her box overlaps
+  ground more than a step above the poly's floor (`box_on_ledge`): from below she can't be
+  there, and from as near as she can it's out of reach. A lift's face "pressed" from the
+  yard beside its ledge; a door's switch from a floor 72 under it.
+
+The first alone did little (MAP14's eight runs: 9 given up -> 8): the rest weren't for
+want of the last units. Both: 346 presses on those eight runs, none given up, none tried
+twice.
+
+The 544 runs: exits 291 -> 288 (4 more, 7 less), lives lost a run 1.096 -> 1.108, 521 s ->
+526 s; presses given up 26 -> 13 (MAP14 9 -> 0, E4M3 3 -> 1, MAP29 2 -> 0; E4M1's 7 not
+touched, untraced), stuck lines 2270 -> 2332, errands timed out 194 -> 213. Right in what
+it does and not shown better on the score; taken on the maintainer's word.

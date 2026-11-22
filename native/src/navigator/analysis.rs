@@ -718,6 +718,7 @@ impl<'a> Analysis<'a> {
                     if segment_distance(a, b, q, q) <= USE_REACH + 16.0
                         && self.mesh.poly_at(q) == Some(pi)
                         && !self.box_on_wall(q)
+                        && !self.box_on_ledge(q, poly.sector)
                         && reaches(q)
                     {
                         let over = self.moving_walls_at(q, poly.sector);
@@ -756,6 +757,7 @@ impl<'a> Analysis<'a> {
                     && self.mesh.poly_at(q) == Some(pi)
                     && crate::mesh::inside(vs, x, y)
                     && !self.box_on_wall(q)
+                    && !self.box_on_ledge(q, poly.sector)
                     && reaches(q)
                 {
                     let over = self.moving_walls_at(q, poly.sector);
@@ -805,6 +807,32 @@ impl<'a> Analysis<'a> {
         }
         out.sort_unstable();
         out
+    }
+
+    /// Does the box at q, standing in `sector`, overlap ground more than a step above that
+    /// sector's floor that nothing ever moves: the edge of a ledge over her? From below she
+    /// can't be there, her centre short of the edge or not. (What may move is
+    /// `moving_walls_at`'s.) Doom II MAP14: a lift's face "pressed" from the yard under the
+    /// ledge beside it, at a spot her box would be half up the ledge at; from as near as she
+    /// can get it's out of reach.
+    fn box_on_ledge(&self, q: Point, sector: usize) -> bool {
+        let r = PLAYER_RADIUS - 0.5;
+        let init = &self.movers.initial;
+        for cell in cells(q.0 - r, q.1 - r, q.0 + r, q.1 + r) {
+            for &li in self.mesh.line_grid.get(&cell).into_iter().flatten() {
+                let (Some(f), Some(b)) = self.m.sides(li) else {
+                    continue;
+                };
+                if (init[f].floor.max(init[b].floor) > init[sector].floor + MAX_STEP)
+                    && !self.may_move.contains(&f)
+                    && !self.may_move.contains(&b)
+                    && box_hits_segment(q.0, q.1, r, self.m.line_seg(li))
+                {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     /// Does the box at q overlap a one-sided or impassable line, or a solid thing?
