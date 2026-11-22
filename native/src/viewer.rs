@@ -142,6 +142,11 @@ pub struct WatchOptions {
     pub stream: Option<StreamSide>,
     /// the games hers to start (`control::game::Choices::parse`'s words); none: none
     pub choices: Option<String>,
+    /// her lives are for all the levels played on through (`--episode-lives`), not each one's
+    pub lives_shared: bool,
+    /// settings not hers to change (`--lock`): "instinct" (on, and stays on), "finish" (none:
+    /// she leaves a level when she says so, and can't set it otherwise)
+    pub locked: Vec<String>,
     /// the window's size, vsync, full screen
     pub window: crate::dsda::WindowSpec,
     /// the game drawn at this size (width, height); none: its own (640x480)
@@ -627,6 +632,14 @@ fn first_watch(
         .neuro
         .as_deref()
         .map(|url| crate::neuro::session::Session::new(url, &clocks));
+    if let Some(n) = watch.neuro.as_mut() {
+        if o.locked.iter().any(|l| l == "instinct") {
+            n.set_instinct_hers(false);
+        }
+        if o.locked.iter().any(|l| l == "finish") {
+            n.set_finish_hers(false);
+        }
+    }
     Ok((w, watch))
 }
 
@@ -913,10 +926,15 @@ fn enter_level(
         }
         n.director.new_map();
     }
+    let lives = watch.lives_left;
     let mut engine = watch.engine;
     engine.carry = carry.or_else(|| o.carry.clone());
     engine.goto(name)?;
     let mut watch = level(w, m, nav, engine, o)?;
+    // (her lives for the whole of it: what's left of them comes with her)
+    if o.lives_shared {
+        watch.lives_left = lives;
+    }
     (watch.speed, watch.show_all, watch.follow) = (speed, show_all, follow);
     watch.show_keys = show_keys;
     watch.frame_per_tic = frame_per_tic;

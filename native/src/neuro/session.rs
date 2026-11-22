@@ -83,6 +83,10 @@ pub struct Session {
     /// other schema
     instinct_hers: bool,
     policy_stale: bool,
+    /// when the level's done hers to set (`doom_goal`'s `finish`); not (the stream's say): it's
+    /// none, and the field isn't in her schema. `goal_stale`: registered with the other schema
+    finish_hers: bool,
+    goal_stale: bool,
     /// the games hers to start and what of the game is hers (the watch's; doom_game's schema
     /// made from them), and doom_game registered with older ones
     choices: Option<Choices>,
@@ -261,6 +265,17 @@ pub fn actions_timed(c: &Directed) -> Vec<Value> {
 /// isn't hers to turn off.
 const INSTINCT_HELP: &str = " instinct: on (an action done, you carry on by yourself and are asked what next), off (you stand and wait).";
 
+/// `doom_goal` with no `finish`: when the level's done isn't hers to set.
+fn without_finish(all: &mut [Value]) {
+    let Some(g) = all.iter_mut().find(|a| a["name"] == "doom_goal") else {
+        return;
+    };
+    g["description"] = json!("What comes first in what's suggested to you and in what you do by instinct: health (while under 100), ammo (while short of a cyberdemon's worth), hunt (the monsters you know of), unexplored (new ground), or none. Not given: what's set.");
+    if let Some(props) = g["schema"]["properties"].as_object_mut() {
+        props.remove("finish");
+    }
+}
+
 /// `doom_policy` with no word of instinct: not hers to turn off.
 fn without_instinct(all: &mut [Value]) {
     let Some(p) = all.iter_mut().find(|a| a["name"] == "doom_policy") else {
@@ -314,6 +329,8 @@ impl Session {
             next_at: 0,
             instinct_hers: true,
             policy_stale: false,
+            finish_hers: true,
+            goal_stale: false,
             choices: None,
             game_stale: false,
             paused: false,
@@ -464,6 +481,15 @@ impl Session {
         if hers != self.instinct_hers {
             self.instinct_hers = hers;
             self.policy_stale = true;
+        }
+    }
+
+    /// Whether when the level's done is hers to set (the stream's say). Not: it's none (she
+    /// leaves when she says so), `doom_goal` loses `finish`, and one sent anyway is refused.
+    pub fn set_finish_hers(&mut self, hers: bool) {
+        if hers != self.finish_hers {
+            self.finish_hers = hers;
+            self.goal_stale = true;
         }
     }
 
@@ -786,6 +812,9 @@ impl Session {
         if !self.instinct_hers {
             without_instinct(&mut all);
         }
+        if !self.finish_hers {
+            without_finish(&mut all);
+        }
         all
     }
 
@@ -824,6 +853,12 @@ impl Session {
             self.link.send(
                 "actions/unregister",
                 Some(json!({ "action_names": ["doom_game"] })),
+            );
+        }
+        if std::mem::take(&mut self.goal_stale) && self.registered.remove("doom_goal") {
+            self.link.send(
+                "actions/unregister",
+                Some(json!({ "action_names": ["doom_goal"] })),
             );
         }
         if std::mem::take(&mut self.policy_stale) && self.registered.remove("doom_policy") {
@@ -1439,6 +1474,13 @@ impl Session {
             "doom_why" => (true, self.director.why(agent, obs)),
             "doom_goal" => {
                 let mut said: Vec<String> = Vec::new();
+                if arg("finish").is_some() && !self.finish_hers {
+                    return (
+                        false,
+                        "finish: not yours to set here: you leave a level when you say (doom_exit)."
+                            .into(),
+                    );
+                }
                 if let Some(f) = arg("finish") {
                     match self.director.set_goal(agent, obs, f) {
                         // (completionist: asked first; what's asked is the answer)

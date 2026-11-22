@@ -105,6 +105,7 @@ zooms, Esc quits.
 
 The game:
   --episode               on to the next level when she exits, what she has carried over
+  --episode-lives N       her lives for all of it, not each level's (with --mortal)
   --speed X               play speed (1: real time; the sound plays only at 1)
   --mute                  no sound
   --all                   the whole map shown, not only what she's seen
@@ -145,6 +146,9 @@ Directed play:
   --gpt [CONFIG]          directed by a language model, run in this program
                           (config/neuro-gpt.json unless named)
   --directed FILE         orders read from FILE as lines are added to it; answers in FILE.out
+  --lock WHAT             settings not hers to change, commas between: instinct (on, and it
+                          stays on), finish (none: she leaves when she says, doom_goal's
+                          finish taken away)
   --choices SPEC          the games hers to start (\"maps=E1M1,E1M2|all;skills=3,4;play=single\")
 
 Run options (evil-boom help options) work here too: --fight, --mortal, --lives, --seed, ...

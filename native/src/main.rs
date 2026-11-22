@@ -859,6 +859,8 @@ fn watch_options(
         title_wait: false,
         stream: None,
         choices: None,
+        lives_shared: false,
+        locked: Vec::new(),
         window: evilboom::dsda::WindowSpec::default(),
         render: None,
         soundfont: evilboom::config::default_soundfont(),
@@ -878,6 +880,22 @@ fn watch_options(
             "--all" => w.show_all = true,
             "--show-keys" => w.show_keys = true,
             "--episode" => w.episode = true,
+            "--episode-lives" => {
+                w.lives = it
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .ok_or("--episode-lives N (her lives for all the levels played on through)")?;
+                w.lives_shared = true;
+            }
+            "--lock" => {
+                let v = it.next().ok_or("--lock instinct,finish (settings not hers to change)")?;
+                for s in v.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+                    if !matches!(s, "instinct" | "finish") {
+                        return Err(format!("--lock: instinct or finish, not \"{s}\""));
+                    }
+                    w.locked.push(s.to_string());
+                }
+            }
             "--headless" => w.headless = true,
             "--mute" => w.sound = false,
             "--window-size" => {
@@ -973,7 +991,7 @@ fn watch_options(
             _ => names.push(a.clone()),
         }
     }
-    if w.episode && !o.lives_given {
+    if w.episode && !o.lives_given && !w.lives_shared {
         w.lives = 1; // (an episode watched as it's played: one life, unless `--lives` says)
     }
     w.focus = o.focus;
