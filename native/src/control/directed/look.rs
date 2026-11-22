@@ -162,9 +162,26 @@ impl Director {
     }
 
     /// The pick in a line ("door-l40: door not tried (N 210)").
+    /// ...and, the pick something else, the way out she knows of after it ("; exit known:
+    /// exit-l907 (N 144)"): said every time, so that going on is a choice she's making. (End
+    /// to end, E2M4 and E2M5: the exit found, and minutes more of what little was left.)
     pub fn pick_line(&mut self, agent: &mut Agent, obs: &Observation) -> Option<String> {
         let p = self.pick(agent, obs)?;
-        Some(self.describe_pick(&p, obs))
+        let line = self.describe_pick(&p, obs);
+        if p.id.starts_with("exit-") {
+            return Some(line);
+        }
+        let exit = self.list(agent, obs, Topic::Exits).into_iter().next();
+        Some(match exit {
+            Some(e) => {
+                let e = Entry {
+                    what: String::new(),
+                    ..e
+                };
+                format!("{line}; exit known: {}", self.describe(&e, obs))
+            }
+            None => line,
+        })
     }
 
     pub(super) fn describe_pick(&self, p: &Pick, obs: &Observation) -> String {

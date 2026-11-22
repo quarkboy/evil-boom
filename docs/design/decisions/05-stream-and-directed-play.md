@@ -4094,3 +4094,12 @@ question names that one thing ("Still in reach: area-70: nearest unexplored (S 1
 6/6, items 20/37, secrets 1/3. Leave anyway?") and no answer leaves. The stock-up question
 before another level is as it was. Against the mock on E1M1: the question as quoted, "stay"
 kept her; later, with the exit the suggestion and items 34/37, `doom_exit` left at once.
+
+### The known exit is in every suggestion (2026-11-22)
+
+The maintainer, watching E2M2, E2M4 and E2M5 end to end: with `finish` none the exit was
+suggested only when nothing else was left, and the model spent minutes on what little was.
+Every suggestion now names the way out once she knows one, after its pick: "Suggested:
+area-70: nearest unexplored (S 145); exit known: exit-l326 (SW 174)". It's in `pick_line`,
+so in an order's "nothing to do there", her look, her lists, the nudge and what a force
+shows her. The pick itself is unchanged.
