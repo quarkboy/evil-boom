@@ -662,14 +662,25 @@ impl Director {
                 }),
             );
         }
-        let left = self.exit_check(agent, obs)?;
-        // (her goal the way out, or exploring new ground only: leaving's what she's said she
-        // wants, so no answer leaves; otherwise no answer stays)
-        let out = self.goal == Some(super::goal::Goal::Out) || self.policy.explore == "speedy";
+        self.exit_check(agent, obs)?;
+        // (what she'd do next left to herself is the way out: nothing else she has a way to,
+        // or only another look somewhere. She's asked to leave: she leaves, unasked. What's
+        // left of the tally is out of her reach, and a list of it only kept her: end-to-end,
+        // E2M4, four times "stay" to it in ninety seconds with the exit already suggested)
+        let pick = self
+            .pick(agent, obs)
+            .filter(|p| !p.id.starts_with("exit-"))?;
+        // (something still in reach: that named, not the count of all she's seen; and leaving
+        // the answer if she gives none, as leaving's what she asked for)
+        let next = self.describe_pick(&pick, obs);
+        let text = format!(
+            "Still in reach: {next}. {}. Leave anyway?",
+            self.tally.line()
+        );
         Some(
             self.ask(
                 obs,
-                format!("{left} Leave anyway?"),
+                text.clone(),
                 vec![
                     Choice {
                         label: "leave anyway".into(),
@@ -680,10 +691,10 @@ impl Director {
                         then: Then::Nothing,
                     },
                 ],
-                usize::from(!out),
+                0,
                 true,
             )
-            .unwrap_or_else(|| format!("{left} Answer what's open first, then doom_exit again.")),
+            .unwrap_or_else(|| format!("{text} Answer what's open first, then doom_exit again.")),
         )
     }
 

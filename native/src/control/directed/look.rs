@@ -167,7 +167,7 @@ impl Director {
         Some(self.describe_pick(&p, obs))
     }
 
-    fn describe_pick(&self, p: &Pick, obs: &Observation) -> String {
+    pub(super) fn describe_pick(&self, p: &Pick, obs: &Observation) -> String {
         // (a thing by what it is too: its id doesn't say)
         let thing =
             p.id.split_once("-t")

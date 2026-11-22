@@ -4077,3 +4077,20 @@ registered.
 
 Not changed: a question's answer can still set what's locked (the exit's "stock up first"
 sets a goal).
+
+### `doom_exit` with only the exit left: she leaves (2026-11-22)
+
+End-to-end, episode 2 skill 3, E2M4: the suggestion had been the exit for three minutes
+("nothing else left in reach"), she called `doom_exit`, and was asked "Still here: 1 to
+explore, 5 other pickups; kills 55/65, items 26/46, secrets 7/10. Leave anyway? a) leave
+anyway b) stay (default)". The model answered "stay" four times in ninety seconds, each
+time calling `doom_exit` again. The list counted what she'd seen, in reach or not; "stay"
+was the default though leaving was what she'd asked for; and the force three seconds in
+carried the same text.
+
+Now `ask_leave` goes by what she'd do next left to herself (`pick`): if that's the exit
+(nothing else she has a way to, or only another look), she leaves unasked. Otherwise the
+question names that one thing ("Still in reach: area-70: nearest unexplored (S 145). kills
+6/6, items 20/37, secrets 1/3. Leave anyway?") and no answer leaves. The stock-up question
+before another level is as it was. Against the mock on E1M1: the question as quoted, "stay"
+kept her; later, with the exit the suggestion and items 34/37, `doom_exit` left at once.
