@@ -543,14 +543,61 @@ impl Combat {
         let d = dist((t.x, t.y), q);
         let (h, seen, _) = self.autoaim(obs, q, heading(q, (t.x, t.y)));
         let wide = !mon(t.name).boss && d > self.tune.aim.width_far;
-        self.rocket_flies(
-            obs,
-            q,
-            h,
-            (d - mon(t.name).radius - radius).max(1.0),
-            seen,
-            (if wide { radius } else { 0.0 }, 0.0),
-        )
+        let len = (d - mon(t.name).radius - radius).max(1.0);
+        if !self.rocket_flies(obs, q, h, len, seen, (if wide { radius } else { 0.0 }, 0.0)) {
+            return false;
+        }
+        // Nearer, its middle clear: but not through a slot narrower than itself, something
+        // in the way of its box on both sides (bars, a grate, a slit). One side grazing a
+        // pillar is a ball lost and the stream goes on as she and it move; a slot takes every
+        // ball of it, near or far. (MAP14, the maintainer watching: thirteen cells into the
+        // red bars at shotgunners 260 to 400 off behind them, gaps of 24 for a ball 26 wide.)
+        wide || {
+            let (left, right) = self.lane_sides(obs, q, h, len, seen, radius);
+            left || right
+        }
+    }
+
+    /// The two sides of a missile's box along its way (`rocket_flies`, each by itself): is
+    /// the left clear, is the right?
+    fn lane_sides(
+        &mut self,
+        obs: &Observation,
+        pos: Point,
+        h: f64,
+        len: f64,
+        slope: f64,
+        radius: f64,
+    ) -> (bool, bool) {
+        let (ux, uy) = (h.to_radians().cos(), h.to_radians().sin());
+        let half = radius * (ux.abs() + uy.abs());
+        let foot = self.z(obs);
+        let (bottom, top) = (
+            foot + ROCKET_BOTTOM - 0.5,
+            foot + ROCKET_BOTTOM + ROCKET_HEIGHT + 0.5,
+        );
+        let rise = slope * len;
+        self.refresh_tic_cache(obs);
+        let side = |k: f64| {
+            let from = (pos.0 - uy * half * k, pos.1 + ux * half * k);
+            let to = (from.0 + ux * len, from.1 + uy * len);
+            [bottom, top].into_iter().all(|z| {
+                let me = Body {
+                    x: from.0,
+                    y: from.1,
+                    z: z - 3.0,
+                    height: 4.0,
+                };
+                let at = Body {
+                    x: to.0,
+                    y: to.1,
+                    z: z + rise - 0.5,
+                    height: 1.0,
+                };
+                self.los.clear(me, at, &self.heights_now)
+            })
+        };
+        (side(1.0), side(-1.0))
     }
 
     /// Plasma from here wouldn't get to t (autoaim tips it into a lip below, or the floor in

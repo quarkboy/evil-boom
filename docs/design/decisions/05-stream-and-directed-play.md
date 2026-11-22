@@ -3688,3 +3688,18 @@ on both was not.
 E4M1's presses given up: 7 -> 0. Left: E3M4 lost a run on the second set for the list of
 doors being grouped otherwise and the other door taking her to the baron's pit, which is
 the fight's to mend.
+
+## Plasma not fired through a slot narrower than itself (2026-11-22)
+
+Doom II MAP14, the maintainer watching (570 s): thirteen cells into the red bars, at
+shotgunners 260 to 400 off behind them. The bars leave gaps of 24; the ball is 26 wide.
+`projectile_reaches` goes by the ball's whole width only past `aim.width_far` (384): nearer
+it's the middle alone, on purpose (the whole width everywhere lost E4M8 four exits of
+sixteen and E2M9 three, pillars clipped in close fights), and the middle goes through a gap.
+
+The maintainer's: the ball's leftmost and rightmost ways each tried, and held only when
+both meet something. One side on a pillar is still a shot; a slot is none, at any range
+(`lane_sides`). Bars so thin both edges find gaps would fool it, and are left to.
+
+The three-lives test, 544 runs: exits 287 -> 293 (8 runs more, 2 less), lives lost a run
+1.110 -> 1.103, none stood the hour; 63 runs differ. E4M8 +2, MAP25 -2, six others +1.
