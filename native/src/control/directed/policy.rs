@@ -80,12 +80,6 @@ pub fn value(setting: &str, v: &str) -> Option<&'static str> {
     of.iter().copied().find(|o| *o == v)
 }
 
-/// Each value's line in the schema: what it is, and what it cost in the score (the
-/// cost told, the choice hers).
-pub fn help() -> &'static str {
-    SETTINGS_HELP
-}
-
 /// One setting's line of `SETTINGS_HELP` ("explore: normal (...), methodical (...), speedy (...).").
 pub fn help_for(setting: &str) -> &'static str {
     const SETTINGS: [&str; 5] = ["stance", "save", "risk", "powerups", "explore"];

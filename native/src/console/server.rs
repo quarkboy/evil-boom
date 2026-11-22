@@ -91,6 +91,8 @@ pub struct Settings {
     /// instinct hers to turn off (`doom_policy instinct: off`: she stands and waits when an
     /// action's done); off: it stays on whatever she says. Changed from the page as it plays.
     pub evil_instinct: bool,
+    /// the settings not hers to change (`Command::Lock`), given to each game as it starts
+    pub evil_locked: Vec<String>,
     /// Evil asked what next without a word aloud (none: the game's own, on)
     #[serde(default)]
     pub next_silent: Option<bool>,
@@ -164,6 +166,7 @@ impl Default for Settings {
             force_ask: None,
             force_next: None,
             evil_instinct: true,
+            evil_locked: Vec::new(),
             next_silent: None,
             answer_wait: None,
             auto_restart: true,
@@ -735,6 +738,12 @@ fn read_game(stream: TcpStream, hub: &Hub) {
                 if sfx.is_some() || music.is_some() || master.is_some() {
                     let _ = s.send(&Command::Volume { sfx, music, master });
                 }
+                // (instinct locked the old way, by `evil_instinct` off: locked still)
+                let mut settings = s.settings.evil_locked.clone();
+                if !s.settings.evil_instinct && !settings.iter().any(|l| l == "instinct") {
+                    settings.push("instinct".into());
+                }
+                let _ = s.send(&Command::Lock { settings });
                 let (brightness, fov) = (s.settings.brightness, s.settings.fov);
                 if brightness.is_some() || fov.is_some() {
                     let _ = s.send(&Command::Picture { brightness, fov });
@@ -750,7 +759,7 @@ fn read_game(stream: TcpStream, hub: &Hub) {
                     s.settings.force_ask,
                     s.settings.force_next,
                 );
-                let instinct = Some(s.settings.evil_instinct);
+                let instinct = None;
                 let answers = s.settings.answer_wait;
                 let quiet = s.settings.next_silent;
                 let _ = s.send(&Command::Forcing {
@@ -1179,6 +1188,14 @@ fn handle(hub: &Hub, mut req: Request) {
                     st.sfx_volume = sfx.map(|v| v.clamp(0, 15)).or(st.sfx_volume);
                     st.music_volume = music.map(|v| v.clamp(0, 15)).or(st.music_volume);
                     st.master_volume = master.map(|v| v.clamp(0, 100)).or(st.master_volume);
+                    let saved = s.save();
+                    let sent = if s.to_game.is_some() { s.send(&c) } else { Ok(()) };
+                    done(saved.and(sent))
+                } else if let Command::Lock { settings } = &c {
+                    // (kept for the next game as well)
+                    let st = &mut s.settings;
+                    st.evil_locked = settings.clone();
+                    st.evil_instinct = !settings.iter().any(|l| l == "instinct");
                     let saved = s.save();
                     let sent = if s.to_game.is_some() { s.send(&c) } else { Ok(()) };
                     done(saved.and(sent))

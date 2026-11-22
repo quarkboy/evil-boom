@@ -146,9 +146,10 @@ Directed play:
   --gpt [CONFIG]          directed by a language model, run in this program
                           (config/neuro-gpt.json unless named)
   --directed FILE         orders read from FILE as lines are added to it; answers in FILE.out
-  --lock WHAT             settings not hers to change, commas between: instinct (on, and it
-                          stays on), finish (none: she leaves when she says, doom_goal's
-                          finish taken away)
+  --lock WHAT             settings not hers to change, commas between: stance, save, risk,
+                          powerups, explore, instinct (doom_policy's), finish, prefer
+                          (doom_goal's). Each stays as it is (instinct: on) and is taken
+                          out of her action; an action with nothing left isn't offered
   --choices SPEC          the games hers to start (\"maps=E1M1,E1M2|all;skills=3,4;play=single\")
 
 Run options (evil-boom help options) work here too: --fight, --mortal, --lives, --seed, ...

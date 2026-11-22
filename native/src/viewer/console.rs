@@ -318,6 +318,14 @@ impl Watch {
                 Command::Volume { sfx, music, master } => {
                     self.engine.set_volume(sfx, music, master)
                 }
+                Command::Lock { settings } => match self.neuro.as_mut() {
+                    Some(n) => n.set_locked(&settings),
+                    None => self
+                        .agent
+                        .x_mut()
+                        .log
+                        .push("console: not directed by Neuro: no settings to lock".into()),
+                },
                 Command::Picture { brightness, fov } => {
                     if let Some(b) = brightness {
                         super::set_brightness(b);
@@ -345,8 +353,11 @@ impl Watch {
                 } => match self.neuro.as_mut() {
                     Some(n) => {
                         n.set_forcing(idle, ask, next);
-                        if let Some(hers) = instinct {
-                            n.set_instinct_hers(hers);
+                        // (the old form of the instinct lock: only ever locks)
+                        if instinct == Some(false) {
+                            let mut l = n.locked();
+                            l.push("instinct".into());
+                            n.set_locked(&l);
                         }
                         if let Some(secs) = answers {
                             n.set_answer_wait(secs);

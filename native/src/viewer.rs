@@ -144,8 +144,8 @@ pub struct WatchOptions {
     pub choices: Option<String>,
     /// her lives are for all the levels played on through (`--episode-lives`), not each one's
     pub lives_shared: bool,
-    /// settings not hers to change (`--lock`): "instinct" (on, and stays on), "finish" (none:
-    /// she leaves a level when she says so, and can't set it otherwise)
+    /// settings not hers to change (`--lock`; of `neuro::session::LOCKABLE`): each stays as
+    /// it is ("instinct": on) and is out of her actions
     pub locked: Vec<String>,
     /// the window's size, vsync, full screen
     pub window: crate::dsda::WindowSpec,
@@ -635,12 +635,7 @@ fn first_watch(
         .as_deref()
         .map(|url| crate::neuro::session::Session::new(url, &clocks));
     if let Some(n) = watch.neuro.as_mut() {
-        if o.locked.iter().any(|l| l == "instinct") {
-            n.set_instinct_hers(false);
-        }
-        if o.locked.iter().any(|l| l == "finish") {
-            n.set_finish_hers(false);
-        }
+        n.set_locked(&o.locked);
     }
     Ok((w, watch))
 }

@@ -297,12 +297,22 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
             <label>instinct<select data-p="instinct"><option>on</option><option>off</option></select></label>
           </div>
           <div class="row"><button id="ev-setapply">Apply as hers</button><span class="dim" id="ev-policy" style="font-size:12px;align-self:center"></span></div>
+          <div class="row" id="ev-locks" style="flex-wrap:wrap;gap:4px 12px;font-size:12px" title="A locked setting stays as it is (instinct: on), is taken out of her doom_policy or doom_goal, and is refused if she sends it. You can still change it here. Kept for the next game.">
+            <span class="dim">Locked (not hers to change):</span>
+            <label><input type="checkbox" data-lock="stance"> stance</label>
+            <label><input type="checkbox" data-lock="explore"> explore</label>
+            <label><input type="checkbox" data-lock="risk"> risk</label>
+            <label><input type="checkbox" data-lock="save"> save</label>
+            <label><input type="checkbox" data-lock="powerups"> powerups</label>
+            <label><input type="checkbox" data-lock="instinct"> instinct</label>
+            <label><input type="checkbox" data-lock="finish"> goal: finish</label>
+            <label><input type="checkbox" data-lock="prefer"> goal: prefer</label>
+          </div>
           <div class="ev-sets" style="margin-top:8px" title="The stream's, not hers: how soon a decision's pushed on her, in seconds (0: never). Kept for the next game.">
             <label>push her, waiting (s)<input type="number" min="0" max="3600" step="0.5" id="ev-fidle"></label>
             <label>push her, a question (s)<input type="number" min="0" max="3600" step="0.5" id="ev-fask"></label>
             <label>ask what next, at most every (s)<input type="number" min="0" max="3600" step="0.5" id="ev-fnext"></label>
             <label title="Before a question's default is taken (0: till she answers).">a question waits (s)<input type="number" min="0" max="3600" step="0.5" id="ev-fwait"></label>
-            <label title="Off: instinct stays on, and the setting's taken out of her doom_policy."><input type="checkbox" id="ev-finst"> she may turn instinct off</label>
             <label title="On: asked what next, she picks without saying anything aloud about it (it comes often)."><input type="checkbox" id="ev-fquiet"> what next asked quietly</label>
           </div>
           <div class="row"><button id="ev-forceapply">Apply</button><span class="dim" style="font-size:12px;align-self:center">the stream's: a decision forced after she's waited, or left a question, this long</span></div>
@@ -565,10 +575,9 @@ function renderEvil(e, n) {
   pol.instinct = /instinct/.test(e.idle || "") ? "on" : "off";
   for (const el of $("evilcard").querySelectorAll("[data-p]")) if (!setsDirty && document.activeElement !== el && pol[el.dataset.p] != null) el.value = pol[el.dataset.p];
   // (how soon she's pushed, as the game has it, unless it's being changed here)
-  if (!forceDirty) $("ev-finst").checked = !!e.instinct_hers;
+  if (Date.now() - lockSentAt > 1500) for (const el of $("ev-locks").querySelectorAll("[data-lock]")) el.checked = (e.locked || []).includes(el.dataset.lock);
   if (!forceDirty) $("ev-fquiet").checked = !!e.next_silent;
   if (!forceDirty && document.activeElement !== $("ev-fwait") && e.answer_wait != null) $("ev-fwait").value = Math.round(e.answer_wait * 10) / 10;
-  for (const el of $("evilcard").querySelectorAll('[data-p="instinct"]')) el.disabled = el.disabled || !e.instinct_hers;
   [["ev-fidle", 0], ["ev-fask", 1], ["ev-fnext", 2]].forEach(([id, i]) => { if (!forceDirty && document.activeElement !== $(id) && e.forcing) $(id).value = Math.round(e.forcing[i] * 10) / 10; });
   $("ev-calls").replaceChildren(...(e.calls || []).map(li));
   $("ev-why").replaceChildren(...((e.why && e.why.length) ? e.why : ["-"]).map(li));
@@ -606,7 +615,7 @@ function renderEvil(e, n) {
     (a.by_console ? "(" + ((last && last.settings && last.settings.console_name) || "console") + ") " : "") + a.name + (a.data ? " " + a.data : "") + "\n   -> " + (a.ok ? "" : "FAILED: ") + a.reply.split("\n")[0])),
     acts.length + "|" + (acts.length ? acts[acts.length - 1].seconds + acts[acts.length - 1].name : ""), evilActs);
 }
-let setsDirty = false, forceDirty = false;
+let setsDirty = false, forceDirty = false, lockSentAt = 0;
 function order(action, data) { return cmd({ cmd: "order", action, data: data == null ? null : JSON.stringify(data) }); }
 // (none shown unless picked: each costs the game a little while it's shown; OBS has its own)
 const viewOn = { map: false, game: false, stream: false }, viewShown = {}, viewLoading = {};
@@ -778,11 +787,15 @@ $("ev-goalset").onclick = () => {
 };
 $("ev-goaldrop").onclick = () => order("doom_goal", { finish: "none", prefer: "none" });
 for (const el of $("evilcard").querySelectorAll("[data-p]")) el.addEventListener("change", () => { setsDirty = true; });
-for (const id of ["ev-fidle", "ev-fask", "ev-fnext", "ev-fwait", "ev-finst", "ev-fquiet"]) $(id).addEventListener("input", () => { forceDirty = true; });
+for (const id of ["ev-fidle", "ev-fask", "ev-fnext", "ev-fwait", "ev-fquiet"]) $(id).addEventListener("input", () => { forceDirty = true; });
 $("ev-forceapply").onclick = async () => {
   const n = (id) => { const v = $(id).value.trim(); return v === "" ? null : Math.max(0, Number(v)); };
-  if (await cmd({ cmd: "forcing", idle: n("ev-fidle"), ask: n("ev-fask"), next: n("ev-fnext"), instinct: $("ev-finst").checked, answers: n("ev-fwait"), quiet: $("ev-fquiet").checked })) forceDirty = false;
+  if (await cmd({ cmd: "forcing", idle: n("ev-fidle"), ask: n("ev-fask"), next: n("ev-fnext"), answers: n("ev-fwait"), quiet: $("ev-fquiet").checked })) forceDirty = false;
 };
+for (const el of $("ev-locks").querySelectorAll("[data-lock]")) el.addEventListener("change", () => {
+  lockSentAt = Date.now();
+  cmd({ cmd: "lock", settings: [...$("ev-locks").querySelectorAll("[data-lock]")].filter((x) => x.checked).map((x) => x.dataset.lock) });
+});
 $("ev-setapply").onclick = async () => {
   const data = {};
   for (const el of $("evilcard").querySelectorAll("[data-p]")) if (!el.disabled) data[el.dataset.p] = el.value;

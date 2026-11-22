@@ -73,9 +73,16 @@ Actions from the page are marked as yours, and she's told of them by the name in
 soon a decision's forced on her when she's waited with nothing to do (6 s) or left a question
 unanswered (3 s), and how often at most she's asked what next while she's on with something
 (15 s); 0 for never; how long a question waits for her answer before its default's taken
-(8 s; 0: till she answers); and whether she may turn instinct off (unticked: it stays on, and the
-setting's taken out of her `doom_policy`). Kept in `config/console.local.json` (`force_idle`,
-`force_ask`, `force_next`, `answer_wait`, `evil_instinct`) for the next game.
+(8 s; 0: till she answers). Kept in `config/console.local.json` (`force_idle`, `force_ask`,
+`force_next`, `answer_wait`) for the next game.
+
+**Locks.** Under her settings, a tick box for each of them and for her goal's two parts
+(stance, explore, risk, save, powerups, instinct, goal: finish, goal: prefer). A ticked one
+isn't hers to change: it stays as it is (instinct: on), it's taken out of her `doom_policy`
+or `doom_goal` (the action registered again without it, or not at all with nothing left),
+and it's refused if she sends it anyway. You can still set it from the page. Ticking takes
+effect at once and is kept (`evil_locked`) for the next game. `watch --lock` is the same
+from the command line.
 
 The Stream column section sets the stream window's column: its side, which of its items it
 shows (the logo and a box for chat at the top, the level, the map, now, Evil's calls, a question she's been asked with

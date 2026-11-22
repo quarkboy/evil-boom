@@ -87,6 +87,12 @@ pub enum Command {
         #[serde(default)]
         fov: Option<i32>,
     },
+    /// the settings not hers to change (Neuro's; of stance, save, risk, powerups, explore,
+    /// instinct, finish, prefer): each stays as it is (instinct: on) and leaves her actions;
+    /// the whole list, replacing the last
+    Lock {
+        settings: Vec<String>,
+    },
     /// damage does nothing to her (rehearsals), or does again
     God {
         on: bool,
@@ -290,6 +296,9 @@ pub struct EvilState {
     /// instinct hers to turn off (`doom_policy instinct`); not: on, the stream's say
     #[serde(default)]
     pub instinct_hers: bool,
+    /// the settings not hers to change
+    #[serde(default)]
+    pub locked: Vec<String>,
     /// asked what next without a word aloud
     #[serde(default)]
     pub next_silent: bool,

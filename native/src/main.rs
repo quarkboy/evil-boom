@@ -888,10 +888,11 @@ fn watch_options(
                 w.lives_shared = true;
             }
             "--lock" => {
+                let all = evilboom::control::directed::LOCKABLE;
                 let v = it.next().ok_or("--lock instinct,finish (settings not hers to change)")?;
                 for s in v.split(',').map(str::trim).filter(|s| !s.is_empty()) {
-                    if !matches!(s, "instinct" | "finish") {
-                        return Err(format!("--lock: instinct or finish, not \"{s}\""));
+                    if !all.contains(&s) {
+                        return Err(format!("--lock: of {}, not \"{s}\"", all.join(", ")));
                     }
                     w.locked.push(s.to_string());
                 }

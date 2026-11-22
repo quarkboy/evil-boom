@@ -4055,3 +4055,25 @@ colour ourselves, so:
 
 Both are the console's "Picture" section (`Command::Picture`), kept in its settings and
 given to each game as it starts. Evil has no say in either.
+
+### Every setting of hers can be locked (2026-11-22)
+
+The console could lock instinct (a tick box), and `--lock` instinct and finish. Asked for:
+every setting of `doom_policy` and `doom_goal` lockable from the console, a locked one not
+in her schema at all.
+
+`Session::locked` (of `LOCKABLE`: stance, save, risk, powerups, explore, instinct, finish,
+prefer) replaces the two flags. A locked setting stays as it is (instinct locked is instinct
+on, as it was), leaves its action's schema (the action unregistered and registered again;
+`doom_goal`'s description says only the part that's left), is left out of what an empty
+`doom_policy` explains, and is refused by name if she sends it ("stance: not yours to
+change."; checked before the mending, which would drop the field unsaid). An action with
+every setting locked isn't registered. The console's own hand (`console_action`) isn't
+locked: the stream sets what she can't. `Command::Lock { settings }` carries the whole
+list; the console keeps it (`evil_locked`; the old `evil_instinct: false` still locks
+instinct). Against the mock: stance, instinct and finish locked, `doom_policy stance` and
+`doom_goal finish` refused, risk and prefer taken; all eight locked, neither action
+registered.
+
+Not changed: a question's answer can still set what's locked (the exit's "stock up first"
+sets a goal).

@@ -47,7 +47,13 @@ pub use ask::{About, Question};
 pub use events::{Event, Weight};
 pub use look::{Listing, Pick};
 pub use moments::{skill_name, Level};
-pub use policy::{help as policy_help, Policy};
+pub use policy::{help_for as policy_help_for, Policy};
+
+/// Her standing settings the stream can lock, so they're not hers to change (`--lock`, the
+/// console): `doom_policy`'s, then `doom_goal`'s.
+pub const LOCKABLE: &[&str] = &[
+    "stance", "save", "risk", "powerups", "explore", "instinct", "finish", "prefer",
+];
 pub use situation::Situation;
 
 /// a name at most this long (refused, not cut: a name she didn't choose is one she won't use)

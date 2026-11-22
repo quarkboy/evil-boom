@@ -78,15 +78,15 @@ pub struct Session {
     speech_stale: i64,
     next_due: Option<&'static str>,
     next_at: i64,
-    /// instinct hers to turn off (`doom_policy instinct`); not (the console's say): it's on,
-    /// and the setting isn't in her schema. `policy_stale`: doom_policy registered with the
-    /// other schema
-    instinct_hers: bool,
+    /// the settings not hers to change (the stream's say; of `LOCKABLE`): each stays as it is
+    /// (instinct: on), isn't in her schema, and is refused if sent anyway; an action with all
+    /// its settings locked isn't registered at all. `policy_stale`, `goal_stale`: that action
+    /// registered with another schema than it has now
+    locked: std::collections::BTreeSet<&'static str>,
     policy_stale: bool,
-    /// when the level's done hers to set (`doom_goal`'s `finish`); not (the stream's say): it's
-    /// none, and the field isn't in her schema. `goal_stale`: registered with the other schema
-    finish_hers: bool,
     goal_stale: bool,
+    /// the action being carried out is the console's (the stream's own hand: no lock on it)
+    console_hand: bool,
     /// the games hers to start and what of the game is hers (the watch's; doom_game's schema
     /// made from them), and doom_game registered with older ones
     choices: Option<Choices>,
@@ -304,24 +304,45 @@ pub fn actions_timed(c: &Directed) -> Vec<Value> {
 /// isn't hers to turn off.
 const INSTINCT_HELP: &str = " instinct: on (an action done, you carry on by yourself and are asked what next), off (you stand and wait).";
 
-/// `doom_goal` with no `finish`: when the level's done isn't hers to set.
-fn without_finish(all: &mut [Value]) {
-    let Some(g) = all.iter_mut().find(|a| a["name"] == "doom_goal") else {
-        return;
-    };
-    g["description"] = json!("What comes first in what's suggested to you and in what you do by instinct: health (while under 100), ammo (while short of a cyberdemon's worth), hunt (the monsters you know of), unexplored (new ground), or none. Not given: what's set.");
-    if let Some(props) = g["schema"]["properties"].as_object_mut() {
-        props.remove("finish");
-    }
-}
+pub use crate::control::directed::LOCKABLE;
+const POLICY_SETTINGS: &[&str] = &["stance", "save", "risk", "powerups", "explore", "instinct"];
+const GOAL_SETTINGS: &[&str] = &["finish", "prefer"];
 
-/// `doom_policy` with no word of instinct: not hers to turn off.
-fn without_instinct(all: &mut [Value]) {
-    let Some(p) = all.iter_mut().find(|a| a["name"] == "doom_policy") else {
+const GOAL_FINISH: &str = "finish: when the level's done: out (by the first exit), kills, secrets or completionist (all of it: slow, asked first), each then out; none: you're asked.";
+const GOAL_PREFER: &str = "prefer: what comes first meanwhile: health (while under 100), ammo (while short of a cyberdemon's worth), hunt (the monsters you know of), unexplored (new ground), or none.";
+
+/// The actions without the settings locked: out of `doom_policy`'s and `doom_goal`'s schemas,
+/// and `doom_goal`'s description of the one that's left; either action gone with nothing left
+/// of it.
+fn without(all: &mut Vec<Value>, locked: &std::collections::BTreeSet<&'static str>) {
+    if locked.is_empty() {
         return;
-    };
-    if let Some(props) = p["schema"]["properties"].as_object_mut() {
-        props.remove("instinct");
+    }
+    for (name, settings) in [
+        ("doom_policy", POLICY_SETTINGS),
+        ("doom_goal", GOAL_SETTINGS),
+    ] {
+        if settings.iter().all(|k| locked.contains(k)) {
+            all.retain(|a| a["name"] != name);
+            continue;
+        }
+        let Some(a) = all.iter_mut().find(|a| a["name"] == name) else {
+            continue;
+        };
+        if let Some(props) = a["schema"]["properties"].as_object_mut() {
+            props.retain(|k, _| !locked.contains(k.as_str()));
+        }
+        if name == "doom_goal" && settings.iter().any(|k| locked.contains(k)) {
+            let (one, what) = if locked.contains("finish") {
+                ("prefer", GOAL_PREFER)
+            } else {
+                ("finish", GOAL_FINISH)
+            };
+            a["description"] = json!(format!(
+                "A standing aim; it doesn't play for you: it puts what it's after first in what's suggested to you and in what you do by instinct. {what} Not given: what's set."
+            ));
+            debug_assert!(a["schema"]["properties"][one].is_object());
+        }
     }
 }
 
@@ -369,10 +390,10 @@ impl Session {
             moments: c.moments_a_minute,
             next_due: None,
             next_at: 0,
-            instinct_hers: true,
+            locked: std::collections::BTreeSet::new(),
             policy_stale: false,
-            finish_hers: true,
             goal_stale: false,
+            console_hand: false,
             choices: None,
             game_stale: false,
             paused: false,
@@ -454,7 +475,8 @@ impl Session {
                 self.ask_force as f64 / 35.0,
                 self.next_force as f64 / 35.0,
             ],
-            instinct_hers: self.instinct_hers,
+            instinct_hers: !self.locked.contains("instinct"),
+            locked: self.locked.iter().map(ToString::to_string).collect(),
             next_silent: self.next_silent,
             answer_wait: self.director.answer_wait.map_or(0.0, |t| t as f64 / 35.0),
             ..EvilState::default()
@@ -514,31 +536,42 @@ impl Session {
         self.director.answer_wait = (secs > 0.0).then_some((secs * 35.0).round() as i64);
     }
 
-    /// Whether instinct's hers to turn off (the console's say). Not: it's on from now, her
-    /// `doom_policy` loses the setting, and one sent anyway is refused.
-    pub fn set_instinct_hers(&mut self, hers: bool) {
-        if !hers {
+    /// The settings not hers to change, from now (the stream's say; names of `LOCKABLE`,
+    /// others passed over): each stays as it is, leaves her action's schema, and is refused
+    /// if sent anyway. Instinct locked is instinct on.
+    pub fn set_locked<S: AsRef<str>>(&mut self, names: &[S]) {
+        let new: std::collections::BTreeSet<&'static str> = LOCKABLE
+            .iter()
+            .copied()
+            .filter(|l| names.iter().any(|n| n.as_ref().trim() == *l))
+            .collect();
+        if new.contains("instinct") {
             self.director.idle_auto = Some(crate::control::directed::IDLE_AUTO);
         }
-        if hers != self.instinct_hers {
-            self.instinct_hers = hers;
-            self.policy_stale = true;
-        }
+        let changed = |of: &[&str]| {
+            of.iter()
+                .any(|k| new.contains(k) != self.locked.contains(k))
+        };
+        let (policy, goal) = (changed(POLICY_SETTINGS), changed(GOAL_SETTINGS));
+        self.policy_stale |= policy;
+        self.goal_stale |= goal;
+        self.locked = new;
     }
 
-    /// Whether when the level's done is hers to set (the stream's say). Not: it's none (she
-    /// leaves when she says so), `doom_goal` loses `finish`, and one sent anyway is refused.
-    pub fn set_finish_hers(&mut self, hers: bool) {
-        if hers != self.finish_hers {
-            self.finish_hers = hers;
-            self.goal_stale = true;
-        }
+    /// The settings not hers to change now.
+    pub fn locked(&self) -> Vec<String> {
+        self.locked.iter().map(ToString::to_string).collect()
+    }
+
+    /// Is this setting hers to change now? (The console's own hand always may.)
+    fn hers(&self, setting: &str) -> bool {
+        self.console_hand || !self.locked.contains(setting)
     }
 
     /// The rules told her (silently), and the count since started again.
     fn brief(&mut self, tic: i64) {
         // (instinct not hers to turn off: its setting not named)
-        if self.instinct_hers {
+        if !self.locked.contains("instinct") {
             self.link.context(BRIEFING, true);
         } else {
             self.link
@@ -856,12 +889,7 @@ impl Session {
         ) {
             *g = game_action(c);
         }
-        if !self.instinct_hers {
-            without_instinct(&mut all);
-        }
-        if !self.finish_hers {
-            without_finish(&mut all);
-        }
+        without(&mut all, &self.locked);
         all
     }
 
@@ -894,6 +922,16 @@ impl Session {
     ) {
         if !self.connected {
             return;
+        }
+        // (an action with every setting locked has nothing left to offer her)
+        let mut wanted = wanted;
+        for (name, settings) in [
+            ("doom_policy", POLICY_SETTINGS),
+            ("doom_goal", GOAL_SETTINGS),
+        ] {
+            if settings.iter().all(|k| self.locked.contains(k)) {
+                wanted.remove(name);
+            }
         }
         // (what's hers of the game changed: doom_game again, with its new schema)
         if std::mem::take(&mut self.game_stale) && self.registered.remove("doom_game") {
@@ -1199,7 +1237,9 @@ impl Session {
         data: Option<&str>,
     ) -> (bool, String) {
         self.clock(obs.tic);
+        self.console_hand = true;
         let (ok, msg) = self.action(agent, obs, name, data);
+        self.console_hand = false;
         self.keep(name, data, ok, &msg, true);
         let n = self.reply.as_ref().map_or(1, |r| r.0 + 1);
         self.reply = Some((n, name.to_string(), ok, msg.clone()));
@@ -1235,6 +1275,15 @@ impl Session {
             Some(Ok(v)) => v,
             Some(Err(_)) => return (false, "The action's data wasn't valid JSON.".into()),
         };
+        // (a locked setting sent anyway: refused by name, before the mending drops it as a
+        // field her schema hasn't got)
+        if matches!(name, "doom_policy" | "doom_goal")
+            && let Some(k) = LOCKABLE
+                .iter()
+                .find(|k| args.get(**k).is_some() && !self.hers(k))
+        {
+            return (false, format!("{k}: not yours to change."));
+        }
         let (mut args, mut notes) = self.mend(name, args);
         // (a place as lists give it, "SW 305", for an id: what's listed nearest there. Not
         // for exploring or searching, whose `ref` may be a direction: that's taken as it is)
@@ -1332,6 +1381,12 @@ impl Session {
                     None => None,
                 };
                 // (her settings first: one refused, or yolo asked about, is answered at once)
+                if let Some(k) = POLICY_SETTINGS
+                    .iter()
+                    .find(|k| arg(k).is_some() && !self.hers(k))
+                {
+                    return (false, format!("{k}: not yours to change."));
+                }
                 for setting in ["stance", "save", "risk", "powerups", "explore"] {
                     if let Some(v) = arg(setting) {
                         match self.director.set_policy(obs, setting, v) {
@@ -1340,9 +1395,6 @@ impl Session {
                             Err(why) => return (false, why),
                         }
                     }
-                }
-                if instinct == Some(false) && !self.instinct_hers {
-                    return (false, "instinct: not yours to turn off.".into());
                 }
                 if let Some(on) = instinct {
                     self.director.idle_auto = on.then_some(crate::control::directed::IDLE_AUTO);
@@ -1360,18 +1412,16 @@ impl Session {
                 if asked {
                     (true, now)
                 } else {
-                    let instinct = if self.instinct_hers {
-                        INSTINCT_HELP
-                    } else {
-                        ""
-                    };
-                    (
-                        true,
-                        format!(
-                            "{now}\n{}{instinct}",
-                            crate::control::directed::policy_help()
-                        ),
-                    )
+                    // (what's hers to set only; the console's hand hears of them all)
+                    let mut help: Vec<&str> = ["stance", "save", "risk", "powerups", "explore"]
+                        .into_iter()
+                        .filter(|k| self.hers(k))
+                        .map(crate::control::directed::policy_help_for)
+                        .collect();
+                    if self.hers("instinct") {
+                        help.push(INSTINCT_HELP.trim());
+                    }
+                    (true, format!("{now}\n{}", help.join(" ")))
                 }
             }
             "doom_go" => {
@@ -1522,12 +1572,15 @@ impl Session {
             "doom_why" => (true, self.director.why(agent, obs)),
             "doom_goal" => {
                 let mut said: Vec<String> = Vec::new();
-                if arg("finish").is_some() && !self.finish_hers {
+                if arg("finish").is_some() && !self.hers("finish") {
                     return (
                         false,
                         "finish: not yours to set here: you leave a level when you say (doom_exit)."
                             .into(),
                     );
+                }
+                if arg("prefer").is_some() && !self.hers("prefer") {
+                    return (false, "prefer: not yours to change.".into());
                 }
                 if let Some(f) = arg("finish") {
                     match self.director.set_goal(agent, obs, f) {
@@ -1660,17 +1713,30 @@ fn noted(msg: String, notes: &[String]) -> String {
 
 #[cfg(test)]
 mod tests {
-    /// Instinct not hers to turn off: `doom_policy` says nothing of it, its other settings
-    /// as they were.
+    /// A setting locked is out of her action's schema, the rest as they were; an action with
+    /// nothing left is gone.
     #[test]
-    fn instinct_out_of_her_policy() {
+    fn locked_settings_out_of_her_actions() {
+        let set = |l: &[&'static str]| l.iter().copied().collect();
         let mut all = super::actions();
-        super::without_instinct(&mut all);
+        super::without(&mut all, &set(&["instinct", "stance", "finish"]));
         let p = all.iter().find(|a| a["name"] == "doom_policy").unwrap();
-        assert!(!p.to_string().contains("instinct"), "{p}");
+        assert!(
+            !p.to_string().contains("instinct") && !p.to_string().contains("stance"),
+            "{p}"
+        );
         assert!(p["schema"]["properties"]["explore"].is_object());
         // (and what each does isn't in the description at all: it's what an empty call answers)
         assert!(p["description"].as_str().unwrap().len() < 160);
+        let g = all.iter().find(|a| a["name"] == "doom_goal").unwrap();
+        assert!(!g.to_string().contains("finish"), "{g}");
+        assert!(g["schema"]["properties"]["prefer"].is_object());
+        let mut all = super::actions();
+        super::without(&mut all, &set(super::LOCKABLE));
+        assert!(!all
+            .iter()
+            .any(|a| a["name"] == "doom_policy" || a["name"] == "doom_goal"));
+        assert!(all.iter().any(|a| a["name"] == "doom_go"));
     }
 
     /// One force at a time: out till it's answered for sure, a while after another of its own
