@@ -158,9 +158,11 @@ OpenAI's newer models refuse some of what Gary's Chat Completions client sends.
 relays Gary's requests to the Responses API and the answers back. The key is passed through,
 never logged. Gary's OpenAI engine also needs the model's context window set by hand.
 
-Gary 1.0.6 is from before the SDK's `silent` on a force, and drops a force that carries it
-(`prot/invalid_message`). `tools/neuro/gary.sh` plays with `config/gary.json`, which asks what
-next aloud (`directed.next_silent` false); a force that isn't silent doesn't send the key.
+Gary as released (1.0.6) is from before the SDK's `silent` on a force, and drops a force that
+carries it (`prot/invalid_message`). For one, add `--tuning config/gary.json`, which asks what
+next aloud (`directed.next_silent` false); a force that isn't silent doesn't send the key. A
+Gary whose force schema takes `silent` (one line in its `src/lib/api/v1/spec.ts`) needs
+nothing.
 
 Gary's diagnostics ask for `additionalProperties: false` on every schema. Ours follow the SDK's
 specification instead, which lists `additionalProperties` among the keywords Neuro may not
