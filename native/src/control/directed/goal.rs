@@ -305,7 +305,7 @@ impl Director {
                 && !self
                     .open_objectives(agent, obs)
                     .iter()
-                    .any(|o| o.kind == crate::knowledge::explorer::Kind::Item))
+                    .any(|o| Focus::Supplies.wants(o, &self.preferred_things(obs))))
             .then(|| "Goal done: nothing more to pick up that you know of.".to_string()),
         }
     }
@@ -392,6 +392,16 @@ impl Director {
     /// explorer to offer and put first.
     pub(super) fn preferred_things(&self, obs: &Observation) -> BTreeSet<i32> {
         let Some(p) = self.prefer.filter(|_| !self.prefer_lull) else {
+            // (stocking up: every pickup but those that would mostly go to waste)
+            if self.goal == Some(Goal::Supplies) {
+                return obs
+                    .things
+                    .iter()
+                    .flatten()
+                    .filter(|t| self.worth_stocking(t.name, obs))
+                    .map(|t| t.id)
+                    .collect();
+            }
             return BTreeSet::new();
         };
         obs.things
@@ -402,8 +412,58 @@ impl Director {
             .collect()
     }
 
+    /// Is a pickup worth stocking up on? Health or ammo is if she'd use enough of it
+    /// (`directed.stock_share`: a box of bullets with room for two isn't); the rest always.
+    pub(super) fn worth_stocking(&self, name: &str, obs: &Observation) -> bool {
+        use crate::bestiary::{ammo_item, ammo_max, health_item};
+        let share = self.clocks.stock_share;
+        // (a megasphere's armor, a berserk's fist, a backpack's room: more than their count)
+        if matches!(name, "Megasphere" | "Berserk" | "Backpack") {
+            return true;
+        }
+        if let Some((amount, cap)) = health_item(name) {
+            return f64::from(cap) - obs.health.unwrap_or(0.0) >= share * f64::from(amount);
+        }
+        if let Some((slots, amount)) = ammo_item(name) {
+            let packed = if obs.backpack == Some(true) { 2.0 } else { 1.0 };
+            let have = obs
+                .ammo
+                .iter()
+                .flatten()
+                .find(|(s, _)| *s == slots[0])
+                .map_or(0, |(_, n)| *n);
+            return ammo_max(slots[0]) * packed - f64::from(have) >= share * f64::from(amount);
+        }
+        true
+    }
+
     /// A new level: her goal and what she prefers stand (both are hers till she changes them).
     pub(super) fn goal_new_map(&mut self) {
         self.prefer_lull = false;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Stocking up leaves what would mostly go to waste: the box of bullets with room for two.
+    #[test]
+    fn stocking_leaves_what_she_cant_use() {
+        let d = Director::new();
+        let mut obs = Observation {
+            health: Some(90.0),
+            ammo: Some(vec![(2, 398), (3, 60)]),
+            backpack: Some(true),
+            ..Default::default()
+        };
+        assert!(!d.worth_stocking("ClipBox", &obs)); // (50 bullets, room for 2)
+        assert!(!d.worth_stocking("Clip", &obs));
+        assert!(d.worth_stocking("ShellBox", &obs)); // (20 shells, room for 40)
+        assert!(!d.worth_stocking("Medikit", &obs)); // (25, of which 10)
+        assert!(d.worth_stocking("Stimpack", &obs)); // (10, all of it)
+        assert!(d.worth_stocking("GreenArmor", &obs));
+        obs.ammo = Some(vec![(2, 370)]);
+        assert!(d.worth_stocking("ClipBox", &obs)); // (room for 30 of 50)
     }
 }

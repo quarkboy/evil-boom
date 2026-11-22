@@ -4021,3 +4021,19 @@ she waits) always takes the settle.
 Left alone: Gary's note that schemas lack `additionalProperties: false` (the SDK's
 specification lists the keyword among those "probably not supported well"), and an action
 arriving as the program closes going unanswered.
+
+### Stocking up leaves what she'd waste (2026-11-22)
+
+End-to-end, E2M7: holding 398 bullets of 400, she was asked "Seen and still here, to take
+with you: ... 12 clips, 3 boxes of bullets ... Stock up first?", the answer set her goal to
+picking up everything, and she went 1095 units for a box of bullets. What's stock to the
+bot is anything that would add at all (`stock_gain` over 0: two bullets do), and the goal's
+focus wanted every item.
+
+Three things. Her status gives each pool with the most it holds ("398/400 bullets"). The
+exit question lists only what's worth stocking up on, and isn't asked if nothing is: health
+or ammo counts if she'd use `directed.stock_share` (half) of it at least. And the stock-up
+goal goes for those and the other pickups (armor, guns, bonuses), not for ammo or health
+that would mostly go to waste; it's done when none of those are left. The bot alone is
+untouched (it has no such focus): parity 24 of 24. What the bot itself counts as stock
+before an exit is as it was.

@@ -382,8 +382,9 @@ impl Explorer {
         // (what's wanted only to take on to another level, set aside: what's to do now, and what
         // comes when there's nothing, as they'd be without it; given back after, `objectives`)
         let supplies = self.focus == super::Focus::Supplies;
-        let (aside, out): (Vec<Objective>, Vec<Objective>) =
-            out.into_iter().partition(|o| o.stock_only && !supplies);
+        let (aside, out): (Vec<Objective>, Vec<Objective>) = out.into_iter().partition(|o| {
+            o.stock_only && !(supplies && o.thing.is_none_or(|t| self.focus_things.contains(&t)))
+        });
         self.stock_aside = aside;
         let first = self.usable(obs, hooks, &mut sift, out);
         if !first.is_empty() {

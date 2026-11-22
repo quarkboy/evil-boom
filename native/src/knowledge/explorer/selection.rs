@@ -933,7 +933,10 @@ impl Explorer {
             // exit's first, then weighed against it; unless supplies are what she's after)
             let supplies = self.focus == super::Focus::Supplies;
             let (stock_pool, ranked): (Vec<Objective>, Vec<Objective>) =
-                ranked.into_iter().partition(|o| o.stock_only && !supplies);
+                ranked.into_iter().partition(|o| {
+                    o.stock_only
+                        && !(supplies && o.thing.is_none_or(|t| self.focus_things.contains(&t)))
+                });
             // The exit first of all, except for something she needs that's nearer by the way than it
             // is: those are compared with it too, by their ways. A level she knows the whole of is
             // otherwise the exit from its first tic, walked for with what she started with.

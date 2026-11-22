@@ -612,6 +612,11 @@ impl Director {
             .player_mut()
             .map(|p| p.stock_left(obs))
             .unwrap_or_default();
+        // (not what would mostly go to waste: ammo for a pool that's all but full)
+        let stock: Vec<String> = stock
+            .into_iter()
+            .filter(|n| self.worth_stocking(n, obs))
+            .collect();
         if !stock.is_empty() {
             let mut counted: Vec<(String, usize)> = Vec::new();
             for name in stock {

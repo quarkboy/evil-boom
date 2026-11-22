@@ -536,7 +536,7 @@ impl Focus {
             Focus::None => false,
             Focus::Kills => o.kind == Kind::Hunt,
             Focus::Secrets => matches!(o.kind, Kind::Wall | Kind::Secret),
-            Focus::Supplies => o.kind == Kind::Item,
+            Focus::Supplies => o.kind == Kind::Item && o.thing.is_none_or(|t| things.contains(&t)),
             Focus::Things => o.kind == Kind::Item && o.thing.is_some_and(|t| things.contains(&t)),
             Focus::Unexplored => matches!(o.kind, Kind::Frontier | Kind::Room | Kind::Visit),
         }

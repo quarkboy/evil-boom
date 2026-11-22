@@ -1036,6 +1036,9 @@ pub struct Directed {
     pub tactic: f64,
     /// ...and a stance this long
     pub stance: f64,
+    /// a health or ammo pickup is worth stocking up on (asked about on her way out, gone for
+    /// when that's her goal) if she'd use this share of it at least; less, it's left
+    pub stock_share: f64,
 }
 
 impl Default for Directed {
@@ -1056,6 +1059,7 @@ impl Default for Directed {
             status_every: 20.0,
             tactic: 10.0,
             stance: 30.0,
+            stock_share: 0.5,
         }
     }
 }
