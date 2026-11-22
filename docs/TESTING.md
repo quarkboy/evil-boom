@@ -80,7 +80,7 @@ BIN=out/check/release/evil-boom tools/lives/run.sh NAME
 plays every level of DOOM (E1-E4) and DOOM II from a pistol start with **three lives** (dead,
 the level again knowing what she learned), on Hurt Me Plenty and Ultra-Violence, on the four
 seeds of `tools/lives/seeds.txt`: 544 runs, about nine minutes at 14 jobs (`JOBS=N`). A row a
-run goes to `out/lives/NAME.rows/`; a run already there isn't played again. Then the report
+run goes to `out/lives/NAME.rows/`; a run already there isn't played again, so the script keeps what NAME was played with (the build's hash, the lives, seeds and options, in `out/lives/NAME.stamp`) and refuses a NAME holding anything else. Put the date in the name (`1122-thing`). Then the report
 (`tools/lives/report.py NAME...`), a line a set:
 
 | measure | what it is |
