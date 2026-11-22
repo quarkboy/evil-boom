@@ -400,6 +400,17 @@ impl Engine {
         self.game.volume()
     }
 
+    /// How wide the view's drawn, in degrees (Doom's own: 90). None from an engine built
+    /// without it.
+    pub fn fov(&self) -> Option<i32> {
+        self.game.fov()
+    }
+
+    /// The view's width set (60 to 120 degrees): only what's drawn, the game plays the same.
+    pub fn set_fov(&self, degrees: i32) {
+        self.game.set_fov(degrees);
+    }
+
     /// The loudness set (None: that one left as it is).
     pub fn set_volume(&self, sfx: Option<i32>, music: Option<i32>, master: Option<i32>) {
         self.game.set_volume(sfx, music, master);

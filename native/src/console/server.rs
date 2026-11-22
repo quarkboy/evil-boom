@@ -78,6 +78,10 @@ pub struct Settings {
     pub sfx_volume: Option<i32>,
     pub music_volume: Option<i32>,
     pub master_volume: Option<i32>,
+    /// the picture each game's given as it starts: how bright (0-10) and how wide the view
+    /// (60-120 degrees); none: as the game has it (0, 90). Changed from the page as it plays.
+    pub brightness: Option<i32>,
+    pub fov: Option<i32>,
     /// how soon a decision's forced on Evil, in seconds: waiting with nothing to do, a question
     /// unanswered, asked what next while she's on with something (at most that often); 0:
     /// never; none: the game's own (6, 3 and 15). Changed from the page as it plays.
@@ -154,6 +158,8 @@ impl Default for Settings {
             sfx_volume: None,
             music_volume: None,
             master_volume: None,
+            brightness: None,
+            fov: None,
             force_idle: None,
             force_ask: None,
             force_next: None,
@@ -729,6 +735,10 @@ fn read_game(stream: TcpStream, hub: &Hub) {
                 if sfx.is_some() || music.is_some() || master.is_some() {
                     let _ = s.send(&Command::Volume { sfx, music, master });
                 }
+                let (brightness, fov) = (s.settings.brightness, s.settings.fov);
+                if brightness.is_some() || fov.is_some() {
+                    let _ = s.send(&Command::Picture { brightness, fov });
+                }
                 let name = s.settings.console_name.trim().to_string();
                 let _ = s.send(&Command::ConsoleName { name });
                 let hide = s.settings.column_hide.clone();
@@ -1097,7 +1107,10 @@ fn handle(hub: &Hub, mut req: Request) {
         ));
         return;
     }
-    if method == Method::Post && !body.starts_with(r#"{"cmd":"volume""#) {
+    if method == Method::Post
+        && !body.starts_with(r#"{"cmd":"volume""#)
+        && !body.starts_with(r#"{"cmd":"picture""#)
+    {
         // (what each did, and who; not the volume, a slider sends many)
         let what = path.trim_start_matches("/api/");
         lock(hub).push(format!(
@@ -1166,6 +1179,14 @@ fn handle(hub: &Hub, mut req: Request) {
                     st.sfx_volume = sfx.map(|v| v.clamp(0, 15)).or(st.sfx_volume);
                     st.music_volume = music.map(|v| v.clamp(0, 15)).or(st.music_volume);
                     st.master_volume = master.map(|v| v.clamp(0, 100)).or(st.master_volume);
+                    let saved = s.save();
+                    let sent = if s.to_game.is_some() { s.send(&c) } else { Ok(()) };
+                    done(saved.and(sent))
+                } else if let Command::Picture { brightness, fov } = c {
+                    // (kept for the next game as well; not logged, as the volume isn't)
+                    let st = &mut s.settings;
+                    st.brightness = brightness.map(|v| v.clamp(0, 10)).or(st.brightness);
+                    st.fov = fov.map(|v| v.clamp(60, 120)).or(st.fov);
                     let saved = s.save();
                     let sent = if s.to_game.is_some() { s.send(&c) } else { Ok(()) };
                     done(saved.and(sent))

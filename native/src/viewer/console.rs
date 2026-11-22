@@ -318,6 +318,15 @@ impl Watch {
                 Command::Volume { sfx, music, master } => {
                     self.engine.set_volume(sfx, music, master)
                 }
+                Command::Picture { brightness, fov } => {
+                    if let Some(b) = brightness {
+                        super::set_brightness(b);
+                        self.palette = super::brightened(&self.base_palette);
+                    }
+                    if let Some(f) = fov {
+                        self.engine.set_fov(f);
+                    }
+                }
                 Command::ConsoleName { name } => {
                     if let Some(f) = self.feed.as_mut() {
                         f.director.console_name.clone_from(&name);
@@ -546,6 +555,8 @@ impl Watch {
                 None => "level".into(),
             },
             volume: self.engine.volume(),
+            brightness: super::brightness(),
+            fov: self.engine.fov(),
             chat_box: self
                 .stream
                 .as_ref()

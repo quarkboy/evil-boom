@@ -55,6 +55,7 @@ form's changes first).
 | **Sound:** Music | `music` | the songs as recorded, from your own Steam copy of the DOOM + DOOM II re-release: `sc55` (the original soundtrack on a Roland SC-55) or `idkfa` (Andrew Hulshult's); empty: all as MIDI |
 | MIDI synth | `soundfont` | for the songs not recorded: empty for the default (`soundfonts/SC-55.sf2` if it's there, else OPL), `opl`, or a SoundFont in `soundfonts/` by name |
 | Start muted | `muted`, and the Sound section's `sfx_volume`, `music_volume`, `master_volume` | the game's sound |
+| **Picture:** Brightness, View (FOV) | `brightness`, `fov` | how bright the game's frame is shown (0, Doom's own, to 10: a gamma curve, the dark lifted most), and how wide its view in degrees (60 to 120; Doom's own is 90). Both change as it plays and are kept for the next game. A wider view makes movement look slower; the weapon is drawn the same |
 
 Settings that apply only under others are shown only then: the Neuro URL for Neuro, Evil's for
 Neuro or GPT, the title card's choice with Doom's own screens, the column for the stream.

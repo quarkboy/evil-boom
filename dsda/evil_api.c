@@ -677,6 +677,27 @@ EVIL_API void evil_get_volume(int *out)
   out[2] = SDL_AtomicGet(&evil_master_volume);
 }
 
+/* The view's width, in degrees over the 4:3 middle of the picture (Doom's own is 90; 60 to
+ * 120 taken): the software renderer's, which has none of its own to set. Only what's drawn:
+ * the game plays the same. The weapon's drawn as ever. */
+EVIL_API void evil_fov_set(int degrees)
+{
+  extern int evil_fov;
+  extern dboolean setsizeneeded;
+  degrees = degrees < 60 ? 60 : degrees > 120 ? 120 : degrees;
+  if (degrees != evil_fov)
+  {
+    evil_fov = degrees;
+    setsizeneeded = true;
+  }
+}
+
+EVIL_API int evil_fov_get(void)
+{
+  extern int evil_fov;
+  return evil_fov;
+}
+
 /* The game's sound for the next `samples` sample frames (16-bit stereo, interleaved: out holds
  * 2 * samples), mixed now, as DSDA's video dump takes it a frame at a time; only with
  * -evilsoundcap. Returns the sample rate, or 0 if there's none to take. A recording's: a tic's

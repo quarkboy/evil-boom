@@ -4037,3 +4037,21 @@ goal goes for those and the other pickups (armor, guns, bonuses), not for ammo o
 that would mostly go to waste; it's done when none of those are left. The bot alone is
 untouched (it has no such focus): parity 24 of 24. What the bot itself counts as stock
 before an exit is as it was.
+
+### Brightness and the view's width, from the console (2026-11-22)
+
+Asked for: brightness as the volume is exposed, and a field of view (viewers found the old
+fast movement queasy). The game is drawn by DSDA's software renderer, as palette indices we
+colour ourselves, so:
+
+- **Brightness** is ours: the palette the frame's shown with, through a gamma curve (0 as
+  the game has it, to 10, a channel's square root; Doom's own gamma levels are the same kind
+  of curve). The window, the stream's view, the console's picture and a recording all take it.
+- **The view's width** DSDA has only for its OpenGL renderer (`gl_render_fov`); the software
+  one is fixed at 90 degrees. Added in our patch (`evil_fov`, `r_main.c`): the projection is
+  scaled as the widescreen code already scales it (`fov_centerx` beside `wide_centerx`), the
+  light-by-distance tables go by it too, and the weapon is drawn as ever. 60 to 120. Only
+  what's drawn: the game plays the same (parity 24 of 24).
+
+Both are the console's "Picture" section (`Command::Picture`), kept in its settings and
+given to each game as it starts. Evil has no say in either.

@@ -152,6 +152,13 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
     <p class="dim" id="v-note" style="margin:0;font-size:12px"></p>
   </section>
 
+  <section id="sec-picture">
+    <h2>Picture <span class="dim" style="text-transform:none;letter-spacing:0">(kept for the next game)</span></h2>
+    <div class="vol"><label for="p-brightness">Brightness</label><input type="range" id="p-brightness" min="0" max="10" value="0" data-k="brightness"><output id="p-brightness-n"></output></div>
+    <div class="vol"><label for="p-fov">View (FOV)</label><input type="range" id="p-fov" min="60" max="120" step="5" value="90" data-k="fov"><output id="p-fov-n"></output></div>
+    <p class="dim" id="p-note" style="margin:0;font-size:12px"></p>
+  </section>
+
   <section id="sec-column">
     <h2>Stream column <span class="dim" style="text-transform:none;letter-spacing:0">(the stream window's: changes at once, kept for the next game)</span></h2>
     <div class="row"><label>Side <select id="col-side"><option value="right">on the right</option><option value="left">on the left</option></select></label></div>
@@ -375,6 +382,7 @@ const $ = (id) => document.getElementById(id);
 let token = new URLSearchParams(location.search).get("t") || "";
 try { if (token) localStorage.setItem("evil-console-token", token); else token = localStorage.getItem("evil-console-token") || ""; } catch (e) { /* (storage off: the URL's token only) */ }
 let urlsShown = null, volSentAt = 0, volTimer = null, volPending = {};
+let picPending = {}, picTimer = null, picSentAt = 0;
 let fontsShown = null, tokenRefused = false;
 // (the token the page goes by in the address bar too: a reload or a bookmark keeps it)
 function showToken() {
@@ -496,6 +504,15 @@ function render(p) {
     $("v-" + k + "-n").textContent = el.value;
   }
   $("v-note").textContent = live && !vol ? "This game's engine has no volume control (rebuild it: tools/build-engine.sh)." : (!p.connected ? "No game running: the levels are kept for the next one." : "");
+  // (the picture: the game's own while it's connected, else what's kept)
+  const shownPic = { brightness: live ? st.brightness : sv.brightness, fov: live ? st.fov : sv.fov };
+  for (const k of ["brightness", "fov"]) {
+    const el = $("p-" + k);
+    el.disabled = k === "fov" && !!live && st.fov == null;
+    if (document.activeElement !== el && Date.now() - picSentAt > 1500 && shownPic[k] != null) el.value = shownPic[k];
+    $("p-" + k + "-n").textContent = k === "fov" ? el.value + "°" : el.value;
+  }
+  $("p-note").textContent = live && st.fov == null ? "This game's engine has no view setting (rebuild it: tools/build-engine.sh)." : "Brightness 0 and a view of 90° are Doom's own. A wider view makes movement look slower.";
   const urls = (p.neuro_urls || []).join("\n");
   if (urls !== urlsShown) {
     urlsShown = urls;
@@ -791,6 +808,14 @@ for (const k of ["master", "sfx", "music"]) {
     volSentAt = Date.now();
     // (a slider sends many: at most one every 150 ms, the last value always)
     if (!volTimer) volTimer = setTimeout(() => { const v = volPending; volPending = {}; volTimer = null; cmd(Object.assign({ cmd: "volume" }, v)); }, 150);
+  });
+}
+for (const k of ["brightness", "fov"]) {
+  $("p-" + k).addEventListener("input", (e) => {
+    $("p-" + k + "-n").textContent = k === "fov" ? e.target.value + "°" : e.target.value;
+    picPending[k] = Number(e.target.value);
+    picSentAt = Date.now();
+    if (!picTimer) picTimer = setTimeout(() => { const v = picPending; picPending = {}; picTimer = null; cmd(Object.assign({ cmd: "picture" }, v)); }, 150);
   });
 }
 for (const x of [0.5, 1, 2, 4, 8]) {

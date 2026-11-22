@@ -79,6 +79,14 @@ pub enum Command {
         #[serde(default)]
         master: Option<i32>,
     },
+    /// the picture: how bright the game's frame is shown (0, as the game has it, to 10) and how
+    /// wide its view (60 to 120 degrees; Doom's own is 90); one left out is left as it is
+    Picture {
+        #[serde(default)]
+        brightness: Option<i32>,
+        #[serde(default)]
+        fov: Option<i32>,
+    },
     /// damage does nothing to her (rehearsals), or does again
     God {
         on: bool,
@@ -232,6 +240,10 @@ pub struct GameState {
     pub god: bool,
     /// sfx, music (0-15), master (0-100); none from an engine without the control
     pub volume: Option<[i32; 3]>,
+    /// how bright the game's frame is shown (0-10)
+    pub brightness: i32,
+    /// how wide the view's drawn, in degrees; none from an engine without the control
+    pub fov: Option<i32>,
     /// what's on the screen: "title", "menu", "level", "dead", "between levels", "over", ...
     pub screen: String,
     /// who directs her: "bot" (on her own), "orders file", "neuro"
@@ -336,6 +348,13 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<Command>(r#"{"cmd":"speed","x":2}"#).ok(),
             Some(Command::Speed { x: 2.0 })
+        );
+        assert_eq!(
+            serde_json::from_str::<Command>(r#"{"cmd":"picture","fov":105}"#).ok(),
+            Some(Command::Picture {
+                brightness: None,
+                fov: Some(105)
+            })
         );
         assert_eq!(
             serde_json::from_str::<Command>(r#"{"cmd":"restart_level"}"#).ok(),

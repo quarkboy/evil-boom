@@ -308,6 +308,7 @@ pub struct Dsda {
     grab_sound_fn: Option<GrabSoundFn>,
     sound_rate_fn: Option<SoundRateFn>,
     volume_fn: Option<VolumeFn>,
+    fov_fns: Option<(unsafe extern "C" fn(c_int), unsafe extern "C" fn() -> c_int)>,
     get_volume_fn: Option<GetVolumeFn>,
     present_fn: Option<PresentFn>,
     title_fn: Option<PlainFn>,
@@ -495,6 +496,12 @@ impl Dsda {
         // SAFETY: as above, evil_volume's and evil_get_volume's signatures; optional.
         let volume_fn = unsafe { get::<VolumeFn>(&lib, b"evil_volume") }.ok();
         let get_volume_fn = unsafe { get::<GetVolumeFn>(&lib, b"evil_get_volume") }.ok();
+        // SAFETY: as above: `void evil_fov_set(int)` and `int evil_fov_get(void)`; optional.
+        let fov_fns = unsafe {
+            get::<unsafe extern "C" fn(c_int)>(&lib, b"evil_fov_set")
+                .ok()
+                .zip(get::<unsafe extern "C" fn() -> c_int>(&lib, b"evil_fov_get").ok())
+        };
         // SAFETY: as above, the presentation's calls' signatures (evil_present, evil_title,
         // evil_wipe_tic, evil_menu, evil_screen); optional.
         let present_fn = unsafe { get::<PresentFn>(&lib, b"evil_present") }.ok();
@@ -597,6 +604,7 @@ impl Dsda {
             grab_sound_fn,
             sound_rate_fn,
             volume_fn,
+            fov_fns,
             get_volume_fn,
             present_fn,
             title_fn,
@@ -751,6 +759,20 @@ impl Dsda {
             waiting: o[4] != 0,
             item: o[5],
         })
+    }
+
+    /// How wide the view's drawn, in degrees (Doom's own: 90). None without the call.
+    pub fn fov(&self) -> Option<i32> {
+        // SAFETY: no arguments, a plain value back; see `load`.
+        self.fov_fns.map(|(_, get)| unsafe { get() })
+    }
+
+    /// The view's width set (60 to 120 degrees; only what's drawn); no effect without the call.
+    pub fn set_fov(&self, degrees: i32) {
+        if let Some((set, _)) = self.fov_fns {
+            // SAFETY: a plain value into the game; see `load`.
+            unsafe { set(degrees.clamp(60, 120)) };
+        }
     }
 
     /// The loudness set (None: that one left as it is); no effect without the call.

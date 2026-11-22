@@ -352,6 +352,96 @@ index 65eb56a..f9efdff 100644
      // heretic
      int damage;                 // For missiles
      uint64_t flags2;           // Heretic & MBF21 flags
+diff --git a/prboom2/src/r_main.c b/prboom2/src/r_main.c
+index 7885732..1cf8a7b 100644
+--- a/prboom2/src/r_main.c
++++ b/prboom2/src/r_main.c
+@@ -97,6 +97,10 @@ const lighttable_t *fixedcolormap;
+ int      centerx, centery;
+ // e6y: wide-res
+ int wide_centerx;
++// evil: the view's width in degrees over the 4:3 middle of the picture (90: Doom's own),
++// and wide_centerx as a view that wide has it (the weapon's drawn by wide_centerx still)
++int evil_fov = 90;
++int fov_centerx;
+ 
+ fixed_t  focallength;
+ fixed_t  focallengthy;
+@@ -367,9 +371,10 @@ static void R_InitTextureMapping (void)
+ 
+   // For widescreen displays, increase the FOV so that the middle part of the
+   // screen that would be visible on a 4:3 display has the requested FOV.
+-  if (wide_centerx != centerx)
+-  { // wide_centerx is what centerx would be if the display was not widescreen
+-    FieldOfView = (int)(atan((double)centerx * tan((double)FieldOfView * M_PI / FINEANGLES) / (double)wide_centerx) * FINEANGLES / M_PI);
++  if (fov_centerx != centerx)
++  { // fov_centerx is what centerx would be if the display was not widescreen (evil: or
++    // the view not Doom's 90 degrees)
++    FieldOfView = (int)(atan((double)centerx * tan((double)FieldOfView * M_PI / FINEANGLES) / (double)fov_centerx) * FINEANGLES / M_PI);
+     if (FieldOfView > 160 * FINEANGLES / 360)
+       FieldOfView = 160 * FINEANGLES / 360;
+   }
+@@ -683,13 +688,19 @@ void R_ExecuteSetViewSize (void)
+   }
+ 
+   // e6y: wide-res
+-  projection = wide_centerx<<FRACBITS;
++  // evil: a view of evil_fov degrees: the screen's as far off as shows that much
++  fov_centerx = wide_centerx;
++  if (evil_fov != 90)
++    fov_centerx = (int)(wide_centerx / tan(evil_fov * M_PI / 360.0) + 0.5);
++  projection = fov_centerx<<FRACBITS;
+ 
+ // proff 11/06/98: Added for high-res
+   // calculate projectiony using int64_t math to avoid overflow when SCREENWIDTH>4228
+   projectiony = (fixed_t)((((int64_t)cheight * centerx * 320) / 200) / SCREENWIDTH * FRACUNIT);
++  if (evil_fov != 90)
++    projectiony = (fixed_t)((double)projectiony * fov_centerx / wide_centerx);
+   // e6y: this is a precalculated value for more precise flats drawing (see R_MapPlane)
+-  viewfocratio = projectiony / wide_centerx;
++  viewfocratio = projectiony / fov_centerx;
+ 
+   dsda_SetupStretchParams();
+ 
+diff --git a/prboom2/src/r_main.h b/prboom2/src/r_main.h
+index 04b4a91..f3bf1b4 100644
+--- a/prboom2/src/r_main.h
++++ b/prboom2/src/r_main.h
+@@ -61,6 +61,8 @@ extern fixed_t  projection;
+ extern fixed_t  skyiscale;
+ // e6y: wide-res
+ extern int wide_centerx;
++extern int evil_fov;
++extern int fov_centerx;
+ #define RMUL (1.6f/1.333333f)
+ 
+ // proff 11/06/98: Added for high-res
+diff --git a/prboom2/src/r_segs.c b/prboom2/src/r_segs.c
+index 6d60ba4..abd6fdc 100644
+--- a/prboom2/src/r_segs.c
++++ b/prboom2/src/r_segs.c
+@@ -345,7 +345,7 @@ static void R_ApplyLightColormap(draw_column_vars_t *dcvars, fixed_t scale)
+ {
+   if (!fixedcolormap)
+   {
+-    int index = (int)(((int64_t) scale * 160 / wide_centerx) >> LIGHTSCALESHIFT);
++    int index = (int)(((int64_t) scale * 160 / fov_centerx) >> LIGHTSCALESHIFT);
+     if (index >= MAXLIGHTSCALE)
+         index = MAXLIGHTSCALE - 1;
+ 
+diff --git a/prboom2/src/r_things.c b/prboom2/src/r_things.c
+index 4f17958..e28f88a 100644
+--- a/prboom2/src/r_things.c
++++ b/prboom2/src/r_things.c
+@@ -912,7 +912,7 @@ static void R_ProjectSprite (mobj_t* thing, int lightlevel)
+     vis->colormap = fullcolormap;     // full bright  // killough 3/20/98
+   else
+     {      // diminished light
+-      int index = (int)(((int64_t)xscale * 160 / wide_centerx) >> LIGHTSCALESHIFT);
++      int index = (int)(((int64_t)xscale * 160 / fov_centerx) >> LIGHTSCALESHIFT);
+       if (index >= MAXLIGHTSCALE)
+         index = MAXLIGHTSCALE - 1;
+       vis->colormap = spritelights[index];
 diff --git a/prboom2/src/s_sound.c b/prboom2/src/s_sound.c
 index a12136e..3f19306 100644
 --- a/prboom2/src/s_sound.c

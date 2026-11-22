@@ -504,7 +504,9 @@ struct Watch {
     map_name: String,
     engine: Engine,
     agent: Agent,
+    /// the game's colors as shown (`brightened`), and as the WAD has them
     palette: Vec<u32>,
+    base_palette: Vec<u32>,
     frame: Option<(usize, usize, Vec<u8>)>,
     /// the frame drawn as each tic's played (a window draws its own, between tics, instead)
     frame_per_tic: bool,
@@ -1320,6 +1322,38 @@ pub fn snapshot_to(
     (watch.engine, watch.agent, result)
 }
 
+/// How bright the game's frame is shown: 0, as the game has it, to 10 (the console's; the
+/// program's, so a new level's watch has it too).
+static BRIGHTNESS: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+
+fn brightness() -> i32 {
+    BRIGHTNESS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+fn set_brightness(level: i32) {
+    BRIGHTNESS.store(level.clamp(0, 10), std::sync::atomic::Ordering::Relaxed);
+}
+
+/// A palette as bright as's set: a gamma curve as Doom's own gamma levels are, black still
+/// black and white white, the dark lifted most (10: a channel's square root).
+fn brightened(base: &[u32]) -> Vec<u32> {
+    let level = brightness();
+    if level == 0 {
+        return base.to_vec();
+    }
+    let power = 1.0 / (1.0 + 0.1 * f64::from(level));
+    let lut: Vec<u32> = (0..256)
+        .map(|v| ((f64::from(v) / 255.0).powf(power) * 255.0).round() as u32)
+        .collect();
+    base.iter()
+        .map(|&c| {
+            (lut[(c >> 16 & 0xFF) as usize] << 16)
+                | (lut[(c >> 8 & 0xFF) as usize] << 8)
+                | lut[(c & 0xFF) as usize]
+        })
+        .collect()
+}
+
 /// PLAYPAL's first palette, as 0RGB.
 fn palette(w: &Wad) -> Vec<u32> {
     let Some(lump) = w.lumps.iter().find(|l| l.name == "PLAYPAL") else {
@@ -1409,7 +1443,8 @@ impl Watch {
             map_name: map_name.to_string(),
             engine,
             agent,
-            palette: palette(w),
+            palette: brightened(&palette(w)),
+            base_palette: palette(w),
             frame: None,
             frame_per_tic: true,
             obs: None,
