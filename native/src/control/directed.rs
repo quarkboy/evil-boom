@@ -649,6 +649,15 @@ impl Director {
         self.queue.push_back(Queued { order, rush, then });
     }
 
+    /// The sweep of area `id` is next in the queue, to come after what's in hand (the second
+    /// half of a rushed sweep).
+    fn sweep_queued_for(&self, id: &str) -> bool {
+        matches!(
+            self.queue.front(),
+            Some(Queued { order: Order::ExploreArea(r, _), then: true, .. }) if self.resolve(r) == id
+        )
+    }
+
     /// Doing nothing, waiting for an order?
     pub fn idle(&self, agent: &Agent) -> bool {
         self.queue.is_empty()
@@ -965,7 +974,19 @@ impl Director {
             .then(|| self.queue.pop_front())
             .flatten()
         {
+            // (a go with the sweep of the same area queued after it, a rushed sweep: with no
+            // way there the sweep's dropped with it, one failure told, not two)
+            let went = match &o {
+                Order::Go(r, _) => Some(self.resolve(r)),
+                _ => None,
+            };
             self.start(agent, obs, o);
+            if let Some(id) = went
+                && self.doing.is_none()
+                && self.sweep_queued_for(&id)
+            {
+                self.queue.pop_front();
+            }
             // (a single target only: a sweep of a room, rushed, is a run about it under fire)
             agent.x_mut().press_on = rush && matches!(self.doing, Some(Doing::Once(..)));
             return;
@@ -1075,16 +1096,25 @@ impl Director {
                     .filter(|_| pressed)
                 {
                     Some(l) => self.pressed = Some((l, id.clone(), obs.tic + PRESS_WATCH)),
-                    None => self.report(
-                        obs,
-                        ok,
-                        Event::Outcome,
-                        if ok {
-                            format!("Done: {what}.")
-                        } else {
-                            format!("Couldn't get to {what}: {why}.")
-                        },
-                    ),
+                    // (got to an area whose sweep comes next: the sweep says so, not a "done"
+                    // in the middle of the one order of hers)
+                    None if ok && self.sweep_queued_for(&id) => {}
+                    None => {
+                        // (not got to: its sweep's dropped with it)
+                        if self.sweep_queued_for(&id) {
+                            self.queue.pop_front();
+                        }
+                        self.report(
+                            obs,
+                            ok,
+                            Event::Outcome,
+                            if ok {
+                                format!("Done: {what}.")
+                            } else {
+                                format!("Couldn't get to {what}: {why}.")
+                            },
+                        )
+                    }
                 }
             }
             Some(Doing::Area(id, what, secrets)) => {
