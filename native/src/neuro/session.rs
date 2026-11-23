@@ -311,6 +311,24 @@ const GOAL_SETTINGS: &[&str] = &["finish", "prefer"];
 const GOAL_FINISH: &str = "finish: when the level's done: out (by the first exit), kills, secrets or completionist (all of it: slow, asked first), each then out; none: you're asked.";
 const GOAL_PREFER: &str = "prefer: what comes first meanwhile: health (while under 100), ammo (while short of a cyberdemon's worth), hunt (the monsters you know of), unexplored (new ground), or none.";
 
+/// The schema an action's data is mended against: hers as registered, the locked settings out
+/// of it; the console's, whole. A lock is on her, not on the page: mended against hers, a
+/// locked setting the console applied was dropped as a field the schema hasn't got, and the
+/// setting stayed as it was.
+fn mending_schema(
+    mut all: Vec<Value>,
+    locked: &std::collections::BTreeSet<&'static str>,
+    console: bool,
+    name: &str,
+) -> Option<Value> {
+    if !console {
+        without(&mut all, locked);
+    }
+    all.into_iter()
+        .find(|a| a["name"] == name)
+        .and_then(|a| a.get("schema").cloned())
+}
+
 /// The actions without the settings locked: out of `doom_policy`'s and `doom_goal`'s schemas,
 /// and `doom_goal`'s description of the one that's left; either action gone with nothing left
 /// of it.
@@ -883,6 +901,13 @@ impl Session {
 
     /// Her actions, `doom_game` as what's offered her has it.
     fn actions(&self) -> Vec<Value> {
+        let mut all = self.all_actions();
+        without(&mut all, &self.locked);
+        all
+    }
+
+    /// ...with the settings locked from her still in them.
+    fn all_actions(&self) -> Vec<Value> {
         let mut all = actions_timed(&self.director.clocks);
         if let (Some(c), Some(g)) = (
             &self.choices,
@@ -890,18 +915,13 @@ impl Session {
         ) {
             *g = game_action(c);
         }
-        without(&mut all, &self.locked);
         all
     }
 
     /// An action's data mended against its registered schema (`repair`), and the notes of
     /// fields taken under another name.
     fn mend(&self, name: &str, args: Value) -> (Value, Vec<String>) {
-        let schema = self
-            .actions()
-            .into_iter()
-            .find(|a| a["name"] == name)
-            .and_then(|a| a.get("schema").cloned());
+        let schema = mending_schema(self.all_actions(), &self.locked, self.console_hand, name);
         super::repair::repair(args, schema.as_ref())
     }
 
@@ -1738,6 +1758,20 @@ mod tests {
             .iter()
             .any(|a| a["name"] == "doom_policy" || a["name"] == "doom_goal"));
         assert!(all.iter().any(|a| a["name"] == "doom_go"));
+    }
+
+    /// A locked setting the console applies is kept by the mending; hers is dropped by it.
+    #[test]
+    fn a_lock_is_on_her_not_the_console() {
+        let locked = ["stance"].into_iter().collect();
+        let sent = serde_json::json!({ "stance": "bold", "risk": "normal" });
+        let mend = |console: bool| {
+            let schema = super::mending_schema(super::actions(), &locked, console, "doom_policy");
+            crate::neuro::repair::repair(sent.clone(), schema.as_ref()).0
+        };
+        assert_eq!(mend(true)["stance"], "bold");
+        assert!(mend(false).get("stance").is_none());
+        assert_eq!(mend(false)["risk"], "normal");
     }
 
     /// One force at a time: out till it's answered for sure, a while after another of its own
