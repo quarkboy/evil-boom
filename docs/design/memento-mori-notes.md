@@ -29,6 +29,7 @@
 | the loader, the gate rule, MAP04's four, the mesh (7420edb) | 15 |
 | MAP26's door and exit ring (0aedce7) | 16 |
 | MAP14's door, MAP05's switch (f895af5) | 18 |
+| MAP20's ledge and ceiling (575ceee) | 19 |
 
 **All four skills at 575ceee** (charmed, seed 1, the hour; `out/mm-survey/1123g-*`):
 
@@ -136,18 +137,54 @@ tics more here. Counted (`MoverModel::timing_from`). Stuck (9 restarts) -> out i
    offered from that ground now. She tries each of the eight lines three times before
    looking elsewhere and finding the switch that opens the pit: clumsy, and out in 1,989 s.
 
-**MAP06: open; looked at.** The warehouse of crates. What the reach lacks is the second
-hall (sector 188) and the nukage hall past it (202 on), from which a lift (228) goes up to
-the room with the switches (236) that lower the big crates (line 1183) and raise the blue
-card's floor (1159). Two things the model doesn't have:
-- *Crates as stairs.* A crate 16 square and 16 high (sector 197) beside one 32 square and 32
-  high (198): the game lets her up, her box over the small one lifting her feet while her
-  middle is still on the floor beside it, then onto the bigger. The mesh goes by where her
-  middle is: no floor there she can stand her middle on (a crate at 128 is in her box from
-  any spot on the small one), so no way up. Steps shallower than her box, each within a
-  step of the last, are what's missing, and it will come up in other WADs.
-- How the second hall is entered at all isn't traced yet (over the 64-high crates, or by
-  the big crates coming down).
+**MAP06: three things; out on all four skills** (charmed, seeds 1-3: 12 of 12, 787-2,932 s).
+The maintainer pasted the Doom Wiki's walkthrough, and each step was looked for in the model.
+1. *Crate to crate, one sector.* In the second warehouse every crate 64 high is sector 192.
+   The way on is from the head of a little stair in the corner, across the corner, onto the
+   next crate: her box over one or the other all the way and no floor under her middle
+   between, so nothing the mesh joins. A jump, to the finder; but it took a landing only on
+   another sector than the one left. Now on another stretch of floor: polys of a sector that
+   portals join are one stretch (`floor_piece`). The reach went from 107 of 281 sectors to
+   250. (What the notes had before, "crates as stairs shallower than her box", was wrong:
+   those the climbs had already. It was the two crates being one sector.)
+2. *A door opened long before its sill is lowered.* The slab before the exit (sector 235) is
+   opened for good by a line walked over early, and its sill lowered by a switch at the end.
+   Effects were added to a sector's heights and the next worked out from the starting one
+   while that was still among them: the sill came down under a slab still shut. A ceiling
+   gone up for good with the floor as it was is now instead of the old heights
+   (`nav::opened_for_good`), as a floor lowered for good already was.
+3. *A lift narrower than she is.* The way back into the first building is a bar across a
+   window (sector 68, 16 wide) that goes down to the yard and up again under a ceiling too
+   low to ride to the top: she's carried by the part of her box on it and walks off at the
+   room's floor on the way. The plan had it. The follower judged the crossing onto the bar
+   by the floor under her middle (the yard's), took the rising bar for a mover out of reach,
+   and stepped back off it to wait: 5,383 presses of its switch in 55 minutes. Now, stood on
+   the far floor already, she's on it.
+
+**MAP09: two things in the model; not out yet.**
+1. *A walk-over line nobody could set off.* The line that lowers a hall's east wall (1006)
+   lies on a boundary of the mesh's grid, and the edge along it was a hair off it: the line
+   was looked for in the wrong row of cells, the portal had no line, the trigger no ground.
+   An edge's lines are now looked for a little round it.
+2. *Switches to shoot, from behind a wall.* The blue card's hall has two switches high on
+   its west wall that are shot, not pressed (lines 1021, 1022), from the ledge across the
+   hall, in front of which that east wall stands till 1006 is crossed. A gun line's ground
+   was whatever had a view of it as the map starts. Now a place whose view only sectors
+   shut-that-may-open stop is ground too, those sectors its gates (`sight_gates`), as a
+   press has had. The exits came into the reach: 330 -> 427 of 513 sectors.
+3. *Still open:* charmed with endless bullets she's stranded two to six times in the hour
+   and not out, on all four skills: at (1055, -856), a hall at floor 0 under ledges 64 up
+   whose only doors are two secret closets (the reach from there is 22 sectors: the model
+   has no way out of it, and the map's lines show none either: wants the walkthrough);
+   at (632, 441) and (-364, 178). And most of her hour goes on big monsters with a pistol.
+
+**The omniscient planner on these maps** (`follow`, the "omniscient plan from there" line of
+a stranding): "no route to the exit" on MAP06, 09, 12, 15, 17, 25, 28 though the exit is in
+the staged reach. On MAP06 the relaxed pass can't name the maker of a height that two lines
+make between them (the exit's slab, opened by one and its sill lowered by another), so the
+lines on the way aren't among those searched with. It doesn't stop her: a stranding is her
+own explorer with nothing left to do, and the planner's line there is only for the reader.
+Not mended.
 
 **MAP22: a cave with no way out, by the model.** Twice in the hour she took a teleporter into
 a water cave (sectors 315, 316, 327, 328, 333, 339, 341, 548, 549) and was stranded there:
@@ -161,7 +198,8 @@ walkthrough before anything is called broken.
 
 ## Still to look at
 
-MAP06, 09, 16, 31 (no route in principle: the model first); MAP12, 15, 17, 23, 25, 28 (no plan);
-MAP20's lift rooms, MAP22; the switch-texture list (`custom-textures-plan.md`), which none of
-the above has needed yet: the switches met so far have DOOM II's names. Then skills 1, 2 and 4
-(a first survey of each is in `out/mm-survey/`), and with monsters able to hurt her.
+MAP09 (the strandings), MAP12 (stranded at (5024, -2083), (4645, -4190), (4784, -3564), each
+with the exit in the reach from there: her explorer, not the model), MAP17, 23, 25, then the
+ones out on some skills only; MAP22 and MAP31 want their walkthroughs; MAP16, MAP31: no
+route in principle, the model first. The switch-texture list (`custom-textures-plan.md`):
+still not needed by anything met. Then with monsters able to hurt her.
