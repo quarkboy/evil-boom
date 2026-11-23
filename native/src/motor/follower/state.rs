@@ -103,6 +103,8 @@ pub struct Jumping {
 /// Backing off from where she got nowhere.
 pub struct Unstick {
     pub(super) count: i32,
+    /// backed out of a wedge this many times on this step (`walking::wedged_way_out`)
+    pub(super) wedged: i32,
     pub(super) until: i64,
     pub(super) dir: f64,
 }

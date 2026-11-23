@@ -65,6 +65,11 @@ const UNSTICK_TICS: i64 = 12;
 
 const UNSTICKS_BEFORE_REPLAN: i32 = 2;
 
+/// wedged, she backs out this many times on one step of the route before it's given up as
+/// any other stuck is, looking for room this far off and twice it
+const WEDGED_TRIES: i32 = 3;
+const WEDGED_STEP: f64 = 12.0;
+
 impl RouteFollower {
     /// Walking the segment's track: what comes before the walking (a jump or a barrel in hand,
     /// a floor going down under her, a lift to wait for, a drop, a crusher, a door), getting
@@ -472,6 +477,28 @@ impl RouteFollower {
                     .is_some_and(|&d| d != 0)
             })
         };
+        // (wedged: the box doesn't stand where she is, a higher floor under one edge of it and
+        // a low ceiling over another, and the game moves her no way that keeps both. Out of a
+        // low tunnel beside a step up, Doom II MAP15: nowhere for 25 s, three errands dropped
+        // there, "stranded", the level begun again; on that slime, uncharmed, dead. Backed out
+        // the way the box fits again, hurting floor or not: a new path from the same spot
+        // starts the same way)
+        if self.unstick.wedged < WEDGED_TRIES
+            && let Some(out) = self.wedged_way_out(obs)
+        {
+            self.unstick.wedged += 1;
+            self.log.add(
+                obs.tic,
+                format!(
+                    "wedged at ({:.0}, {:.0}) (no room for her where she stands): backing out",
+                    obs.x, obs.y
+                ),
+            );
+            self.unstick.until = obs.tic + UNSTICK_TICS;
+            self.progress_tic = obs.tic + UNSTICK_TICS;
+            self.unstick.dir = out;
+            return self.unstick(obs);
+        }
         if self.unstick.count > UNSTICKS_BEFORE_REPLAN || burning {
             // (with the heights as they are: the way the plan saw may be shut now, a timed door
             // closed, and the same path again is stuck again)
@@ -891,6 +918,32 @@ impl RouteFollower {
                 away.sin() * 2.0 + back_r.sin(),
             ),
         )
+    }
+
+    /// Wedged (the box has no room where she stands, floor to ceiling): the way out, a heading
+    /// she'd fit along, nearest the way off the walls by her. None if she isn't, or there's
+    /// none.
+    fn wedged_way_out(&self, obs: &Observation) -> Option<f64> {
+        let pos = obs.pos();
+        let heights: Vec<(f64, f64)> = obs.heights.iter().map(|h| (h.floor, h.ceiling)).collect();
+        let sim = self.view.nav.jump_lab.at_heights(&heights);
+        let room = |q: Point| {
+            let (clear, floor, ceiling) = sim.fits_at(q);
+            (clear && ceiling - floor >= PLAYER_HEIGHT).then_some(floor)
+        };
+        if room(pos).is_some() {
+            return None;
+        }
+        let z = obs.z.unwrap_or(f64::MIN);
+        let off = self.away_from_walls(obs);
+        (0..8)
+            .map(|k| off + 45.0 * f64::from((k + 1) / 2) * if k % 2 == 0 { 1.0 } else { -1.0 })
+            .find(|a| {
+                let (dx, dy) = (a.to_radians().cos(), a.to_radians().sin());
+                [WEDGED_STEP, 2.0 * WEDGED_STEP].iter().all(|d| {
+                    room((pos.0 + dx * d, pos.1 + dy * d)).is_some_and(|f| f - z <= MAX_STEP)
+                })
+            })
     }
 
     fn unstick(&mut self, obs: &Observation) -> Controls {

@@ -548,6 +548,7 @@ impl RouteFollower {
             off_since: None,
             unstick: Unstick {
                 count: 0,
+                wedged: 0,
                 until: -1,
                 dir: 0.0,
             },
@@ -878,6 +879,7 @@ impl RouteFollower {
             .collect();
         self.off_since = None;
         self.unstick.count = 0;
+        self.unstick.wedged = 0;
         self.unstick.until = -1;
         self.enter_segment(tic);
     }

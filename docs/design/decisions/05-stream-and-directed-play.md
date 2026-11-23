@@ -4215,3 +4215,21 @@ ranking at a time, 8 to 13 ms: the next step of an order of hers (`director.orde
 bot's own choice (`agent.act`), an action answered. Inside the ranking, gathering what
 there is (6 ms) and trying the ways to it (6 to 8) are the two that cost; what she can
 reach is quick. Those are the explorer's own, and the bot's without a director too.
+
+### Wedged: backed out the way she fits (2026-11-22)
+
+Doom II MAP15, charmed, the maintainer watching: out of a low tunnel (72 high) into a slime
+pit beside a step up of 24, she stopped at the corner and went nowhere for 25 s; three
+errands failed there, "stuck here 3 times over: stranded", and the level began again.
+Uncharmed that slime kills her. Where she stood her box was over the ledge's floor and
+under the tunnel's ceiling, 48 between them for her 56, and the game moves her no way that
+keeps both; west and north she could walk (`drive`: `fits`, `move`). A stuck is backed off
+from and tried again, but on a floor that hurts it's replanned at once with no backing off
+(each try costs health), and the new path began the same way.
+
+`wedged_way_out`: stuck with no room for her where she stands, she backs out along a
+heading the box fits on, nearest the way off the walls by her, hurting floor or not; three
+times a step at most, then given up as before. At that spot, to two goals: failed after 7 s
+before, there in 5 s and 3 s after one backing out. Three lives: one run in 544 touched,
+nothing moved (exits 297). The corner is still a way to the planner: she can walk into it
+again, and is a second getting out.
