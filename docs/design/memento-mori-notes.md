@@ -172,29 +172,40 @@ The maintainer pasted the Doom Wiki's walkthrough, and each step was looked for 
    was whatever had a view of it as the map starts. Now a place whose view only sectors
    shut-that-may-open stop is ground too, those sectors its gates (`sight_gates`), as a
    press has had. The exits came into the reach: 330 -> 427 of 513 sectors.
-3. *Still open:* charmed with endless bullets she's stranded two to six times in the hour
-   and not out, on all four skills: at (1055, -856), a hall at floor 0 under ledges 64 up
-   whose only doors are two secret closets (the reach from there is 22 sectors: the model
-   has no way out of it, and the map's lines show none either: wants the walkthrough);
-   at (632, 441) and (-364, 178). And most of her hour goes on big monsters with a pistol.
+3. *The top of a lift that's passed under.* The lift in the first hallway (sector 10) is
+   also a door, and its shaft opens to the north only below the lift's height: it's gone
+   through, not ridden (and, the Doom Wiki says, can't be called from the north: go through
+   before the backpack's line is crossed and the level can't be finished). From on top of
+   it her way north was "a drop" through the wall above the opening, room for her box
+   being found 32 past the edge in the hall beyond: 41 minutes of "sector 13 not coming:
+   new path". A drop now needs headroom all the way from the ledge to where she lands.
+4. *What the walkthrough says of the rest* (pasted by the maintainer): the hall at floor 0
+   round (1055, -856) isn't on the single-player way at all (deathmatch starts; no way out
+   of it in the map's lines); its middle platform's switch (440) is reached by a running
+   jump from the rim, 64 to 64 across 128, which the finder has. The two key routes are by
+   teleporters that shut behind her, the yellow one for good. And the stairs in the
+   south-west are lowered by the backpack's line (2224) *or* by a switch meant for the
+   other players (140): by both, the top step ends 32 under the landing and the way up is
+   a sector one unit wide by the wall. She crosses the one and presses the other.
+5. *Not out, and why now:* with the level all known she has nothing left to do within two
+   minutes of each new start (18 restarts in the hour): no whole route by her planner (below).
+   (A rule tried and not kept: no barrel shot from a place with no way back. It kept her
+   out of the hall once and she went down by choice later anyway; on E4M5 it cost 218 s.)
 
-**The omniscient planner on these maps** (`follow`, the "omniscient plan from there" line of
-a stranding): "no route to the exit" on MAP06, 09, 12, 15, 17, 25, 28 though the exit is in
-the staged reach. On MAP06 the relaxed pass can't name the maker of a height that two lines
-make between them (the exit's slab, opened by one and its sill lowered by another), so the
-lines on the way aren't among those searched with. It doesn't stop her: a stranding is her
-own explorer with nothing left to do, and the planner's line there is only for the reader.
-Not mended.
-
-**MAP22: a cave with no way out, by the model.** Twice in the hour she took a teleporter into
-a water cave (sectors 315, 316, 327, 328, 333, 339, 341, 548, 549) and was stranded there:
-the reach from the pad is those nine and no trigger. The way on is past a pit 128 across
-and 32 deep that the cave's floor runs round in strips too thin for her; out of the pit on
-the far side is a rise of 32. A run across it would just clear (32 of fall is eight tics;
-128 units in eight tics wants full pace), if there's the run-up. Needs the level's
-walkthrough before anything is called broken.
-
-**MAP31: not begun.** By the model 30 of 508 sectors can be reached; she sees 122. To trace.
+**The planner on these maps** (`follow`, the "omniscient plan from there" of a stranding,
+and her own way to the exit once a level is all known): "no route to the exit" on MAP06,
+09, 12, 15, 17, 25, 28 though the exit is in the staged reach. Two things found:
+- The relaxed pass can't name the maker of a height two lines make between them (MAP06's
+  exit slab; the like on MAP12, 15, 28: "no maker got to without it (makers [])").
+- More, it reads the lines a goal needs off one path through the world with *everything*
+  fired, and that path can be by a way only the end of the level opens (MAP06: to the
+  nukage hall's lift by the last teleporter, not through the warehouses), so the lines of
+  the real way in are never among those searched with: "with its lines alone: 125 polys
+  of 689". The search with every line then runs out (20,000 expansions).
+  What it wants: the needs read off the stages of the reach in the order they open (each
+  goal by the heights of the stage it first comes into reach at), not off the end state.
+It matters in play: she got out of MAP06 by exploring, but a level she has all seen and
+no plan for is one with "nothing left to do". Not mended yet; the next thing to do here.
 
 ## Still to look at
 
