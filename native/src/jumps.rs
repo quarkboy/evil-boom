@@ -105,7 +105,7 @@ pub const STRAFE_SIDE: f64 = 40.0;
 pub const STRAFE_FACING: f64 = 38.659_808_254_090_09;
 
 /// Bumped whenever the finder's results could change (it keys Python's jump cache).
-pub const FINDER_VERSION: u32 = 35;
+pub const FINDER_VERSION: u32 = 36;
 
 /// `walks`: begun this far to the side of the stretch's start (units), a try each
 const WALK_SIDES: [f64; 5] = [0.0, 3.0, -3.0, 6.0, -6.0];
@@ -142,6 +142,10 @@ pub struct JumpLab {
     sector_centres: Vec<(usize, Point)>,
     sector_edges: HashMap<usize, Vec<Seg>>,
     sector_lines: HashMap<usize, Vec<usize>>,
+    /// per poly: which stretch of its sector's floor it's part of (polys of one sector joined
+    /// by portals, numbered by the lowest poly among them). A sector can be many floors apart:
+    /// every crate of a warehouse one sector.
+    floor_piece: Vec<usize>,
     /// the simulator's geometry (built on first use)
     world: OnceLock<World>,
 }
@@ -338,6 +342,21 @@ impl JumpLab {
                 sector_lines.entry(s).or_default().push(li);
             }
         }
+        let mut floor_piece: Vec<usize> = (0..mesh.polys.len()).collect();
+        loop {
+            let mut changed = false;
+            for p in &mesh.portals {
+                if mesh.poly(p.a).sector != mesh.poly(p.b).sector {
+                    continue;
+                }
+                let low = floor_piece[p.a].min(floor_piece[p.b]);
+                changed |= floor_piece[p.a] != low || floor_piece[p.b] != low;
+                (floor_piece[p.a], floor_piece[p.b]) = (low, low);
+            }
+            if !changed {
+                break;
+            }
+        }
         let JumpFacts {
             static_grid,
             obstacle_grid,
@@ -360,6 +379,7 @@ impl JumpLab {
             sector_centres,
             sector_edges,
             sector_lines,
+            floor_piece,
             world: OnceLock::new(),
         }
     }

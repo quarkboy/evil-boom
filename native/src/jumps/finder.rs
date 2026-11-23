@@ -550,6 +550,7 @@ impl JumpLab {
         };
         let mesh = &self.mesh;
         let src_sector = mesh.poly(src).sector;
+        let src_piece = self.floor_piece[src];
         let floor = chosen.get(src_sector)?.floor;
         let below = chosen
             .0
@@ -764,8 +765,10 @@ impl JumpLab {
                     x + n.0 * (PLAYER_RADIUS - 1.0),
                     y + n.1 * (PLAYER_RADIUS - 1.0),
                 ));
+                // (another floor: another sector's, or a stretch of the takeoff's own that isn't
+                // joined to it, crate to crate in a warehouse that's all one sector)
                 if let Some(ahead) = ahead.filter(|&p| {
-                    mesh.poly(p).sector != src_sector && floor_of(mesh.poly(p).sector) == Some(fmax)
+                    self.floor_piece[p] != src_piece && floor_of(mesh.poly(p).sector) == Some(fmax)
                 }) {
                     if fmax <= below + MAX_STEP && plain(mesh.poly(ahead).sector) {
                         return None; // just dropped to the floor below: an ordinary edge
@@ -820,7 +823,7 @@ impl JumpLab {
                         .copied()
                         .filter(|&(dx, dy)| {
                             mesh.poly_at((x + dx, y + dy)).is_some_and(|q| {
-                                mesh.poly(q).sector != src_sector
+                                self.floor_piece[q] != src_piece
                                     && floor_of(mesh.poly(q).sector) == Some(fmax)
                             })
                         })
