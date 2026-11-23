@@ -462,7 +462,13 @@ impl RouteFollower {
                     continue;
                 }
                 switch_nearby = true;
-                if waited > 3 * 35 && still {
+                // (a mover away from where it rests is on its round and comes back by itself:
+                // that's waited for. One standing where it rests never comes: pressed at once.
+                // Memento Mori MAP04: out of the keep by a lift that rests up, to another
+                // lift called from inside, down for three seconds. The three she waited
+                // before pressing for the first were the second's.)
+                let resting = live[sector] == nav.movers.initial[sector];
+                if (waited > 3 * 35 || (resting && waited >= USE_EVERY)) && still {
                     // the nearest bit of it (a long lift edge's middle can be out of use range),
                     // stepping up to it if need be
                     let Some(li) = t.linedef() else { break };
