@@ -529,6 +529,10 @@ pub enum Focus {
     Unexplored,
 }
 
+/// What a plan's signature can move with inside one tic (`plan_signature`): the tic, what she
+/// can reach (how many polys, the first, the last), the jumps left out, and two last resorts.
+type SignatureAt = (i64, usize, Option<usize>, Option<usize>, usize, bool, bool);
+
 /// An errand a barrel stopped: what it was for, the barrel, and what she had to clear it with
 /// then (`motor::follower::barrel_means`).
 #[derive(Clone, Debug)]
@@ -695,6 +699,9 @@ pub struct Explorer {
     pub stats: RouteStats,
     /// the goals the planner found no way to, and the plan signature then
     no_route: BTreeMap<GoalKey, (u64, i64)>,
+    /// the plan's signature as last worked out, and what it was worked out at
+    /// (`plan_signature`)
+    signature_kept: Option<(SignatureAt, u64)>,
     /// what was given up on for want of a route (the health margin's refusals among them) this
     /// think, and its tic: the dead-end pass's to take up again, not what was dropped for being
     /// gone or done
@@ -977,6 +984,7 @@ impl Explorer {
             journal: crate::decisions::Journal::default(),
             stats: RouteStats::default(),
             no_route: BTreeMap::new(),
+            signature_kept: None,
             refused_now: (i64::MIN, BTreeSet::new()),
             standable_cache: std::cell::RefCell::new(StandableCache::default()),
             suspects: None,

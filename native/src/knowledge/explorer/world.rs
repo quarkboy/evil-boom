@@ -413,6 +413,17 @@ impl Explorer {
     pub(super) fn banned_jumps(&self) -> BTreeSet<usize> {
         let limit = if self.missed_jumps_in { JUMP_MISSES } else { 1 };
         let missed = &self.knowledge.missed_jumps;
+        // (asked for at every route looked for, and of every jump the level has: what doesn't
+        // turn on the jump is worked out once, and a jump's key, a string made each time,
+        // only when there's something to look it up in. On a big level this was a third of
+        // what choosing the next thing to do cost)
+        let lapsing = self.lapsing_now().then_some(&self.lapsing_jumps.0);
+        let knocked = !self.knocked_jumps.is_empty();
+        let by_key = !missed.is_empty()
+            || lapsing.is_some_and(|l| !l.is_empty())
+            || knocked
+            || !self.unsafe_jumps.is_empty()
+            || !self.wedge_jumps.is_empty();
         // And strafing runs, except when there's nothing else to do: they're for where a straight
         // run won't go, not for a way round.
         self.nav
@@ -420,32 +431,37 @@ impl Explorer {
             .iter()
             .enumerate()
             .filter(|(_, j)| {
-                missed.get(&j.key()).copied().unwrap_or(0) >= limit
-                    || (j.strafe && !self.strafing_allowed)
-                    || self.lapsing(&j.key())
-                    || self
-                        .knocked_jumps
-                        .get(&j.key())
-                        .is_some_and(|&till| self.clock < till)
-                    || self.unsafe_jumps.contains(&j.key())
-                    || self.wedge_jumps.contains(&j.key())
+                if j.strafe && !self.strafing_allowed {
+                    return true;
+                }
+                if !by_key {
+                    return false;
+                }
+                let key = j.key();
+                missed.get(&key).copied().unwrap_or(0) >= limit
+                    || lapsing.is_some_and(|l| l.contains(&key))
+                    || (knocked
+                        && self
+                            .knocked_jumps
+                            .get(&key)
+                            .is_some_and(|&till| self.clock < till))
+                    || self.unsafe_jumps.contains(&key)
+                    || self.wedge_jumps.contains(&key)
             })
             .map(|(i, _)| i)
             .collect()
     }
 
-    /// Is the jump one left out for coming too late for something timed (and she's learned
-    /// nothing since that might change it)?
-    fn lapsing(&self, key: &str) -> bool {
-        let (jumps, learned) = &self.lapsing_jumps;
-        *learned
+    /// Are the jumps left out for coming too late still left out (she's learned nothing since
+    /// that might change it)?
+    fn lapsing_now(&self) -> bool {
+        self.lapsing_jumps.1
             == self
                 .knowledge
                 .learned
                 .values()
                 .map(BTreeSet::len)
                 .sum::<usize>()
-            && jumps.contains(key)
     }
 
     /// The exits held back (nothing of them offered or planned through) or given back, from

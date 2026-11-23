@@ -171,6 +171,7 @@ impl View {
     /// keys held, where she stands); see the plan module. The one-off analysis (the upper bound,
     /// what the relaxed plan needs) is done here first.
     pub fn plan(&self, start: Point, goals: &[Point], q: &Plan<'_>) -> Option<Route> {
+        let _timed = crate::debug::Timed::new("nav.plan");
         let n = &self.nav;
         let goal_polys: BTreeSet<usize> = goals.iter().filter_map(|&g| n.poly_at(g)).collect();
         let start_poly = n.poly_at(start)?;

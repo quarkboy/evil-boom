@@ -250,6 +250,7 @@ impl Explorer {
     /// Steps to get to an objective and do it, through what's known (using switches she has
     /// learned on the way if need be).
     pub fn route_to(&mut self, obj: &Objective, obs: &Observation) -> Option<Vec<Step>> {
+        let _timed = crate::debug::Timed::new("explorer.route_to");
         // No way there last time, with nothing a plan goes by changed since: none now. What she's
         // offered comes from a rougher reckoning than the planner's, and a goal the planner can't
         // reach costs a whole search each time.
@@ -259,7 +260,9 @@ impl Explorer {
             trigger_line: obj.trigger.as_ref().map(|t| t.line),
             try_other_activators: matches!(obj.kind, Kind::Switch | Kind::Door | Kind::Exit),
         };
+        let lap = Instant::now();
         let sig = self.plan_signature(obs);
+        crate::debug::lap("explorer.signature", lap);
         if self
             .no_route
             .get(&goal)
@@ -292,6 +295,12 @@ impl Explorer {
         route
     }
 
+    /// Did a route search use up its whole budget this tic? (For whoever asks for routes only
+    /// to advise: one such in a tic is enough.)
+    pub fn search_maxed(&self, tic: i64) -> bool {
+        self.maxed_tic == tic
+    }
+
     /// Forget the goals there was no route to (`drive budget`: searched for again).
     pub fn forget_no_routes(&mut self) {
         self.no_route.clear();
@@ -302,6 +311,24 @@ impl Explorer {
     /// here (for where she's starting from).
     fn plan_signature(&mut self, obs: &Observation) -> u64 {
         use std::hash::{Hash, Hasher};
+        // (kept for the tic: a choice of what to do next asks the way to four things or so, a
+        // signature each, and it's most of what asking costs: what she knows of every
+        // trigger gone through. Within a tic only these move it: what she can reach as last
+        // listed, the jumps left out, and the last resorts in force)
+        let moves = (
+            obs.tic,
+            self.reach.len(),
+            self.reach.first().copied(),
+            self.reach.last().copied(),
+            self.banned_jumps().len(),
+            self.missed_jumps_in,
+            self.strafing_allowed,
+        );
+        if let Some((m, sig)) = self.signature_kept
+            && m == moves
+        {
+            return sig;
+        }
         let mut h = std::collections::hash_map::DefaultHasher::new();
         // What she knows of the level as the view has it, but where she's walked only as far as it's
         // somewhere she knows no other way: the view takes the two together, and walking over floor
@@ -349,7 +376,9 @@ impl Explorer {
             }
         }
         self.reach.hash(&mut h);
-        h.finish()
+        let sig = h.finish();
+        self.signature_kept = Some((moves, sig));
+        sig
     }
 
     fn plan_route(
@@ -358,11 +387,16 @@ impl Explorer {
         obs: &Observation,
         failed: (GoalKey, u64),
     ) -> Option<Vec<Step>> {
+        let _timed = crate::debug::Timed::new("explorer.plan_route");
+        let lap = Instant::now();
         let view = self.view();
+        let lap = crate::debug::lap("explorer.view", lap);
         let nav = Rc::clone(&self.nav);
         let keys = obs.keys.unwrap_or_default();
         let states = self.states();
+        let lap = crate::debug::lap("explorer.states", lap);
         self.crusher_entry_costs(&view, &states, obs);
+        let lap = crate::debug::lap("explorer.crusher_costs", lap);
         let k = &self.knowledge;
         let mut key_items: Vec<(Key, Vec<(usize, Point)>)> = Vec::new();
         for th in k.known_things() {
@@ -374,8 +408,10 @@ impl Explorer {
                 }
             }
         }
+        let lap = crate::debug::lap("explorer.key_items", lap);
         // The once-only lines she has used this life are spent.
         let fired = self.spent_once();
+        crate::debug::lap("explorer.spent_once", lap);
         let budget = (self.plan_expansions >> self.budget_cuts.min(MAX_BUDGET_CUTS))
             .max(MIN_EXPANSIONS.min(self.plan_expansions));
         // From the floor she's on: on a lip, not the drop her middle is over.

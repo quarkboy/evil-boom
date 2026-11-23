@@ -827,6 +827,7 @@ impl View {
         states: &States,
         doors: Option<&Doors>,
     ) -> Option<Path> {
+        let _timed = crate::debug::Timed::new("nav.find_path");
         let doors = doors.filter(|d| !d.is_empty());
         let strict = self.nav.strict_fit;
         let found = self.with_core(|nav, _| {
@@ -1087,6 +1088,7 @@ impl View {
         key_items: &[(Key, Vec<(usize, Point)>)],
         triggers: &[&TriggerLine],
     ) -> (BTreeSet<usize>, States, Keys) {
+        let _timed = crate::debug::Timed::new("nav.saturate");
         let mut states = states.clone();
         let mut keys = keys;
         let mut fired: BTreeSet<i64> = BTreeSet::new();

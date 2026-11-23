@@ -291,6 +291,7 @@ impl Explorer {
     ///
     /// With nothing at all, she stands, and where she can get to is noted as a trap.
     pub(super) fn next(&mut self, obs: &Observation, hooks: &mut dyn Hooks) {
+        let _timed = crate::debug::Timed::new("explorer.next");
         self.follower = None;
         let suited = self.knowledge.protected(obs.tic);
         if suited && !self.suited && self.short_of_health.is_some() {

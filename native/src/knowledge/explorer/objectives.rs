@@ -289,10 +289,15 @@ impl Explorer {
             })
             .collect();
         let lap = crate::debug::lap("explorer.before_gather", lap);
+        let glap = lap;
         out.extend(self.exits(&by_line, &reach, keys, pos));
+        let glap = crate::debug::lap("g.exits", glap);
         out.extend(self.keys_seen(&view, &states, &reach, keys, pos));
+        let glap = crate::debug::lap("g.keys_seen", glap);
         out.extend(self.ammo_for_tapping(obs, &reach));
+        let glap = crate::debug::lap("g.ammo_for_tapping", glap);
         out.extend(self.untried(&by_line, &reach, keys, pos, (&view, &states, &states_all)));
+        let glap = crate::debug::lap("g.untried", glap);
         let again = self.pressed_again(obs, &by_line, &reach, keys, pos);
         if self.suspecting != Suspecting::No {
             let panic = self.suspecting == Suspecting::EveryWall;
@@ -325,15 +330,26 @@ impl Explorer {
             }
         }
         out.extend(self.teleporters(&reach, pos));
+        let glap = crate::debug::lap("g.teleporters", glap);
         out.extend(self.frontier(&reach, pos));
+        let glap = crate::debug::lap("g.frontier", glap);
         out.extend(self.recheck(&reach, pos));
+        let glap = crate::debug::lap("g.recheck", glap);
         out.extend(self.unfinished(&reach, pos));
+        let glap = crate::debug::lap("g.unfinished", glap);
         out.extend(self.unvisited(&reach, pos));
+        let glap = crate::debug::lap("g.unvisited", glap);
         out.extend(self.healing(obs, &reach));
+        let glap = crate::debug::lap("g.healing", glap);
         out.extend(self.spare_pickups(obs, &reach));
+        let glap = crate::debug::lap("g.spare_pickups", glap);
         out.extend(self.get_off(obs, &reach, risky));
+        let glap = crate::debug::lap("g.get_off", glap);
         out.extend(self.secrets_again(&reach, pos));
+        let glap = crate::debug::lap("g.secrets_again", glap);
         out.extend(self.noises(&reach, pos, obs.tic));
+        let glap = crate::debug::lap("g.noises", glap);
+        let _ = glap;
         let lap = crate::debug::lap("explorer.gather", lap);
         out.extend(hooks.wanted(self, obs, &reach, pos));
         // Out of ammo, and the nearest thing she needs (health, ammo) a long way off: the walls
