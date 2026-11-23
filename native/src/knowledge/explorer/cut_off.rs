@@ -51,6 +51,8 @@ pub(super) struct WayBack<'a> {
     untried: Vec<&'a TriggerLine>,
     /// where she could get back to from each poly asked about so far
     afters: BTreeMap<usize, BTreeSet<usize>>,
+    /// the polys asked about that she can get back from (to where she is now)
+    returns: BTreeSet<usize>,
 }
 
 impl WayBack<'_> {
@@ -91,7 +93,26 @@ impl WayBack<'_> {
     /// line can be), a door's face she hasn't tried, a switch or door not tried yet that she
     /// could press from there (as `shuts_in` has it). No way out known isn't no way out.
     fn lost_from(&mut self, p: usize) -> (BTreeSet<usize>, bool) {
+        // (most places she'd go she can come back from, and for those the first way back is
+        // all that's asked: the flood stops at where she is, or at anywhere already known to
+        // have a way back. Everything a place leads to, as below, is worked out only for one
+        // that has none. A flood a candidate was half of what choosing cost on a big level.
+        // With the doors that come back shut: what else `from` would open, it opens for a
+        // place that gets to one of these too, so a way back found here is one there)
+        if self.returns.contains(&p) {
+            return (BTreeSet::new(), true);
+        }
         if !self.afters.contains_key(&p) {
+            let (here, returns) = (self.now.here, &self.returns);
+            if self
+                .view
+                .reaches(p, &self.states_back, Some(&self.doors), &|q| {
+                    q == here || returns.contains(&q)
+                })
+            {
+                self.returns.insert(p);
+                return (BTreeSet::new(), true);
+            }
             let after = self.from(p);
             self.afters.insert(p, after);
         }
@@ -250,6 +271,7 @@ impl Explorer {
                 .filter_map(|li| by_line.get(li).copied())
                 .collect(),
             afters: BTreeMap::new(),
+            returns: BTreeSet::new(),
         }
     }
 

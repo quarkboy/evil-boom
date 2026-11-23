@@ -747,6 +747,52 @@ impl NavCore {
         seen
     }
 
+    /// Does the flood fill from `start` get to a poly that `stop` picks (`start` among them)?
+    /// As `reachable`, but done as soon as it does: asking whether somewhere can be got back
+    /// from needs no more than the first way back. (Gone on from nearest the likely way back
+    /// first, a queue by distance, was tried: no quicker on E2M7, MAP14 or MAP15, the first
+    /// way back being a few polys off as a rule; left plain.)
+    pub fn reaches(
+        &mut self,
+        start: usize,
+        st: &mut dyn HeightSource,
+        doors: Option<&Doors>,
+        stop: &dyn Fn(usize) -> bool,
+    ) -> bool {
+        if stop(start) {
+            return true;
+        }
+        let mut seen: HashSet<usize> = HashSet::from_iter([start]);
+        let mut todo = vec![start];
+        while let Some(poly) = todo.pop() {
+            for i in 0..self.adj[poly].len() {
+                let to = self.adj[poly][i].to;
+                if !seen.contains(&to)
+                    && self.enterable(to)
+                    && self.edge_passable(poly, i, st, doors)
+                {
+                    if stop(to) {
+                        return true;
+                    }
+                    seen.insert(to);
+                    todo.push(to);
+                }
+            }
+            for ti in 0..self.tele[poly].len() {
+                let dest = self.tele[poly][ti].dest;
+                if !seen.contains(&dest) && self.tele_known(poly, ti) && self.tele_ok(poly, ti, st)
+                {
+                    if stop(dest) {
+                        return true;
+                    }
+                    seen.insert(dest);
+                    todo.push(dest);
+                }
+            }
+        }
+        false
+    }
+
     /// How the flood fill gets from `start` to `goal`, if it does: the polys on the way, each with
     /// how it was entered (a portal, a teleport or jump), for tracing what it takes for reachable.
     pub fn reach_chain(

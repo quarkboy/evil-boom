@@ -245,6 +245,7 @@ impl Explorer {
         if let Some((_, found)) = self.suspects.as_ref().filter(|(k, _)| *k == key) {
             return found.clone();
         }
+        let _whole = crate::debug::Timed::new("explorer.suspicious");
         let places = Spots::new(known.difference(reach).map(|&p| mesh.poly(p).center));
         let near = |q: Point, r: f64| places.near(q, r);
         let found = self

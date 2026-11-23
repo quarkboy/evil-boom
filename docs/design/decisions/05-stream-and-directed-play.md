@@ -4274,3 +4274,29 @@ Now the walls are dropped only with a way out known, as `searching_secrets` alre
 it. E2M1 on skill 4, three seeds, on instinct: no wall tried before, 10 to 15 after, the
 exit found each time both ways (those seeds didn't find the four secrets first: the case
 itself isn't reproduced). The director's only (`resorts` given): parity all 24 the same.
+
+### The way back asked for as far as the first one (2026-11-23)
+
+E2M7 through Gary: 102 tics over 25 ms in its first eleven minutes, the director taking an
+explore order to its next step, a ranking by the explorer each time. In a ranking, nearly
+half went on one question put of every candidate, "could she get back from there?",
+answered by a flood from the candidate over everything it leads to (`WayBack::from`). Nearly
+everywhere has a way back, and for those the first one is the whole answer.
+
+`reaches` (nav, view): the flood done as soon as it gets to a poly that's asked for.
+`lost_from` asks it first, for where she is or anywhere already known to have a way back;
+the whole flood only for a place with none, where what it would cut off is wanted. Four
+more floods in the route's checks asked only whether there's a way (a floor that doesn't
+hurt from a drop's landing; either end of a jump from under it; straight back to where she
+is, twice) and ask `reaches` now, the fuller reckoning after it where there was one.
+
+E2M7, the bot alone, the same run: choosing 17 ms a time, then 10; the question itself
+8.1 ms, then 1.4. The model's E2M7 actions replayed (same seed): tics over 14 ms 56, then
+12; over 25 ms 7, then 1. Parity all 24 the same.
+
+Tried and left out: the flood gone on from nearest where she is first, a queue by distance
+(the maintainer's thought, a small A*). No quicker on E2M7, MAP14 or MAP15: the first way
+back is a few polys off as a rule. MAP14, a level of pits and moats, still spends 13 ms a
+choice here, on the places that do have no way back. What else a choice costs on E2M7:
+the walls weighed for secrets (3.4 ms, every wall mapped, each time she knows more), the
+routes (2.4), the spots to see unseen walls from (1.3).

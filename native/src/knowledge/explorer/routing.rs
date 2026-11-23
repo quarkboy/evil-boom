@@ -773,10 +773,11 @@ impl Explorer {
                         .iter()
                         .copied()
                         .find(|&p| nav.sector_of_poly(p) == s);
+                    // (the first floor that doesn't hurt is all that's asked: `reaches`)
                     let way_off = landing.is_some_and(|p| {
-                        view.reachable(p, &route.states, None)
-                            .iter()
-                            .any(|&q| !self.knowledge.damaging(nav.sector_of_poly(q)))
+                        view.reaches(p, &route.states, None, &|q| {
+                            !self.knowledge.damaging(nav.sector_of_poly(q))
+                        })
                     });
                     if !way_off {
                         return Some(Refusal::DropOntoHarm { sector: s });
@@ -953,6 +954,11 @@ impl Explorer {
             .iter()
             .filter(|t| !t.effects.is_empty())
             .collect();
+        // (a way straight back to where she is, as things stand: no need of all she could get
+        // to from there. What she could set off on the way only adds to it)
+        if view.reaches(end, &states, None, &|q| q == here) {
+            return None;
+        }
         let after = view.saturate(end, &states, keys, &[], &actions).0;
         if after.contains(&here)
             || !after
@@ -1183,8 +1189,8 @@ impl Explorer {
         let stuck: Vec<usize> = under
             .into_values()
             .filter(|&poly| {
-                let back = view.reachable(poly, states, None);
-                !back.contains(&from) && !back.contains(&jump.dest_poly)
+                // (a way to either end of the jump is all that's asked)
+                !view.reaches(poly, states, None, &|q| q == from || q == jump.dest_poly)
             })
             .collect();
         stuck
@@ -1267,6 +1273,10 @@ impl Explorer {
             .iter()
             .filter(|t| !t.effects.is_empty())
             .collect();
+        // (as above: a way straight back, and it's no dead end)
+        if view.reaches(end, &states, None, &|q| q == here) {
+            return false;
+        }
         let after = view.saturate(end, &states, keys, &[], &actions).0;
         if after.contains(&here) {
             return false;

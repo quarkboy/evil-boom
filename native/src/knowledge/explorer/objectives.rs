@@ -299,6 +299,7 @@ impl Explorer {
         out.extend(self.untried(&by_line, &reach, keys, pos, (&view, &states, &states_all)));
         let glap = crate::debug::lap("g.untried", glap);
         let again = self.pressed_again(obs, &by_line, &reach, keys, pos);
+        let glap = crate::debug::lap("g.pressed_again", glap);
         if self.suspecting != Suspecting::No {
             let panic = self.suspecting == Suspecting::EveryWall;
             out.extend(self.walls(obs, &reach, panic));
@@ -329,6 +330,7 @@ impl Explorer {
                 }
             }
         }
+        let glap = crate::debug::lap("g.walls", glap);
         out.extend(self.teleporters(&reach, pos));
         let glap = crate::debug::lap("g.teleporters", glap);
         out.extend(self.frontier(&reach, pos));

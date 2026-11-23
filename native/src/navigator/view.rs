@@ -818,6 +818,19 @@ impl View {
             .collect()
     }
 
+    /// Can she get from `start` to a poly `stop` picks, with these heights? (`reachable`, done
+    /// at the first such poly.)
+    pub fn reaches(
+        &self,
+        start: usize,
+        states: &States,
+        doors: Option<&Doors>,
+        stop: &dyn Fn(usize) -> bool,
+    ) -> bool {
+        let doors = doors.filter(|d| !d.is_empty());
+        self.with_core(|nav, _| nav.reaches(start, &mut StatesSource::new(states), doors, stop))
+    }
+
     /// A path from `start` to `goal` (A* over polys; a stretch the box can't get through is
     /// searched round; if every way squeezes, the least squeezed, or None with strict_fit).
     pub fn find_path(
