@@ -904,6 +904,16 @@ impl Knowledge {
         out
     }
 
+    /// The switches and doors she knows of and hasn't worked, and the exits, as one number:
+    /// the same again, there's none she hadn't. (Cheap: no ways worked out.)
+    pub fn workable(&self) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        self.interactables().hash(&mut h);
+        self.exits().hash(&mut h);
+        h.finish()
+    }
+
     /// How much she knows, as counts (lines mapped, sectors, lines fired, effects learned): the
     /// same again, nothing new has come into view or been found out.
     pub fn amount(&self) -> [usize; 4] {

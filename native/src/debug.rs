@@ -108,6 +108,34 @@ pub fn timed<T>(label: &'static str, f: impl FnOnce() -> T) -> T {
     out
 }
 
+/// A stretch of a function begun at `began` is over: kept under `label` if it was slow and
+/// `EVIL_DEBUG_SLOW` asks (for where a closure won't go). The time now, for the next stretch.
+pub fn lap(label: &'static str, began: std::time::Instant) -> std::time::Instant {
+    let now = std::time::Instant::now();
+    if let Some(over) = slow_over() {
+        let ms = now.duration_since(began).as_secs_f64() * 1000.0;
+        if ms >= over {
+            SLOW.with(|s| s.borrow_mut().push((label, ms)));
+        }
+    }
+    now
+}
+
+/// The rest of a function, timed from here to wherever it leaves (`let _t = Timed::new(..)`).
+pub struct Timed(&'static str, std::time::Instant);
+
+impl Timed {
+    pub fn new(label: &'static str) -> Timed {
+        Timed(label, std::time::Instant::now())
+    }
+}
+
+impl Drop for Timed {
+    fn drop(&mut self) {
+        lap(self.0, self.1);
+    }
+}
+
 /// A tic's over: what of it was slow, said.
 pub fn slow_report(tic: i64) {
     if slow_over().is_none() {

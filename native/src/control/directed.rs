@@ -473,7 +473,7 @@ pub struct Director {
     /// the explorer's rankings asked for this tic (`open::ranked`)
     open_kept: std::cell::RefCell<Vec<open::OpenKept>>,
     /// what she knew, and when, as the news last listed what's open (safe, risky)
-    news_listed: [(([usize; 4], usize), i64); 2],
+    news_listed: [((u64, usize), i64); 2],
     /// her own plans told her this life (`plans.rs`)
     plans_told: Vec<crate::tactical::player::Plan>,
     told_items: std::collections::BTreeSet<i32>,
@@ -727,7 +727,7 @@ impl Director {
         self.places = None;
         self.told_exits.clear();
         self.fresh_ranking();
-        self.news_listed = [(([0; 4], 0), 0); 2];
+        self.news_listed = [((0, 0), 0); 2];
         self.told_complete = false;
         self.told_items.clear();
         self.out_of_reach.clear();
@@ -1106,6 +1106,7 @@ impl Director {
             });
             return;
         }
+        let _orders = crate::debug::Timed::new("director.orders");
         match self.doing.take() {
             None => {
                 // (waiting: never on a floor that hurts)

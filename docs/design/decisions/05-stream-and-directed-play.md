@@ -4205,3 +4205,13 @@ Three lives, run for run against the base:
 All within the test's noise (exit +0.009, s.e. 0.011; deaths -0.017, s.e. 0.020), no run
 stalled in any. The first row is why the memory is the director's only: in the 14 runs it
 touched, 3 fewer exits and 8 more deaths.
+
+The same replay in a window, before and after: late frames 2.1% then 0.8%, the worst gap
+277 ms then 77, frames over 50 ms 187 then 23. Then the news keyed on the switches, doors
+and exits she knows of (`Knowledge::workable`: no ways worked out), not on everything she
+knows, which changes every second of exploring: its slow tics 193, then 97; tics that lose a
+frame (over 14 ms) in the nine minutes 487 at the start, 293, then 201. What's left is one
+ranking at a time, 8 to 13 ms: the next step of an order of hers (`director.orders`), the
+bot's own choice (`agent.act`), an action answered. Inside the ranking, gathering what
+there is (6 ms) and trying the ways to it (6 to 8) are the two that cost; what she can
+reach is quick. Those are the explorer's own, and the bot's without a director too.

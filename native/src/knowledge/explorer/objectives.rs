@@ -202,6 +202,7 @@ impl Explorer {
         let t_sat = Instant::now();
         let (reach, states_all, _) = view.saturate(here, &states, keys, &[], &actions);
         self.stats.saturate_secs += t_sat.elapsed().as_secs_f64();
+        let lap = crate::debug::lap("explorer.reach", t_sat);
         if crate::debug::on().reach == Some(obs.tic) {
             let sectors: BTreeSet<usize> = reach.iter().map(|&p| nav.sector_of_poly(p)).collect();
             self.log.push(format!(
@@ -287,6 +288,7 @@ impl Explorer {
                     .collect::<Vec<_>>()
             })
             .collect();
+        let lap = crate::debug::lap("explorer.before_gather", lap);
         out.extend(self.exits(&by_line, &reach, keys, pos));
         out.extend(self.keys_seen(&view, &states, &reach, keys, pos));
         out.extend(self.ammo_for_tapping(obs, &reach));
@@ -332,6 +334,7 @@ impl Explorer {
         out.extend(self.get_off(obs, &reach, risky));
         out.extend(self.secrets_again(&reach, pos));
         out.extend(self.noises(&reach, pos, obs.tic));
+        let lap = crate::debug::lap("explorer.gather", lap);
         out.extend(hooks.wanted(self, obs, &reach, pos));
         // Out of ammo, and the nearest thing she needs (health, ammo) a long way off: the walls
         // round her first, searched as hard as a search for secrets goes. What a level hides
@@ -377,6 +380,7 @@ impl Explorer {
         };
         let back = self.way_back(&nav, &view, now, &by_line);
         let mut sift = self.sift(obs, risky, back, exit_polys);
+        let lap = crate::debug::lap("explorer.back_and_sift", lap);
         // With nothing else left, the ways between rooms never walked over (walk-over lines are
         // thresholds), and last of all those onto floors that hurt.
         // (what's wanted only to take on to another level, set aside: what's to do now, and what
@@ -387,6 +391,7 @@ impl Explorer {
         });
         self.stock_aside = aside;
         let first = self.usable(obs, hooks, &mut sift, out);
+        crate::debug::lap("explorer.usable", lap);
         if !first.is_empty() {
             return first;
         }
