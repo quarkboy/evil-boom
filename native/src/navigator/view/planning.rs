@@ -7,7 +7,7 @@ use super::{key_bit, states_of, world, Leg, LowVariant, Plan, Route, Step, View}
 use crate::det::HashMap;
 use crate::geom::{point_key, Point};
 use crate::nav::{can_cross, Heights, HeightsKey};
-use crate::navigator::{Effects, States, TeleEdge, TriggerLine};
+use crate::navigator::{add_height, Effects, States, TeleEdge, TriggerLine};
 use crate::plan::{KeySet, Kind, PlanFacts, Planner, Query, Trigger as PlanTrigger};
 use crate::specials::{Key, Keys, Lock, Trigger};
 use std::collections::{BTreeMap, BTreeSet};
@@ -21,6 +21,22 @@ const WIDER_EXPANSIONS: usize = 2000;
 const RELAXED_GOAL_LIMIT: usize = 200;
 /// Share of the full budget used after the narrow search proves its choices insufficient.
 const WIDER_BUDGET_DIVISOR: usize = 10;
+
+/// No level opens in more steps than this (and a search for needs isn't worth more).
+const MAX_STAGES: usize = 48;
+
+/// `View::stages`: per stage what was in reach, the heights and the doors then; the stage each
+/// line was set off at; and which lines made each height.
+type Parents = BTreeMap<usize, (Option<usize>, Option<Step>)>;
+
+#[derive(Default)]
+struct Stages {
+    worlds: Vec<(BTreeSet<usize>, States, crate::navigator::Doors)>,
+    /// per stage, where its reach was flooded from
+    sources: Vec<BTreeSet<usize>>,
+    fired: BTreeMap<i64, usize>,
+    made: BTreeMap<(usize, HeightsKey), Vec<i64>>,
+}
 
 impl View {
     /// A height-dependent trigger's effects with the sectors round it at the lowest any trigger
@@ -189,26 +205,31 @@ impl View {
         if goal_polys.is_disjoint(&reach_all) {
             return None;
         }
-        let (rel_t, rel_k) = self.relaxed_needs(
-            start_poly,
-            &goal_polys,
-            &states0,
-            q.key_items,
-            &actions,
-            (&reach_all, &states_all, keys_all),
-        );
-        // (and every line that does just what one of those does: a lift's called from its top
-        // by one line and from its foot by another, and the relaxed plan names the one)
-        let same: Vec<&Effects> = actions
-            .iter()
-            .filter(|t| rel_t.contains(&t.line))
-            .map(|t| &t.effects)
-            .collect();
-        let rel_same: BTreeSet<i64> = actions
-            .iter()
-            .filter(|t| rel_t.contains(&t.line) || same.contains(&&t.effects))
-            .map(|t| t.line)
-            .collect();
+        let needs = |staged: bool| {
+            let (rel_t, rel_k) = self.relaxed_needs(
+                start_poly,
+                &goal_polys,
+                (&states0, q.keys),
+                q.key_items,
+                &actions,
+                (&reach_all, &states_all, keys_all),
+                staged,
+            );
+            // (and every line that does just what one of those does: a lift's called from its
+            // top by one line and from its foot by another, and the relaxed plan names the one)
+            let same: Vec<&Effects> = actions
+                .iter()
+                .filter(|t| rel_t.contains(&t.line))
+                .map(|t| &t.effects)
+                .collect();
+            let rel_same: BTreeSet<i64> = actions
+                .iter()
+                .filter(|t| rel_t.contains(&t.line) || same.contains(&&t.effects))
+                .map(|t| t.line)
+                .collect();
+            (rel_t, rel_k, rel_same)
+        };
+        let (rel_t, rel_k, rel_same) = needs(false);
         if crate::debug::on().relaxed {
             self.relaxed_gaps(
                 start_poly,
@@ -232,7 +253,7 @@ impl View {
             .enumerate()
             .map(|(i, t)| (t.id, i))
             .collect();
-        let query = Query {
+        let ask = |rel_t: &BTreeSet<i64>, rel_k: Keys, rel_same: &BTreeSet<i64>| Query {
             start,
             goals: goals.to_vec(),
             keys: KeySet(q.keys.0),
@@ -254,6 +275,7 @@ impl View {
             strict_fit: n.strict_fit,
             fired: q.fired.clone(),
         };
+        let mut query = ask(&rel_t, rel_k, &rel_same);
         let facts = self.plan_facts();
         crate::stats::reset();
         let t0 = std::time::Instant::now();
@@ -262,11 +284,45 @@ impl View {
         // routes needed more. Not every set of every switch in the level first, to find there's
         // no way: with a dozen switches that's thousands of steps and half a minute. A way with
         // those: the route as ever, from them all; the few lines' route can be another, worse)
-        let narrow = self.with_core(|nav, caches| {
+        let mut narrow = self.with_core(|nav, caches| {
             Planner::new(nav, facts, caches).plan(&query, world(&states0))
         });
-        let none =
+        let mut none =
             narrow.is_none() && crate::stats::last_ended() == Some(crate::stats::Ended::Exhausted);
+        let first_clean =
+            narrow.is_some() && crate::stats::last_ended() == Some(crate::stats::Ended::Found);
+        let mut staged_clean = false;
+        let mut other: Option<Query> = None;
+        // (no way with those lines: the same asked of the level as it opens, stage by stage.
+        // The needs above are read off one way to the goal with every line set off, and that
+        // way can be one only the level's end opens, its lines the wrong ones: Memento Mori
+        // MAP06, into the last hall by the exit's teleporter and not through the warehouses)
+        if none {
+            let (t2, k2, same2) = needs(true);
+            if t2 != rel_t || k2 != rel_k {
+                if crate::debug::on().relaxed {
+                    eprintln!(
+                        "relaxed: by stages, lines {:?} keys {:?}",
+                        t2,
+                        k2.iter().map(Key::name).collect::<Vec<_>>()
+                    );
+                }
+                // (a way by them: that. None: on as before, the search from every line
+                // pointed as the first needs point it, which find ways these don't)
+                let by_stages = ask(&t2, k2, &same2);
+                let second = self.with_core(|nav, caches| {
+                    Planner::new(nav, facts, caches).plan(&by_stages, world(&states0))
+                });
+                if second.is_some() {
+                    none = false;
+                    staged_clean = crate::stats::last_ended() == Some(crate::stats::Ended::Found);
+                    narrow = second;
+                    query = by_stages;
+                } else {
+                    other = Some(by_stages);
+                }
+            }
+        }
         if none && crate::debug::on().relaxed {
             let furthest = self.with_core(|_, caches| caches.furthest.take());
             if let Some((reach, w, lines)) = furthest {
@@ -289,8 +345,7 @@ impl View {
         // (a way with the few lines and the box fitting all along it: that's the route. The
         // search from them all after it found the same way or one no better by anything it
         // measures, in as many seconds as the level has switches)
-        let clean =
-            narrow.is_some() && crate::stats::last_ended() == Some(crate::stats::Ended::Found);
+        let clean = first_clean || staged_clean;
         // (a tenth of the budget, which comes down as searches use theirs up: the explorer's)
         let max_expansions = if none {
             (q.max_expansions / WIDER_BUDGET_DIVISOR).min(WIDER_EXPANSIONS)
@@ -308,6 +363,20 @@ impl View {
             self.with_core(|nav, caches| {
                 Planner::new(nav, facts, caches).plan(&wider, world(&states0))
             })
+        };
+        // (nor from them all, pointed so: from them all pointed as the stages have it)
+        let found = match other {
+            Some(by_stages) if found.is_none() && narrow.is_none() => {
+                let wider = Query {
+                    useful_lines: None,
+                    max_expansions,
+                    ..by_stages
+                };
+                self.with_core(|nav, caches| {
+                    Planner::new(nav, facts, caches).plan(&wider, world(&states0))
+                })
+            }
+            _ => found,
         };
         if crate::stats::enabled() {
             eprintln!("{}", crate::stats::report(t0.elapsed().as_secs_f64()));
@@ -499,23 +568,155 @@ impl View {
         }
     }
 
+    /// Breadth first from `sources` with these heights and doors, till a poly of `target` is
+    /// come to (if one's given): each poly's parent and how it was come into, and that poly.
+    fn flood_from(
+        &self,
+        sources: &BTreeSet<usize>,
+        st: &States,
+        doors: &crate::navigator::Doors,
+        target: Option<&BTreeSet<usize>>,
+        jumps: bool,
+    ) -> (Parents, Option<usize>) {
+        let n = &self.nav;
+        let mesh = &n.mesh;
+        let mut parent: Parents = sources.iter().map(|&p| (p, (None, None))).collect();
+        let mut todo: std::collections::VecDeque<usize> = sources.iter().copied().collect();
+        while let Some(p) = todo.pop_front() {
+            if target.is_some_and(|t| t.contains(&p)) {
+                return (parent, Some(p));
+            }
+            let mut moves: Vec<(usize, Step)> = mesh
+                .poly(p)
+                .portals
+                .iter()
+                .filter(|&&pi| n.passable(pi, p, st, Some(doors), self.spent()))
+                .map(|&pi| (mesh.portals[pi].other(p), Step::Portal(pi)))
+                .collect();
+            moves.extend(
+                n.tele_from[p]
+                    .iter()
+                    .filter(|&&e| {
+                        !matches!(e, TeleEdge::Jump(j) if !jumps || self.banned_jumps.contains(&j))
+                            && n.edge_ok(e, st)
+                    })
+                    .map(|&e| (n.edge_dest(e).0, Step::Tele(e))),
+            );
+            for (to, via) in moves {
+                if let std::collections::btree_map::Entry::Vacant(e) = parent.entry(to) {
+                    e.insert((Some(p), Some(via)));
+                    todo.push_back(to);
+                }
+            }
+        }
+        (parent, None)
+    }
+
+    /// The level as it opens: what's in reach with nothing set off, then with every line
+    /// usable from there set off and every key there taken, and so on till nothing's added.
+    /// Each stage's reach is what the one before had and what can be walked to from any of
+    /// it with the heights as they are then: a move for good is instead of what was (a floor
+    /// raised once isn't walked into low and out of high), and where she's been stays hers
+    /// though the way there has shut.
+    fn stages(
+        &self,
+        start: usize,
+        (states0, keys0): (&States, Keys),
+        key_items: &[(Key, Vec<(usize, Point)>)],
+        triggers: &[&TriggerLine],
+        jumps: bool,
+    ) -> Stages {
+        let mut out = Stages::default();
+        let mut states = states0.clone();
+        let mut keys = keys0;
+        let mut reach: BTreeSet<usize> = BTreeSet::from([start]);
+        for stage in 0..MAX_STAGES {
+            let doors = self.local_doors(keys);
+            // (from where she's been, but for the floors that have moved since: on one of
+            // those she's only if it's walked onto as it is now)
+            if let Some((_, was, _)) = out.worlds.last() {
+                reach.retain(|&p| {
+                    let sec = self.nav.sector_of_poly(p);
+                    was[sec] == states[sec]
+                });
+                reach.insert(start);
+            }
+            out.sources.push(reach.clone());
+            reach = self
+                .flood_from(&reach, &states, &doors, None, jumps)
+                .0
+                .into_keys()
+                .collect();
+            let new: Vec<&TriggerLine> = triggers
+                .iter()
+                .copied()
+                .filter(|t| {
+                    !out.fired.contains_key(&t.line)
+                        && !t.activators.is_disjoint(&reach)
+                        && t.info.lock.satisfied(keys)
+                })
+                .collect();
+            let new_keys: Vec<Key> = key_items
+                .iter()
+                .filter(|(k, spots)| !keys.has(*k) && spots.iter().any(|(p, _)| reach.contains(p)))
+                .map(|(k, _)| *k)
+                .collect();
+            out.worlds.push((reach.clone(), states.clone(), doors));
+            if new.is_empty() && new_keys.is_empty() {
+                break;
+            }
+            for k in new_keys {
+                keys = keys.with(k);
+            }
+            let before = states.clone();
+            for t in new {
+                out.fired.insert(t.line, stage);
+                for (s, hs) in self.nav.effects_now(t, &states) {
+                    // (instead of what it was at as the stage began; beside what another
+                    // line of this stage has made of it)
+                    if t.permanent() && !hs.is_empty() {
+                        states[s].retain(|h| !before[s].contains(h));
+                    }
+                    for h in hs {
+                        out.made.entry((s, h.key())).or_default().push(t.line);
+                        add_height(&mut states[s], h);
+                    }
+                }
+            }
+        }
+        out
+    }
+
     /// The relaxed plan (order ignored): which triggers and keys a route to `goals` depends on.
     /// A path to the goal in the saturated world; every crossing that needs a moved height names
     /// the trigger(s) making it, every locked door a key; then the same for those triggers'
     /// activators and those keys' spots, till nothing new is needed. It points the search at
     /// the level's critical chain.
+    ///
+    /// `staged`: each target's way is looked for first in the level as it stood when the
+    /// target first came into reach (`stages`), and a height's makers are taken earliest
+    /// first: what's needed for it then was all to be had before it.
+    #[allow(clippy::too_many_arguments)]
     fn relaxed_needs(
         &self,
         start: usize,
         goals: &BTreeSet<usize>,
-        states0: &States,
+        (states0, keys0): (&States, Keys),
         key_items: &[(Key, Vec<(usize, Point)>)],
         triggers: &[&TriggerLine],
         (reach_all, states_all, keys_all): (&BTreeSet<usize>, &States, Keys),
+        staged: bool,
     ) -> (BTreeSet<i64>, Keys) {
         let n = &self.nav;
-        let mesh = &n.mesh;
         let doors_all = self.local_doors(keys_all);
+        let (stages, on_foot) = if staged {
+            (
+                self.stages(start, (states0, keys0), key_items, triggers, true),
+                self.stages(start, (states0, keys0), key_items, triggers, false),
+            )
+        } else {
+            (Stages::default(), Stages::default())
+        };
         let mut producers: BTreeMap<(usize, HeightsKey), Vec<&TriggerLine>> = BTreeMap::new();
         let mut assumed: BTreeMap<(usize, HeightsKey), Vec<(usize, Heights)>> = BTreeMap::new();
         for &t in triggers {
@@ -564,14 +765,32 @@ impl View {
         // wall it lowers, and what's needed is the way there before it has)
         let mut before: BTreeMap<BTreeSet<usize>, (usize, Heights)> = BTreeMap::new();
         let mut seen_goals: BTreeSet<BTreeSet<usize>> = BTreeSet::new();
-        while let Some(target) = queue.pop() {
-            if seen_goals.len() >= RELAXED_GOAL_LIMIT {
+        // (by stages, the ways back as well: from where a line's set off to what it was set
+        // off for. Where she's been isn't hers for nothing: the switch is deep in the level
+        // and what it opens is by the start, and the way between has its own lines)
+        let mut legs: Vec<(BTreeSet<usize>, BTreeSet<usize>)> = Vec::new();
+        let mut seen_legs: BTreeSet<(BTreeSet<usize>, BTreeSet<usize>)> = BTreeSet::new();
+        loop {
+            let (target, from) = if let Some(t) = queue.pop() {
+                (t, None)
+            } else if let Some((t, f)) = legs.pop() {
+                (t, Some(f))
+            } else {
+                break;
+            };
+            if seen_goals.len() + seen_legs.len() >= RELAXED_GOAL_LIMIT {
                 break;
             }
-            if seen_goals.contains(&target) || target.is_disjoint(reach_all) {
+            if target.is_disjoint(reach_all) {
                 continue;
             }
-            seen_goals.insert(target.clone());
+            if let Some(f) = &from {
+                if !seen_legs.insert((target.clone(), f.clone())) {
+                    continue;
+                }
+            } else if !seen_goals.insert(target.clone()) {
+                continue;
+            }
             let earlier: Option<(States, crate::navigator::Doors)> = before
                 .get(&target)
                 .filter(|(s, _)| states_all[*s].len() > 1)
@@ -584,7 +803,42 @@ impl View {
                 });
             // breadth first with parents, in the saturated world (without the height the
             // target's wanted for, if there's a way then)
-            let mut found = None;
+            // (by stages: from anywhere the stage before had, with the heights of the stage
+            // the target first comes into reach at; where that way begins is wanted in its
+            // turn, and so back to the start)
+            let mut founds: Vec<(usize, Parents, &States)> = Vec::new();
+            // (and the same of the level as it opens with no jump made: a jump the flood
+            // takes isn't always one the search does, and the lines of the way on foot are
+            // then the ones wanted. Memento Mori MAP06: the blue card's walkway by a jump
+            // from the hall below it, or by its teleporter)
+            for (which, jumps) in [(&stages, true), (&on_foot, false)] {
+                if let Some(f) = &from {
+                    // (a way back: in the level as it ends up)
+                    let Some((_, st, doors_t)) = which.worlds.last() else {
+                        continue;
+                    };
+                    let (parent, end) = self.flood_from(f, st, doors_t, Some(&target), jumps);
+                    if let Some(end) = end {
+                        founds.push((end, parent, st));
+                    }
+                    continue;
+                }
+                let Some(at) = which.worlds.iter().position(|w| !target.is_disjoint(&w.0)) else {
+                    continue;
+                };
+                let (_, st, doors_t) = &which.worlds[at];
+                let (parent, end) =
+                    self.flood_from(&which.sources[at], st, doors_t, Some(&target), jumps);
+                let Some(end) = end else { continue };
+                let mut src = end;
+                while let (Some(prev), _) = parent[&src] {
+                    src = prev;
+                }
+                if src != start {
+                    queue.push(BTreeSet::from([src]));
+                }
+                founds.push((end, parent, st));
+            }
             for world in [
                 earlier.as_ref().map(|(st, d)| (st, d)),
                 Some((states_all, &doors_all)),
@@ -592,135 +846,161 @@ impl View {
             .into_iter()
             .flatten()
             {
-                let (st, doors_t) = world;
-                let mut parent: BTreeMap<usize, (Option<usize>, Option<Step>)> =
-                    BTreeMap::from([(start, (None, None))]);
-                let mut todo = std::collections::VecDeque::from([start]);
-                let mut end = None;
-                while let Some(p) = todo.pop_front() {
-                    if target.contains(&p) {
-                        end = Some(p);
-                        break;
-                    }
-                    let mut moves: Vec<(usize, Step)> = mesh
-                        .poly(p)
-                        .portals
-                        .iter()
-                        .filter(|&&pi| n.passable(pi, p, st, Some(doors_t), self.spent()))
-                        .map(|&pi| (mesh.portals[pi].other(p), Step::Portal(pi)))
-                        .collect();
-                    moves.extend(
-                        n.tele_from[p]
-                            .iter()
-                            .filter(|&&e| {
-                                !matches!(e, TeleEdge::Jump(j) if self.banned_jumps.contains(&j))
-                                    && n.edge_ok(e, st)
-                            })
-                            .map(|&e| (n.edge_dest(e).0, Step::Tele(e))),
-                    );
-                    for (to, via) in moves {
-                        if let std::collections::btree_map::Entry::Vacant(e) = parent.entry(to) {
-                            e.insert((Some(p), Some(via)));
-                            todo.push_back(to);
-                        }
-                    }
-                }
-                if let Some(end) = end {
-                    found = Some((end, parent, st));
+                if !founds.is_empty() || from.is_some() {
                     break;
                 }
+                let (st, doors_t) = world;
+                let (parent, end) =
+                    self.flood_from(&BTreeSet::from([start]), st, doors_t, Some(&target), true);
+                if let Some(end) = end {
+                    founds.push((end, parent, st));
+                }
             }
-            let Some((end, parent, st)) = found else {
+            if founds.is_empty() {
                 continue;
-            };
+            }
             let mut needed: BTreeSet<(usize, HeightsKey)> = BTreeSet::new();
             let mut needed_h: BTreeMap<(usize, HeightsKey), Heights> = BTreeMap::new();
-            let mut p = end;
-            while let (Some(prev), via) = parent[&p] {
-                match via {
-                    Some(Step::Tele(TeleEdge::Jump(j))) => {
-                        for &(s, h) in &n.jumps[j].requires {
-                            needed.insert((s, h.key()));
-                            needed_h.insert((s, h.key()), h);
+            for (end, parent, st) in founds {
+                if staged && crate::debug::on().relaxed {
+                    // (the way found, by sector, and how each was come into)
+                    let mut chain: Vec<String> = Vec::new();
+                    let mut q = end;
+                    while let (Some(prev), via) = parent[&q] {
+                        let s = n.sector_of_poly(q);
+                        let how = match via {
+                            Some(Step::Tele(TeleEdge::Jump(_))) => "jump ",
+                            Some(Step::Tele(TeleEdge::Teleport(_))) => "teleport ",
+                            _ => "",
+                        };
+                        if !how.is_empty() || chain.last().is_none_or(|l| *l != s.to_string()) {
+                            chain.push(format!("{how}{s}"));
                         }
+                        q = prev;
                     }
-                    Some(Step::Portal(pi))
-                        if !n.passable(pi, prev, states0, None, self.spent()) =>
-                    {
-                        // (the lines of moving sectors in the box's way at the portal now and
-                        // not in the end, a fence's posts: what brings them down is needed)
-                        let now = n.gate_blockers(pi, prev, states0, None);
-                        let then = n.gate_blockers(pi, prev, states_all, Some(&doors_all));
-                        for li in now.into_iter().filter(|l| !then.contains(l)) {
-                            let (f, b) = n.map.sides(li);
-                            for s in [f, b].into_iter().flatten() {
-                                let moved = states_all[s]
+                    chain.reverse();
+                    eprintln!(
+                        "relaxed: by stages, the way to polys {:?}: sectors {}",
+                        target.iter().take(3).collect::<Vec<_>>(),
+                        chain.join(" > ")
+                    );
+                }
+                let mut p = end;
+                while let (Some(prev), via) = parent[&p] {
+                    match via {
+                        Some(Step::Tele(TeleEdge::Jump(j))) => {
+                            for &(s, h) in &n.jumps[j].requires {
+                                needed.insert((s, h.key()));
+                                needed_h.insert((s, h.key()), h);
+                            }
+                        }
+                        // (a teleporter whose line can't be stepped over as the map starts, its pad
+                        // up on a block or down a well: what brings it level)
+                        Some(Step::Tele(e @ TeleEdge::Teleport(i)))
+                            if staged && !n.edge_ok(e, states0) =>
+                        {
+                            if let (Some(f), Some(b)) = n.map.sides(n.teleports[i].line) {
+                                let new = |x: &Heights, y: &Heights| {
+                                    usize::from(!states0[f].contains(x))
+                                        + usize::from(!states0[b].contains(y))
+                                };
+                                let pair = st[f]
                                     .iter()
-                                    .filter(|h| !states0[s].contains(h))
-                                    .min_by(|x, y| x.floor.total_cmp(&y.floor));
-                                if let Some(&h) = moved {
-                                    needed.insert((s, h.key()));
-                                    needed_h.insert((s, h.key()), h);
-                                }
-                                // (bars she opens herself, with a key: the key)
-                                if doors_all.contains_key(&s) {
-                                    for t in &self.triggers {
-                                        if t.sectors.contains(&s)
-                                            && t.info.lock != Lock::None
-                                            && let Some(k) =
-                                                key_for(t.info.lock).filter(|k| !need_k.has(*k))
-                                        {
-                                            need_k = need_k.with(k);
-                                            queue.push(spots_of(k));
+                                    .flat_map(|&x| {
+                                        st[b]
+                                            .iter()
+                                            .filter(move |&&y| can_cross(x, y))
+                                            .map(move |&y| (x, y))
+                                    })
+                                    .min_by_key(|(x, y)| new(x, y));
+                                if let Some((x, y)) = pair {
+                                    for (s, h) in [(f, x), (b, y)] {
+                                        if !states0[s].contains(&h) {
+                                            needed.insert((s, h.key()));
+                                            needed_h.insert((s, h.key()), h);
                                         }
                                     }
                                 }
                             }
                         }
-                        let (sa, sb) = (n.sector_of_poly(prev), n.sector_of_poly(p));
-                        let pairs: Vec<(Heights, Heights)> = st[sa]
-                            .iter()
-                            .flat_map(|&ha| {
-                                st[sb]
-                                    .iter()
-                                    .filter(move |&&hb| can_cross(ha, hb))
-                                    .map(move |&hb| (ha, hb))
-                            })
-                            .collect();
-                        // (fewest heights not there now; of those, the lowest floors: what's been
-                        // brought down is the likelier way through)
-                        let new = |ha: &Heights, hb: &Heights| {
-                            usize::from(!states0[sa].contains(ha))
-                                + usize::from(!states0[sb].contains(hb))
-                        };
-                        if let Some(&(ha, hb)) = pairs.iter().min_by(|(a1, b1), (a2, b2)| {
-                            new(a1, b1)
-                                .cmp(&new(a2, b2))
-                                .then((a1.floor + b1.floor).total_cmp(&(a2.floor + b2.floor)))
-                        }) {
-                            for (s, h) in [(sa, ha), (sb, hb)] {
-                                if !states0[s].contains(&h) {
-                                    needed.insert((s, h.key()));
-                                    needed_h.insert((s, h.key()), h);
+                        Some(Step::Portal(pi))
+                            if !n.passable(pi, prev, states0, None, self.spent()) =>
+                        {
+                            // (the lines of moving sectors in the box's way at the portal now and
+                            // not in the end, a fence's posts: what brings them down is needed)
+                            let now = n.gate_blockers(pi, prev, states0, None);
+                            let then = n.gate_blockers(pi, prev, states_all, Some(&doors_all));
+                            for li in now.into_iter().filter(|l| !then.contains(l)) {
+                                let (f, b) = n.map.sides(li);
+                                for s in [f, b].into_iter().flatten() {
+                                    let moved = states_all[s]
+                                        .iter()
+                                        .filter(|h| !states0[s].contains(h))
+                                        .min_by(|x, y| x.floor.total_cmp(&y.floor));
+                                    if let Some(&h) = moved {
+                                        needed.insert((s, h.key()));
+                                        needed_h.insert((s, h.key()), h);
+                                    }
+                                    // (bars she opens herself, with a key: the key)
+                                    if doors_all.contains_key(&s) {
+                                        for t in &self.triggers {
+                                            if t.sectors.contains(&s)
+                                                && t.info.lock != Lock::None
+                                                && let Some(k) =
+                                                    key_for(t.info.lock).filter(|k| !need_k.has(*k))
+                                            {
+                                                need_k = need_k.with(k);
+                                                queue.push(spots_of(k));
+                                            }
+                                        }
+                                    }
                                 }
                             }
-                        } else if doors_all.contains_key(&sb) {
-                            // a use-door: which key does it need?
-                            for t in &self.triggers {
-                                if t.sectors.contains(&sb)
-                                    && t.info.lock != Lock::None
-                                    && let Some(k) =
-                                        key_for(t.info.lock).filter(|k| !need_k.has(*k))
-                                {
-                                    need_k = need_k.with(k);
-                                    queue.push(spots_of(k));
+                            let (sa, sb) = (n.sector_of_poly(prev), n.sector_of_poly(p));
+                            let pairs: Vec<(Heights, Heights)> = st[sa]
+                                .iter()
+                                .flat_map(|&ha| {
+                                    st[sb]
+                                        .iter()
+                                        .filter(move |&&hb| can_cross(ha, hb))
+                                        .map(move |&hb| (ha, hb))
+                                })
+                                .collect();
+                            // (fewest heights not there now; of those, the lowest floors: what's been
+                            // brought down is the likelier way through)
+                            let new = |ha: &Heights, hb: &Heights| {
+                                usize::from(!states0[sa].contains(ha))
+                                    + usize::from(!states0[sb].contains(hb))
+                            };
+                            if let Some(&(ha, hb)) = pairs.iter().min_by(|(a1, b1), (a2, b2)| {
+                                new(a1, b1)
+                                    .cmp(&new(a2, b2))
+                                    .then((a1.floor + b1.floor).total_cmp(&(a2.floor + b2.floor)))
+                            }) {
+                                for (s, h) in [(sa, ha), (sb, hb)] {
+                                    if !states0[s].contains(&h) {
+                                        needed.insert((s, h.key()));
+                                        needed_h.insert((s, h.key()), h);
+                                    }
+                                }
+                            } else if doors_all.contains_key(&sb) {
+                                // a use-door: which key does it need?
+                                for t in &self.triggers {
+                                    if t.sectors.contains(&sb)
+                                        && t.info.lock != Lock::None
+                                        && let Some(k) =
+                                            key_for(t.info.lock).filter(|k| !need_k.has(*k))
+                                    {
+                                        need_k = need_k.with(k);
+                                        queue.push(spots_of(k));
+                                    }
                                 }
                             }
                         }
+                        _ => {}
                     }
-                    _ => {}
+                    p = prev;
                 }
-                p = prev;
             }
             if crate::debug::on().relaxed {
                 eprintln!(
@@ -740,7 +1020,35 @@ impl View {
                 );
             }
             for sh in needed {
-                let cands: Vec<&TriggerLine> = producers.get(&sh).cloned().unwrap_or_default();
+                let mut cands: Vec<&TriggerLine> = producers.get(&sh).cloned().unwrap_or_default();
+                if staged {
+                    // (and what made it as the level opened, where it's a height two lines
+                    // make between them: the one that finished it, and a maker of each part
+                    // of it, floor and ceiling)
+                    let h = needed_h[&sh];
+                    let init = n.movers.initial[sh.0];
+                    for &t in triggers {
+                        if cands.iter().any(|c| c.line == t.line) {
+                            continue;
+                        }
+                        let finished = stages.made.get(&sh).is_some_and(|ls| ls.contains(&t.line));
+                        let part = !producers.contains_key(&sh)
+                            && !t.activators.is_disjoint(reach_all)
+                            && t.effects.iter().any(|(s, hs)| {
+                                *s == sh.0
+                                    && hs.iter().any(|x| {
+                                        (x.floor == h.floor && h.floor != init.floor)
+                                            || (x.ceiling == h.ceiling && h.ceiling != init.ceiling)
+                                    })
+                            });
+                        if finished || part {
+                            cands.push(t);
+                        }
+                    }
+                    let at =
+                        |t: &TriggerLine| stages.fired.get(&t.line).copied().unwrap_or(usize::MAX);
+                    cands.sort_by_key(|t| at(t));
+                }
                 // A producer that can be got to without what it makes (a switch that opens a door
                 // from inside isn't one); if there's none, and the sector is a locked door as well,
                 // that door's key is what's really needed.
@@ -803,11 +1111,22 @@ impl View {
                         queue.push(t2.activators.clone());
                     }
                 }
-                let chosen: Vec<&TriggerLine> = match first {
+                let mut chosen: Vec<&TriggerLine> = match first {
                     Some(t) => vec![t],
                     None => cands.iter().take(1).copied().collect(),
                 };
+                // (a height no one line makes: every maker of a part of it)
+                if staged && !producers.contains_key(&sh) {
+                    chosen = cands.clone();
+                }
                 for t in chosen {
+                    if staged {
+                        let at: BTreeSet<usize> =
+                            t.activators.intersection(reach_all).copied().collect();
+                        if !at.is_empty() {
+                            legs.push((target.clone(), at));
+                        }
+                    }
                     if !need_t.insert(t.line) {
                         continue;
                     }
