@@ -109,9 +109,10 @@ copy; [DEBUGGING.md](DEBUGGING.md) explains how to read it.
 evil-boom record doom E1M1 out/e1m1.mp4 --view game --fight 3 --mortal
 ```
 
-An MP4 (H.264, through `ffmpeg`), played as fast as it goes; directed runs record in real time,
-with the game's sound. `--view game|full|hud`, `--size WxH`, `--speed N`, `--episode`, `--crf N`,
-`--preset P`, `--ffmpeg PATH`.
+An MP4 (H.264, through `ffmpeg`) with the game's sound (none when sped up), played as fast as it
+goes; directed runs record in real time. `--view game|full|hud|stream` (`stream`: the stream's
+16:9 window, with `--hide ITEMS` for the column's items not shown), `--size WxH`, `--speed N`,
+`--episode`, `--crf N`, `--preset P`, `--ffmpeg PATH`.
 
 ## The stream console
 

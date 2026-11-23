@@ -177,11 +177,16 @@ Its settings and token are kept in config/console.local.json. See docs/CONSOLE.m
 const RECORD: &str = "\
 Usage: evil-boom record WAD MAP OUT.mp4 [OPTIONS]
 
-A run recorded to an MP4 (H.264, through ffmpeg), played as fast as it goes. Directed runs
-(--neuro, --gpt, --directed) record in real time, with the game's sound.
+A run recorded to an MP4 (H.264, through ffmpeg) with the game's sound (none when sped up
+with --speed), played as fast as it goes. Directed runs (--neuro, --gpt, --directed) record in
+real time.
 
-  --view game|full|hud    the game's view; the whole watch window; or the game with what she's
-                          doing over it and a map in the corner (hud unless told)
+  --view game|full|hud|stream
+                          the game's view; the whole watch window; the game with what she's
+                          doing over it and a map in the corner (hud unless told); or the
+                          stream's 16:9 window, the game and the viewers' column
+  --hide ITEMS            (the stream view) the column's items not shown, commas between:
+                          logo, chat, level, map, now, calls, asked, says, tally, run, lately
   --size WxH              the video's size
   --speed N               N times as fast (whole numbers)
   --episode               on through the episode

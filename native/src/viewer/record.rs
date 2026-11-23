@@ -19,6 +19,8 @@ pub enum RecordView {
     /// the game's view with what she's at over it (health, ammo, what she's doing, the fight,
     /// a map in the corner)
     Hud,
+    /// the stream's 16:9 window (the game and the viewers' column), 1920x1080
+    Stream,
 }
 
 /// How to record.
@@ -33,6 +35,8 @@ pub struct RecordOptions {
     pub crf: u32,
     pub preset: String,
     pub ffmpeg: std::path::PathBuf,
+    /// the stream view's column items not shown (`console::COLUMN_ITEMS`: chat, logo, ...)
+    pub hide: Vec<String>,
 }
 
 /// ffmpeg: on the path, else where winget put it.
@@ -82,8 +86,18 @@ pub fn record(
 ) -> Result<(), String> {
     use std::io::Write;
     let (w, mut watch) = first_watch(wad, map_name, o, false)?;
+    if r.view == RecordView::Stream {
+        watch.stream = Some(stream::Stream::new(
+            o.stream.unwrap_or(stream::Side::Right),
+            o.fight,
+        ));
+        if let Some(st) = watch.stream.as_mut() {
+            st.hidden = r.hide.clone();
+        }
+    }
     let (fw, fh) = match r.view {
         RecordView::Full => (W, H),
+        RecordView::Stream => (stream::SW, stream::SH),
         RecordView::Hud => (GAME.2, GAME.3),
         RecordView::Game => {
             watch.tic();
@@ -166,10 +180,15 @@ pub fn record(
         r.out.display()
     );
     let mut began = Instant::now();
+    let (cw, ch) = if r.view == RecordView::Stream {
+        (stream::SW, stream::SH)
+    } else {
+        (W, H)
+    };
     let mut canvas = Canvas {
-        px: vec![0; W * H],
-        width: W,
-        clip: (0, 0, W, H),
+        px: vec![0; cw * ch],
+        width: cw,
+        clip: (0, 0, cw, ch),
         text_scale: 1.0,
     };
     if r.view == RecordView::Hud {
@@ -232,6 +251,12 @@ pub fn record(
                     }
                     for &i in px {
                         bytes.extend_from_slice(&watch.palette[usize::from(i)].to_le_bytes());
+                    }
+                }
+                RecordView::Stream => {
+                    watch.draw_stream(&mut canvas);
+                    for &p in &canvas.px {
+                        bytes.extend_from_slice(&p.to_le_bytes());
                     }
                 }
                 RecordView::Full => {

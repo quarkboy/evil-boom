@@ -726,12 +726,13 @@ fn watch(args: &[String]) -> Result<(), String> {
 }
 
 /// A run watched into an MP4 (see `viewer::record`): evil-boom record <wad> <map> <out.mp4>
-/// [--view game|full|hud] [--size WxH] [--speed N] [--ffmpeg PATH] [--episode] [run options].
+/// [--view game|full|hud|stream] [--hide ITEMS] [--size WxH] [--speed N] [--ffmpeg PATH] [--episode] [run options].
 #[cfg(feature = "viewer")]
 fn record(args: &[String]) -> Result<(), String> {
     use evilboom::viewer::{RecordOptions, RecordView};
     let (mut view, mut size, mut every, mut ffmpeg) = (RecordView::Hud, None, 1u32, None);
     let (mut crf, mut preset) = (20u32, "veryfast".to_string());
+    let mut hide = Vec::new();
     let mut rest = Vec::new();
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -741,7 +742,8 @@ fn record(args: &[String]) -> Result<(), String> {
                     Some("game") => RecordView::Game,
                     Some("full") => RecordView::Full,
                     Some("hud") => RecordView::Hud,
-                    _ => return Err("--view game|full|hud".into()),
+                    Some("stream") => RecordView::Stream,
+                    _ => return Err("--view game|full|hud|stream".into()),
                 };
             }
             "--size" => {
@@ -761,6 +763,14 @@ fn record(args: &[String]) -> Result<(), String> {
             "--ffmpeg" => {
                 ffmpeg = Some(std::path::PathBuf::from(it.next().ok_or("--ffmpeg PATH")?))
             }
+            "--hide" => {
+                hide = it
+                    .next()
+                    .ok_or("--hide ITEMS (the stream column's, commas between)")?
+                    .split(',')
+                    .map(str::to_string)
+                    .collect()
+            }
             "--crf" => {
                 crf = it
                     .next()
@@ -779,7 +789,7 @@ fn record(args: &[String]) -> Result<(), String> {
     let (mut w, names, _) = watch_options(&rest)?;
     cli::no_flags(&names)?;
     let [wad, map, out] = names.as_slice() else {
-        return Err("usage: evil-boom record <wad> <map> <out.mp4> [--view game|full|hud] [--size WxH] [--speed N] [--episode] [options]".into());
+        return Err("usage: evil-boom record <wad> <map> <out.mp4> [--view game|full|hud|stream] [--size WxH] [--speed N] [--episode] [options]".into());
     };
     // (the game's sound, at x1: each tic's beside each frame)
     w.capture_sound = every == 1;
@@ -802,6 +812,7 @@ fn record(args: &[String]) -> Result<(), String> {
             crf,
             preset,
             ffmpeg,
+            hide,
         },
     )
 }
