@@ -288,6 +288,15 @@ impl Navigator {
         let mut results: Vec<String> = Vec::with_capacity(verdicts.len());
         let mut jumps: Vec<Jump> = Vec::with_capacity(verdicts.len());
         for (j, r) in self.jumps.iter().zip(verdicts) {
+            // (EVIL_DEBUG_JUMPS_INTO=<sector>: every jump found into it and how its check went)
+            if crate::debug::on().jumps_into == Some(self.mesh.poly(j.dest_poly).sector) {
+                eprintln!(
+                    "jump found into sector {}: from {:?} off ({:.0}, {:.0}) to ({:.0}, {:.0}), run-up from ({:.0}, {:.0}), speed {:.1}: {r}",
+                    self.mesh.poly(j.dest_poly).sector,
+                    j.src_polys.iter().map(|&p| self.mesh.poly(p).sector).collect::<BTreeSet<_>>(),
+                    j.takeoff.0, j.takeoff.1, j.dest.0, j.dest.1, j.runup.0, j.runup.1, j.speed
+                );
+            }
             // The launch is timed against the floor motion, so retain the
             // simulated landing only if the player can stop there.
             if j.rising.is_some() && !(r == OK || r.starts_with("ok~") || r.starts_with(SOFT)) {
@@ -381,6 +390,12 @@ impl Navigator {
             .into_iter()
             .zip(sure)
             .filter_map(|((mut j, _), s)| {
+                if crate::debug::on().jumps_into == Some(self.mesh.poly(j.dest_poly).sector) {
+                    eprintln!(
+                        "  the one off ({:.0}, {:.0}) to ({:.0}, {:.0}): sure {s:.2}",
+                        j.takeoff.0, j.takeoff.1, j.dest.0, j.dest.1
+                    );
+                }
                 j.sure = s;
                 (s >= MIN_SURE).then_some(j)
             })

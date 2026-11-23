@@ -94,7 +94,9 @@ over. `Player::force_target` does the same for a target, from code.
 - `EVIL_DEBUG_SCOUT=1` (with `--known`): keeps the log of the pass beforehand.
 - `EVIL_DEBUG_REACH=<tic>`: her reach at that tic (polys, portals out of it); with
   `EVIL_DEBUG_HEIGHTS=58,59` those sectors' heights too: real, last seen, believed.
-- `EVIL_DEBUG_JUMPS_INTO=<sector>`: the jumps the planner has into a sector.
+- `EVIL_DEBUG_JUMPS_INTO=<sector>`: the jumps the planner has into a sector. With `dump-nav`
+  (stderr): every jump the finder found into it, how its check in the simulator went and how
+  sure the kept ones are.
 - `EVIL_DEBUG_USE=1`: every use press in the knowledge events: where, facing (after the tic's
   turn, as the game traces it), the line the model has it hit.
 - `EVIL_DEBUG_DEAD_END=1`: for a drop refused as a dead end: the sectors she'd have after it
