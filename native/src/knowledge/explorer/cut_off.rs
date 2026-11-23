@@ -354,6 +354,7 @@ impl Explorer {
         let switch_in_harm = |o: &Objective| {
             o.kind == Kind::Switch
                 && !*shut_in
+                && !self.wade_switches
                 && nav
                     .poly_at(o.goal)
                     .is_some_and(|p| self.knowledge.damaging(nav.sector_of_poly(p)))

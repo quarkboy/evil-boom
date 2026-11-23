@@ -279,7 +279,8 @@ impl Explorer {
     /// 1. the ordinary objectives, the safe ones and then the risky ones (`ordinary`);
     /// 2. what only a strafing run-jump gets to (`strafing_runs`);
     /// 3. the places she got stuck, another go (`stuck_places_again`);
-    /// 4. walls that might hide something (`suspect_walls`);
+    /// 4. a switch she can see, pressed from a floor that hurts (`switches_waded_for`), then
+    ///    walls that might hide something (`suspect_walls`);
     /// 5. what was given up on lately, another go (`given_up_again`);
     /// 6. every wall round her (`every_wall`);
     /// 7. the level again, if whoever plays it would rather (`Hooks::before_exit`); a wait for
@@ -314,6 +315,7 @@ impl Explorer {
         self.strafing_allowed = false;
         self.harm_allowed = false;
         self.harm_ways_only = false;
+        self.wade_switches = false;
         self.known_again = false;
         self.from_dead_end = false;
         self.resort_wanted = None;
@@ -338,6 +340,9 @@ impl Explorer {
         }
         if !found {
             found = self.way_on_by_legs(obs, hooks);
+        }
+        if !found {
+            found = self.switches_waded_for(obs, hooks);
         }
         if !found && perceive && self.suspecting == Suspecting::No {
             found = self.suspect_walls(obs, hooks);
@@ -533,6 +538,30 @@ impl Explorer {
             self.knowledge.note(Note::Stuck(p, STUCK_TIMES - 1));
         }
         self.safe_then_risky(obs, hooks)
+    }
+
+    /// Nothing else but walls: a switch she can see, pressed from a floor that hurts, with
+    /// floor that doesn't to come back to. The health margin stands, and so does what's kept
+    /// from being cut off (`usable`): only the rule that no switch is pressed from such a floor
+    /// while there's other floor is lifted, before the walls and not after them. A switch
+    /// someone built is a better guess at the way on than any plain wall. (Memento Mori MAP05:
+    /// the way on is a lift called from a switch in a recess of the nukage moat. Seen in the
+    /// first minutes, pressed in the 58th: every wall of the level came first.)
+    fn switches_waded_for(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
+        if !self.may(Resort::Harm) {
+            return false;
+        }
+        self.wade_switches = true;
+        let found = self.safe_then_risky(obs, hooks);
+        if found {
+            self.log.push(format!(
+                "tic {}: nothing else to do but walls: a switch from a floor that hurts",
+                obs.tic
+            ));
+        } else {
+            self.wade_switches = false;
+        }
+        found
     }
 
     /// Nothing else: walls that might hide something, pressed in turn. Leaves `suspecting` at
