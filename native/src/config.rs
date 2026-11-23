@@ -268,6 +268,55 @@ pub fn write_log(path: &Path, extra: &str, text: &str) -> std::io::Result<()> {
     std::fs::write(stamped(path, extra), text)
 }
 
+/// How much of a watch's log is kept (`watch --log`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LogLevel {
+    /// none written
+    Off,
+    /// what Evil's told and asked, what she does, the Neuro layer, levels and deaths: a sixth
+    /// of the whole. The newest `LOGS_KEPT` kept, the rest cleared away
+    Brief,
+    /// all of it, the fight's reasoning, the explorer's choices and the route follower's steps
+    /// too: for tracing a run. Every one kept
+    Full,
+}
+
+/// at `LogLevel::Brief`, this many of a log's dated copies are kept
+const LOGS_KEPT: usize = 20;
+
+impl LogLevel {
+    pub fn named(word: &str) -> Option<LogLevel> {
+        Some(match word {
+            "off" | "none" => LogLevel::Off,
+            "brief" => LogLevel::Brief,
+            "full" | "all" => LogLevel::Full,
+            _ => return None,
+        })
+    }
+
+    /// The level unless told: all of it from a checkout, where it's what a change is traced
+    /// by; brief from a release, whose player has no use for the rest till something's wrong
+    /// (then: `--log full`).
+    pub fn usual() -> LogLevel {
+        if release_dir().is_some() {
+            LogLevel::Brief
+        } else {
+            LogLevel::Full
+        }
+    }
+
+    /// Is this line of her log (as the agent has it, before its time's put on) one to write?
+    /// The explorer's begin "tic N:", the fight's and the follower's are indented; the rest
+    /// is what she's told and does, the Neuro layer, a level's or a life's end.
+    pub fn keeps(self, line: &str) -> bool {
+        match self {
+            LogLevel::Off => false,
+            LogLevel::Full => true,
+            LogLevel::Brief => !line.starts_with("tic ") && !line.starts_with(' '),
+        }
+    }
+}
+
 /// A log written as it goes, to `path` (the latest) and its kept name both.
 pub struct Log {
     files: Vec<std::fs::File>,
@@ -275,8 +324,20 @@ pub struct Log {
 
 impl Log {
     pub fn create(path: &Path, extra: &str) -> std::io::Result<Log> {
+        Log::create_at(path, extra, LogLevel::Full)
+    }
+
+    /// ...at a level: none written at `Off`; at `Brief`, the dated copies of this log kept
+    /// to the newest few.
+    pub fn create_at(path: &Path, extra: &str, level: LogLevel) -> std::io::Result<Log> {
+        if level == LogLevel::Off {
+            return Ok(Log { files: Vec::new() });
+        }
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;
+        }
+        if level == LogLevel::Brief {
+            clear_old_logs(path);
         }
         Ok(Log {
             files: vec![
@@ -284,6 +345,38 @@ impl Log {
                 std::fs::File::create(stamped(path, extra))?,
             ],
         })
+    }
+}
+
+/// The dated copies of the log at `path` (live.log: live.*.log beside it), all but the newest
+/// `LOGS_KEPT - 1` removed: room for the one about to be made. Only files of that name's own
+/// shape, in its own folder.
+fn clear_old_logs(path: &Path) {
+    let (Some(dir), Some(stem), Some(ext)) = (
+        path.parent(),
+        path.file_stem().and_then(|s| s.to_str()),
+        path.extension().and_then(|s| s.to_str()),
+    ) else {
+        return;
+    };
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let (head, tail) = (format!("{stem}."), format!(".{ext}"));
+    let mut dated: Vec<(std::time::SystemTime, PathBuf)> = entries
+        .flatten()
+        .filter(|e| {
+            e.file_name().to_str().is_some_and(|n| {
+                n.starts_with(&head) && n.ends_with(&tail) && n.len() > head.len() + tail.len()
+            })
+        })
+        .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
+        .collect();
+    dated.sort();
+    let keep = LOGS_KEPT.saturating_sub(1);
+    let gone = dated.len().saturating_sub(keep);
+    for (_, old) in dated.into_iter().take(gone) {
+        let _ = std::fs::remove_file(old);
     }
 }
 
@@ -297,5 +390,50 @@ impl std::io::Write for Log {
 
     fn flush(&mut self) -> std::io::Result<()> {
         self.files.iter_mut().try_for_each(std::io::Write::flush)
+    }
+}
+
+#[cfg(test)]
+mod log_tests {
+    use super::*;
+
+    #[test]
+    fn brief_keeps_what_shes_told_and_does() {
+        let b = LogLevel::Brief;
+        assert!(b.keeps("<< (!) Exit found: exit-l178 (S 156)."));
+        assert!(b.keeps(">> doom_go {\"ref\":\"area-3\"}"));
+        assert!(b.keeps("neuro: connected"));
+        assert!(b.keeps("--- died: life 2"));
+        assert!(!b.keeps("tic 11282: nothing else to do"));
+        assert!(!b.keeps("  [fight] tic 60: shooting on the way"));
+        assert!(!b.keeps("    [ 544.4s] waiting for the crusher (sector 2) to come up"));
+        assert!(LogLevel::Full.keeps("tic 1: x") && !LogLevel::Off.keeps("<< x"));
+        assert_eq!(LogLevel::named("brief"), Some(LogLevel::Brief));
+    }
+
+    /// At brief, a log's dated copies are kept to the newest few; nothing else in the folder
+    /// is touched.
+    #[test]
+    fn old_logs_cleared_at_brief_only() {
+        let dir = std::env::temp_dir().join(format!("evil-logs-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for i in 0..30 {
+            std::fs::write(dir.join(format!("live.old{i:02}.log")), "x").unwrap();
+        }
+        std::fs::write(dir.join("frames.tsv"), "x").unwrap();
+        std::fs::write(dir.join("other.log"), "x").unwrap();
+        let count = |d: &Path| std::fs::read_dir(d).unwrap().count();
+        // (full: all kept, and the two it writes)
+        drop(Log::create_at(&dir.join("live.log"), "a", LogLevel::Full).unwrap());
+        assert_eq!(count(&dir), 30 + 2 + 2);
+        // (off: nothing written, nothing cleared)
+        drop(Log::create_at(&dir.join("live.log"), "b", LogLevel::Off).unwrap());
+        assert_eq!(count(&dir), 30 + 2 + 2);
+        // (brief: the dated ones down to LOGS_KEPT with its own, the latest, and the others)
+        drop(Log::create_at(&dir.join("live.log"), "c", LogLevel::Brief).unwrap());
+        assert_eq!(count(&dir), LOGS_KEPT + 1 + 2);
+        assert!(dir.join("frames.tsv").exists() && dir.join("other.log").exists());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

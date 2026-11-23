@@ -850,6 +850,7 @@ fn watch_options(
         seed: o.seed,
         focus: None,
         sound: true,
+        log: None,
         directed: None,
         neuro: None,
         gpt: None,
@@ -899,6 +900,13 @@ fn watch_options(
             }
             "--headless" => w.headless = true,
             "--mute" => w.sound = false,
+            "--log" => {
+                let v = it.next().ok_or("--log full|brief|off")?;
+                w.log = Some(
+                    evilboom::config::LogLevel::named(v)
+                        .ok_or(format!("--log: full, brief or off, not \"{v}\""))?,
+                );
+            }
             "--window-size" => {
                 w.window.size = Some(evilboom::dsda::WindowSpec::parse_size(
                     it.next().ok_or("--window-size WIDTHxHEIGHT")?,

@@ -38,6 +38,12 @@ evil-boom help                                       # every command; evil-boom 
 
 (On Windows, `evil-boom.exe` from a command prompt in this folder; on Linux, `./evil-boom`.)
 
+## Logs, and reporting a problem
+
+A watch keeps a short log in `out/watch/` (what Evil was told and did; the newest 20 runs).
+If something goes wrong, run it again with `--log full` and send that run's `live.*.log` with
+your report: it has her reasoning tic by tic. `--log off` writes none.
+
 On Linux, for an entry in the desktop's menu: copy `evil-boom.desktop` to
 `~/.local/share/applications/` with its `Exec` line giving this folder's `evil-boom` in full,
 and `evil-boom.png` to `~/.local/share/icons/`.

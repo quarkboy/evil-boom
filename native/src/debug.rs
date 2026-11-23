@@ -150,3 +150,34 @@ pub fn slow_report(tic: i64) {
         }
     });
 }
+
+/// a frame this long, begun to shown, is said (`slow_frame`): two and a half of the screen's
+const SLOW_FRAME_MS: f64 = 40.0;
+
+/// A frame of the window shown, begun at `began`, its tics played by `stepped`, painted by
+/// `painted`: said to stderr if it was long and `EVIL_DEBUG_SLOW` asks ("slow frame at tic
+/// 15097: 250 ms: step 3, paint 2, present 245"). The whole of it: the engine's own step and
+/// the screen's, which the parts of a tic (`timed`) don't cover; with a step that's short, the
+/// time went outside her.
+pub fn slow_frame(
+    tic: i64,
+    began: std::time::Instant,
+    stepped: std::time::Instant,
+    painted: std::time::Instant,
+) {
+    if slow_over().is_none() {
+        return;
+    }
+    let ms =
+        |a: std::time::Instant, b: std::time::Instant| b.duration_since(a).as_secs_f64() * 1000.0;
+    let shown = std::time::Instant::now();
+    if ms(began, shown) >= SLOW_FRAME_MS {
+        eprintln!(
+            "slow frame at tic {tic}: {:.0} ms: step {:.0}, paint {:.0}, present {:.0}",
+            ms(began, shown),
+            ms(began, stepped),
+            ms(stepped, painted),
+            ms(painted, shown)
+        );
+    }
+}

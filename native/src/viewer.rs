@@ -117,6 +117,8 @@ pub struct WatchOptions {
     /// through the logs) rather than flat out
     pub paced: bool,
     pub seed: Option<u32>,
+    /// how much of the log is kept (`--log`; unless told, `LogLevel::usual`)
+    pub log: Option<crate::config::LogLevel>,
     /// the map view centred on a point, zoomed in this much (for looking at one place)
     pub focus: Option<(f64, f64, f64)>,
     /// the game's sound and music out loud (the window only; off while paused or not at x1)
@@ -651,9 +653,13 @@ fn headless(mut watch: Watch, w: &Wad, o: &WatchOptions) -> Result<(), String> {
     // (the log as it's written, to follow live: tail -f)
     let live = out_dir().join("watch").join("live.log");
     std::fs::create_dir_all(live.parent().unwrap_or(Path::new("."))).map_err(|e| e.to_string())?;
-    let mut log =
-        crate::config::Log::create(&live, &o.seed.map_or_else(String::new, |s| format!("s{s}")))
-            .map_err(|e| e.to_string())?;
+    let level = o.log.unwrap_or_else(crate::config::LogLevel::usual);
+    let mut log = crate::config::Log::create_at(
+        &live,
+        &o.seed.map_or_else(String::new, |s| format!("s{s}")),
+        level,
+    )
+    .map_err(|e| e.to_string())?;
     println!(
         "log: {}{}",
         live.display(),
@@ -701,7 +707,10 @@ fn headless(mut watch: Watch, w: &Wad, o: &WatchOptions) -> Result<(), String> {
             watch.tic();
             let lines = &watch.agent.x().log;
             let at = watch.engine.tic as f64 / TICRATE;
-            for l in &lines[shown.min(lines.len())..] {
+            for l in lines[shown.min(lines.len())..]
+                .iter()
+                .filter(|l| level.keeps(l))
+            {
                 let _ = writeln!(log, "[{at:7.1}s] {l}");
             }
             shown = lines.len();
@@ -971,17 +980,23 @@ pub fn watch_prepared(
 /// A watch window's log, written as it plays (out/watch/live.log, as a headless watch's).
 struct LiveLog {
     log: crate::config::Log,
+    level: crate::config::LogLevel,
     /// the lines of the agent's log written so far, and the level they're of
     shown: usize,
     map: String,
 }
 
 impl LiveLog {
-    fn create(seed: Option<u32>) -> Result<LiveLog, String> {
+    fn create(
+        seed: Option<u32>,
+        level: Option<crate::config::LogLevel>,
+    ) -> Result<LiveLog, String> {
         let live = out_dir().join("watch").join("live.log");
         let tag = seed.map_or_else(String::new, |s| format!("s{s}"));
+        let level = level.unwrap_or_else(crate::config::LogLevel::usual);
         Ok(LiveLog {
-            log: crate::config::Log::create(&live, &tag).map_err(|e| e.to_string())?,
+            log: crate::config::Log::create_at(&live, &tag, level).map_err(|e| e.to_string())?,
+            level,
             shown: 0,
             map: String::new(),
         })
@@ -998,7 +1013,10 @@ impl LiveLog {
         }
         let lines = &watch.agent.x().log;
         let at = watch.engine.tic as f64 / TICRATE;
-        for l in &lines[self.shown.min(lines.len())..] {
+        for l in lines[self.shown.min(lines.len())..]
+            .iter()
+            .filter(|l| self.level.keeps(l))
+        {
             let _ = writeln!(self.log, "[{at:7.1}s] {l}");
         }
         self.shown = lines.len();
@@ -1048,7 +1066,10 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
     }
     let mut owed = 0.0;
     // (her log written as it plays, as a headless watch's is: a watched run read afterwards)
-    let mut live = LiveLog::create(opts.as_ref().and_then(|o| o.seed))?;
+    let mut live = LiveLog::create(
+        opts.as_ref().and_then(|o| o.seed),
+        opts.as_ref().and_then(|o| o.log),
+    )?;
     'frames: loop {
         for event in window::Window::events(&watch.engine.game) {
             use window::key;
@@ -1209,6 +1230,7 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
         paint(&mut watch, &mut canvas, &mut aside);
         let painted = Instant::now();
         window.show(&watch.engine.game, &canvas.px, ww, wh);
+        crate::debug::slow_frame(watch.engine.tic, now, stepped, painted);
         if let Some(f) = frames.as_mut() {
             let picture = watch.frame.as_ref().map_or(&[][..], |f| &f.2[..]);
             f.frame(now, stepped, painted, watch.engine.tic - tic0, picture);

@@ -108,6 +108,10 @@ The game:
   --episode-lives N       her lives for all of it, not each level's (with --mortal)
   --speed X               play speed (1: real time; the sound plays only at 1)
   --mute                  no sound
+  --log full|brief|off    how much of the log is kept in out/watch/: all of it (her fight's
+                          and her route's reasoning: for tracing a run), what she's told
+                          and does (a sixth of it; the newest 20 kept), or none. Unless
+                          told: full from a source checkout, brief from a release
   --all                   the whole map shown, not only what she's seen
   --show-keys             her key presses over the game: each key lit while down, its last
                           three seconds beside it, and her turning (K puts it on and off)
