@@ -93,7 +93,30 @@ fn dump_nav(wad: &str, map: &str) -> Result<(), String> {
         let reached: BTreeSet<usize> = last.reached.iter().filter_map(|&p| sector(p)).collect();
         let all: BTreeSet<usize> = (0..nav.mesh.polys.len()).filter_map(sector).collect();
         println!("sectors reached {} of {}", reached.len(), all.len());
-        let mut edges: BTreeMap<(usize, usize), (usize, Option<usize>)> = BTreeMap::new();
+        if let Ok(v) = std::env::var("EVIL_DEBUG_AT") {
+            let c: Vec<f64> = v.split(',').filter_map(|x| x.parse().ok()).collect();
+            for q in c.chunks(2) {
+                let p = nav.poly_at((q[0], q[1]));
+                println!(
+                    "  at ({}, {}): poly {p:?}, sector {:?}, reached {}",
+                    q[0],
+                    q[1],
+                    p.and_then(sector),
+                    p.is_some_and(|p| last.reached.contains(&p))
+                );
+                if let Some(p) = p {
+                    for &pi in &nav.mesh.polys[p].as_ref().unwrap().portals {
+                        let portal = &nav.mesh.portals[pi];
+                        let o = portal.other(p);
+                        println!("    portal {pi} line {:?} to poly {o} sector {:?} reached {} fits {} passable now {}", portal.linedef, sector(o), last.reached.contains(&o), nav.portal_fits[pi], view.nav.passable(pi, p, &nav.initial_states(), None, &BTreeSet::new()));
+                    }
+                }
+            }
+        }
+        if reached.len() < all.len() {
+            println!("  reached: {reached:?}");
+        }
+        let mut edges: BTreeMap<(usize, usize), (usize, Option<usize>, usize)> = BTreeMap::new();
         for &p in &last.reached {
             let Some(poly) = nav.mesh.polys[p].as_ref() else {
                 continue;
@@ -104,8 +127,9 @@ fn dump_nav(wad: &str, map: &str) -> Result<(), String> {
                 if let (false, Some(to)) = (last.reached.contains(&q), sector(q)) {
                     let e = edges
                         .entry((poly.sector, to))
-                        .or_insert((0, portal.linedef));
+                        .or_insert((0, portal.linedef, 0));
                     e.0 += 1;
+                    e.2 += usize::from(nav.portal_fits[pi]);
                 }
             }
         }
@@ -128,9 +152,9 @@ fn dump_nav(wad: &str, map: &str) -> Result<(), String> {
                 t.line, t.info.description, t.sectors, t.info.lock
             );
         }
-        for ((a, b), (n, line)) in &edges {
+        for ((a, b), (n, line, wide)) in &edges {
             println!(
-                "  reach ends: sector {} | sector {}, line {line:?}, {n} portals",
+                "  reach ends: sector {} | sector {}, line {line:?}, {n} portals ({wide} wide enough)",
                 h(*a),
                 h(*b)
             );

@@ -383,7 +383,18 @@ impl Mesh {
                     (m.vertexes[line.v1], m.vertexes[line.v2])
                 };
                 if poly.len() >= 3 {
-                    poly = clip(&poly, a.point(), (b.x - a.x, b.y - a.y), true);
+                    let cut = clip(&poly, a.point(), (b.x - a.x, b.y - a.y), true);
+                    // (a seg of a two-sided line given to the piece on the line's other side:
+                    // the old node builders leave such, and the game plays them, there being
+                    // floor on both sides. Cut by it, the piece is gone, and with it the only
+                    // way through. Memento Mori MAP06: the room south of the hub had no mesh
+                    // under its doorway, and nothing past it could be reached. The piece
+                    // stands as the nodes cut it)
+                    let two_sided =
+                        line.front != crate::map::NO_SIDEDEF && line.back != crate::map::NO_SIDEDEF;
+                    if !(two_sided && (cut.len() < 3 || area(&cut) < 1.0) && area(&poly) >= 1.0) {
+                        poly = cut;
+                    }
                 }
             }
             let Some(first) = segs.first() else {

@@ -379,8 +379,7 @@ impl JumpLab {
     ) -> bool {
         self.sector_centres.iter().any(|&(s, c)| {
             let d = dist(origin, c);
-            d <= STEP_FLIGHT
-                && d >= 16.0
+            (16.0..=STEP_FLIGHT).contains(&d)
                 && (c.0 - origin.0) * n.0 + (c.1 - origin.1) * n.1 > 0.0
                 && options[s]
                     .iter()
