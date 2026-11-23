@@ -107,13 +107,16 @@ fn bounds(vs: &[Point]) -> (f64, f64, f64, f64) {
     )
 }
 
+/// How far off a line an edge along it may be (units): see `shared_segment`.
+const EDGE_NEAR: f64 = 3.0;
+
 /// The overlap of two collinear segments, or None (with some tolerance for nodebuilder
 /// rounding: a poly's edge is its seg's line carried to the poly's corners, and a seg ending at
 /// a split vertex rounded to whole units leans off its linedef; carried twice its length, the
 /// lean reaches past 2 units. Without it a diagonal face can have no portal: a lift a wall,
 /// the way up it never planned)
 fn shared_segment(a1: Point, a2: Point, b1: Point, b2: Point) -> Option<(Point, Point)> {
-    let tol = 3.0;
+    let tol = EDGE_NEAR;
     let d = (a2.0 - a1.0, a2.1 - a1.1);
     let length = d.0.hypot(d.1);
     if length < 1e-6 {
@@ -480,7 +483,12 @@ impl Mesh {
 
     /// Linedefs collinear with and overlapping the segment p-q, ascending.
     fn lines_on_edge(&self, m: &MapData, p: Point, q: Point) -> Vec<usize> {
-        let mut found: Vec<usize> = cells(p.0, p.1, q.0, q.1)
+        // (the cells a little round it: an edge a split left a hair off its line, along a
+        // line that lies on a boundary of the grid, is in the cells one side of the boundary
+        // and the line in those the other. Memento Mori MAP09: a walk-over line at y 384, the
+        // edge along it at 383.99..., so a portal with no line and a trigger nobody could set
+        // off)
+        let mut found: Vec<usize> = crate::geom::cells_around(p, q, EDGE_NEAR)
             .flat_map(|c| self.line_grid.get(&c).into_iter().flatten().copied())
             .collect();
         found.sort_unstable();
