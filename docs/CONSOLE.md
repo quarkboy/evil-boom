@@ -40,7 +40,7 @@ form's changes first).
 |---|---|---|
 | **Game:** WAD, Level, Skill | `wad`, `map`, `skill` | where she starts (an IWAD by short name only; skill 0 = no monsters) |
 | Seed (testing) | `seed` | a fixed seed, which plays the same each time; empty: random each start |
-| She can die | `mortal` | off: nothing hurts her from the start (the Game card's God mode switches it while she plays) |
+| She can die | `mortal` | off: nothing hurts her from the start (God mode, on the Debug tab, switches it while she plays) |
 | Go on through the episode | `episode` | out by an exit, on to the next level with what she has |
 | Restart the game if it crashes or hangs | `auto_restart` | at the level she was on |
 | **Title card:** Doom's own screens | `present` | the title card, the menu, the melt, the tally, the finales |
@@ -66,8 +66,24 @@ from: the page can never point the game at an arbitrary host.
 
 ## The page
 
-Two columns of sections (one on a narrow screen): the game and its controls, the level, the
-sound, the log, and Evil's card. Evil's card shows her goal, her settings, an open question with
+A top bar and four tabs. The bar is there whatever tab is open: whether the console, the game
+and Neuro are up, where she is (the level, its time, her health and armor), and what's wanted
+mid-stream (Pause, Restart level, Mute, Reconnect Neuro). The tabs, by what you're doing:
+
+- **Live**, while she plays: Run (start, stop, Begin, another level), Talk to Evil, the View,
+  and Evil's side (who's directing, her question with its choices, her calls, what she's told
+  and what she does).
+- **Evil**: her goal and settings, which of them are locked from her, and how soon she's
+  pushed.
+- **Setup**, before a game: Settings (saved, used when a game starts), the stream column, and
+  the sound and picture as each game is given them.
+- **Debug**: speed, god mode and the exits; looking and acting as her, a raw action, why; the
+  log.
+
+`?tab=setup` in the address opens a tab. Within a tab the sections fold, move and open in a
+window of their own as before (Reset layout puts them back).
+
+Evil's card. Evil's card shows her goal, her settings, an open question with
 its choices and countdown, `doom_why`, the last lines told her and her last actions. It can act
 for her: answer the question, set a goal, change a setting, look, ask why, take over the fight.
 Actions from the page are marked as yours, and she's told of them by the name in Settings (`console_name`, Vedal by default). Below her settings, the stream's own: how

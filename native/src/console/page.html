@@ -27,6 +27,26 @@ main { display: grid; gap: 12px; padding: 12px 16px 24px; grid-template-columns:
   #col-split::after { content: ""; display: block; width: 2px; height: 100%; margin: 0 auto; background: var(--line); border-radius: 1px; }
   #col-split:hover::after, #col-split.moving::after { background: var(--evil); }
 }
+#tabs { display: flex; gap: 4px; padding: 8px 16px 0; border-bottom: 1px solid var(--line); }
+#tabs button[data-tab] { border-radius: 8px 8px 0 0; border-bottom: none; padding: 8px 18px; background: transparent; border-color: transparent; color: var(--dim); }
+#tabs button[data-tab]:hover { color: var(--text); }
+#tabs button[data-tab].on { background: var(--panel); border-color: var(--line); color: var(--text); }
+#tabs #layout-reset { margin-left: auto; align-self: center; padding: 3px 10px; font-size: 12px; }
+#top-now { font-size: 13px; }
+#top-actions { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+#top-actions button { padding: 5px 12px; }
+body[data-tab="live"] section[data-tab]:not([data-tab="live"]),
+body[data-tab="evil"] section[data-tab]:not([data-tab="evil"]),
+body[data-tab="setup"] section[data-tab]:not([data-tab="setup"]),
+body[data-tab="debug"] section[data-tab]:not([data-tab="debug"]) { display: none; }
+/* (one column where a tab's sections are all one kind: nothing beside them) */
+body:not([data-tab="live"]) main { grid-template-columns: minmax(0, 1fr); max-width: 1100px; }
+body:not([data-tab="live"]) #col-split { display: none; }
+body:not([data-tab="live"]) .col { min-height: 0; }
+body:not([data-tab="live"]) main { row-gap: 0; }
+body:not([data-tab="live"]) .col:not(:empty) { margin-bottom: 12px; }
+body.popout #tabs { display: none; }
+body.popout section.only { display: block !important; }
 body.resizing { cursor: col-resize; user-select: none; }
 .col { display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 48px; }
 section h2 { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
@@ -107,8 +127,21 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
   <span id="b-console" class="badge">console ?</span>
   <span id="b-game" class="badge">game ?</span>
   <span id="b-neuro" class="badge">neuro -</span>
-  <button id="layout-reset" style="margin-left:auto;padding:3px 10px;font-size:12px" title="Every section back where it was, unfolded">Reset layout</button>
+  <span id="top-now" class="dim"></span>
+  <span id="top-actions">
+    <button id="c-pause">Pause</button>
+    <button id="c-restart" title="The level again from its start, no life spent">Restart level</button>
+    <button id="c-mute">Mute</button>
+    <button id="c-neuro" title="The link to Neuro dropped and made again (her orders and names kept)">Reconnect Neuro</button>
+  </span>
 </header>
+<nav id="tabs">
+  <button data-tab="live" title="What you watch and do while she plays">Live</button>
+  <button data-tab="evil" title="Her goal and settings, what's locked from her, how she's pushed">Evil</button>
+  <button data-tab="setup" title="What a game starts with: the level, who directs her, the window, sound and picture">Setup</button>
+  <button data-tab="debug" title="Testing: speed, god mode, exits, raw actions, the log">Debug</button>
+  <button id="layout-reset" title="Every section back where it was, unfolded">Reset layout</button>
+</nav>
 <main>
  <div class="col" id="col-a">
   <section id="tokenbox">
@@ -117,22 +150,13 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
     <div class="row"><input id="tokenin" placeholder="token"><button id="tokenset">Use</button></div>
   </section>
 
-  <section id="sec-game">
-    <h2>Game</h2>
+  <section id="sec-game" data-tab="live">
+    <h2>Run</h2>
     <div class="row">
       <button class="primary" id="g-start" title="The game started with the saved settings (changes saved first); running, started again">Start game</button>
       <button id="g-stop">Stop</button>
       <button class="primary" id="g-begin" title="At the title card: on through the menu to the first level. Later: the run again from the title card">Begin</button>
     </div>
-    <div class="row">
-      <button id="c-pause">Pause</button>
-      <button id="c-restart" title="The level again from its start, no life spent">Restart level</button>
-      <button id="c-god" title="Nothing hurts her while it's on (the setting She can die is how a game starts)">God mode</button>
-      <button id="c-exit" title="Out by the level's exit: the tally, then on">Exit level</button>
-      <button id="c-secret" title="Out by the secret exit">Secret exit</button>
-      <button id="c-neuro" title="The link to Neuro dropped and made again (her orders and names kept)">Reconnect Neuro</button>
-    </div>
-    <div class="row" id="speeds"></div>
     <div class="row">
       <select id="l-map" style="width:auto;min-width:7em"></select>
       <button id="l-go">Go to level</button>
@@ -143,16 +167,24 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
     <dl id="state"></dl>
   </section>
 
-  <section id="sec-sound">
+  <section id="sec-testing" data-tab="debug">
+    <h2>Testing</h2>
+    <div class="row" id="speeds"></div>
+    <div class="row">
+      <button id="c-god" title="Nothing hurts her while it's on (the setting She can die is how a game starts)">God mode</button>
+      <button id="c-exit" title="Out by the level's exit: the tally, then on">Exit level</button>
+      <button id="c-secret" title="Out by the secret exit">Secret exit</button>
+    </div>
+  </section>
+  <section id="sec-sound" data-tab="setup">
     <h2>Sound <span class="dim" style="text-transform:none;letter-spacing:0">(the game's own volumes; kept for the next game)</span></h2>
     <div class="vol"><label for="v-master">Master</label><input type="range" id="v-master" min="0" max="100" data-k="master"><output id="v-master-n"></output></div>
     <div class="vol"><label for="v-sfx">SFX</label><input type="range" id="v-sfx" min="0" max="15" data-k="sfx"><output id="v-sfx-n"></output></div>
     <div class="vol"><label for="v-music">Music</label><input type="range" id="v-music" min="0" max="15" data-k="music"><output id="v-music-n"></output></div>
-    <div class="row" style="margin-top:6px"><button id="c-mute">Mute</button></div>
     <p class="dim" id="v-note" style="margin:0;font-size:12px"></p>
   </section>
 
-  <section id="sec-picture">
+  <section id="sec-picture" data-tab="setup">
     <h2>Picture <span class="dim" style="text-transform:none;letter-spacing:0">(kept for the next game)</span></h2>
     <div class="vol"><label for="p-brightness">Brightness</label><input type="range" id="p-brightness" min="0" max="10" value="0" data-k="brightness"><output id="p-brightness-n"></output></div>
     <div class="vol"><label for="p-fov">View (FOV)</label><input type="range" id="p-fov" min="60" max="120" step="5" value="90" data-k="fov"><output id="p-fov-n"></output></div>
@@ -162,7 +194,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
     <p class="dim" id="p-note" style="margin:0;font-size:12px"></p>
   </section>
 
-  <section id="sec-column">
+  <section id="sec-column" data-tab="setup">
     <h2>Stream column <span class="dim" style="text-transform:none;letter-spacing:0">(the stream window's: changes at once, kept for the next game)</span></h2>
     <div class="row"><label>Side <select id="col-side"><option value="right">on the right</option><option value="left">on the left</option></select></label></div>
     <div class="row" style="flex-wrap:wrap;gap:4px 14px">
@@ -185,7 +217,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
     <p class="dim" id="col-note" style="margin:0;font-size:12px" hidden>Only in the stream layout (Settings, Window).</p>
   </section>
 
-  <section id="sec-talk">
+  <section id="sec-talk" data-tab="live">
     <h2>Talk to Evil <span class="dim" style="text-transform:none;letter-spacing:0">(directed by Neuro or the GPT stand-in)</span></h2>
     <div class="row">
       <input id="e-say" maxlength="300" placeholder="a line to her, sent as context">
@@ -194,7 +226,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
     <p class="dim" id="e-note" style="margin:0;font-size:12px"></p>
   </section>
 
-  <section id="sec-settings">
+  <section id="sec-settings" data-tab="setup">
     <h2>Settings <span class="dim" style="text-transform:none;letter-spacing:0">(used when the game starts)</span></h2>
     <p class="dim" style="margin:0 0 6px;font-size:12px">You must save changes before they will take effect.</p>
     <form class="form" id="settings" onsubmit="return false">
@@ -205,7 +237,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
           <option value="0">No monsters</option><option value="1">I'm too young to die</option><option value="2">Hey, not too rough</option>
           <option value="3">Hurt me plenty</option><option value="4">Ultra-Violence</option><option value="5">Nightmare!</option></select></label>
         <label title="For testing: a run on the same seed plays out the same. Empty: a new one each start, as real play has it">Seed (testing) <input name="seed" placeholder="empty: random"></label>
-        <span class="check" title="Off: nothing hurts her from the start (god mode). The Game card's God mode switches it while she plays"><input type="checkbox" name="mortal" id="s-mortal"><label for="s-mortal" class="check">She can die</label></span>
+        <span class="check" title="Off: nothing hurts her from the start (god mode). God mode (the Debug tab) switches it while she plays"><input type="checkbox" name="mortal" id="s-mortal"><label for="s-mortal" class="check">She can die</label></span>
         <span class="check" title="Out by an exit, on to the next level with what she has; off, the game's over at the exit"><input type="checkbox" name="episode" id="s-episode"><label for="s-episode" class="check">Go on through the episode</label></span>
         <span class="check wide"><input type="checkbox" name="auto_restart" id="s-auto"><label for="s-auto" class="check">Restart the game if it crashes or hangs (at the level she was on)</label></span>
       </fieldset>
@@ -213,7 +245,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
         <span class="check wide"><input type="checkbox" name="present" id="s-present"><label for="s-present" class="check">Doom's own screens: the title card, the menu, the melt, the tally between levels, the finales</label></span>
         <label class="wide" data-when="present">At the title card <select id="s-titlecard">
           <option value="go">go straight into the game, through the menu</option>
-          <option value="begin">wait there until Begin is pressed (the Game card)</option>
+          <option value="begin">wait there until Begin is pressed (Run, on the Live tab)</option>
           <option value="evil">Evil chooses the game (or Begin is pressed)</option></select></label>
       </fieldset>
       <fieldset class="group wide"><legend>Who directs her</legend>
@@ -249,7 +281,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
   </div>
  <div id="col-split" title="Drag to widen or narrow the columns"></div>
  <div class="col" id="col-b">
-  <section id="viewcard">
+  <section id="viewcard" data-tab="live">
     <h2>View <span class="dim" style="text-transform:none;letter-spacing:0">(twice a second, made only while shown here; the watcher's own drawing)</span></h2>
     <div class="row">
       <button id="vw-map">Map</button>
@@ -264,14 +296,40 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
     </div>
   </section>
 
-  <section id="evilcard">
+  <section id="evilcard" data-tab="live" class="evil-part">
     <h2>Evil <span class="dim" style="text-transform:none;letter-spacing:0">(her side: what she's set, asked, told and done; acting here goes in as hers, said to be yours, by your name in Settings)</span></h2>
     <div class="ev-top">
       <span id="ev-link" class="badge">not directing</span>
       <span>danger: <b id="ev-danger">-</b></span>
       <span class="dim" id="ev-idle"></span>
       <span class="dim" id="ev-rate"></span>
+      <span class="dim">goal: <b id="ev-goal-now">none</b></span>
     </div>
+    <div class="ev-grid">
+      <div class="ev-col">
+        <div class="ev-box ev-q" id="ev-qbox" hidden>
+          <h3>Her question <span id="ev-qid"></span></h3>
+          <p class="qtext" id="ev-qtext"></p>
+          <div class="row" id="ev-qchoices"></div>
+          <div class="qbar"><div id="ev-qbar"></div></div>
+          <div class="dim" id="ev-qleft" style="font-size:12px;margin-top:4px"></div>
+        </div>
+      </div>
+      <div class="ev-col">
+        <div class="ev-box">
+          <h3>Her calls</h3>
+          <ul id="ev-calls"></ul>
+        </div>
+      </div>
+    </div>
+    <div class="ev-grid" style="margin-top:12px">
+      <div><h3 class="dim" style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin:0 0 4px">Told her <span style="text-transform:none">(bright: to be heard)</span></h3><div class="feed" id="ev-told"></div></div>
+      <div><h3 class="dim" style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin:0 0 4px">Her actions <span style="text-transform:none">(blue: yours)</span></h3><div class="feed" id="ev-acts"></div></div>
+    </div>
+  </section>
+
+  <section id="sec-evil-set" data-tab="evil" class="evil-part">
+    <h2>Her goal and settings</h2>
     <div class="ev-grid">
       <div class="ev-col">
         <div class="ev-box">
@@ -289,7 +347,9 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
             <button id="ev-goalset">Set</button><button id="ev-goaldrop">Drop</button>
           </div>
         </div>
-        <div class="ev-box" style="margin-top:10px">
+      </div>
+      <div class="ev-col">
+        <div class="ev-box">
           <h3>Her settings</h3>
           <div class="ev-sets">
             <label>stance<select data-p="stance"><option>careful</option><option>steady</option><option>bold</option><option>avoid</option><option>yolo</option></select></label>
@@ -320,11 +380,15 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
           </div>
           <div class="row"><button id="ev-forceapply">Apply</button><span class="dim" style="font-size:12px;align-self:center">the stream's: a decision forced after she's waited, or left a question, this long</span></div>
         </div>
-        <div class="ev-box" style="margin-top:10px">
-          <h3>Her calls</h3>
-          <ul id="ev-calls"></ul>
-        </div>
-        <div class="ev-box" style="margin-top:10px">
+      </div>
+    </div>
+  </section>
+
+  <section id="sec-evil-ask" data-tab="debug" class="evil-part">
+    <h2>As Evil</h2>
+    <div class="ev-grid">
+      <div class="ev-col">
+        <div class="ev-box">
           <h3>Ask the game, as hers</h3>
           <div class="row">
             <button data-q="doom_look">Look</button><button data-q="doom_status">Status</button><button data-q="doom_why">Why</button>
@@ -351,14 +415,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
         </div>
       </div>
       <div class="ev-col">
-        <div class="ev-box ev-q" id="ev-qbox" hidden>
-          <h3>Her question <span id="ev-qid"></span></h3>
-          <p class="qtext" id="ev-qtext"></p>
-          <div class="row" id="ev-qchoices"></div>
-          <div class="qbar"><div id="ev-qbar"></div></div>
-          <div class="dim" id="ev-qleft" style="font-size:12px;margin-top:4px"></div>
-        </div>
-        <div class="ev-box" style="margin-top:10px">
+        <div class="ev-box">
           <h3>Why</h3>
           <ul id="ev-why"></ul>
         </div>
@@ -368,13 +425,9 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
         </div>
       </div>
     </div>
-    <div class="ev-grid" style="margin-top:12px">
-      <div><h3 class="dim" style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin:0 0 4px">Told her <span style="text-transform:none">(bright: to be heard)</span></h3><div class="feed" id="ev-told"></div></div>
-      <div><h3 class="dim" style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin:0 0 4px">Her actions <span style="text-transform:none">(blue: yours)</span></h3><div class="feed" id="ev-acts"></div></div>
-    </div>
   </section>
 
-  <section id="logcard">
+  <section id="logcard" data-tab="debug">
     <h2>Log</h2>
     <div class="row">
       <select id="logfilter" style="width:auto">
@@ -492,6 +545,10 @@ function render(p) {
   if (st && !mapPicked && maps.includes(st.map)) $("l-map").value = st.map;
   for (const id of ["l-map", "l-go", "l-next", "l-carry"]) $(id).disabled = !p.connected || !maps.length;
   for (const b of $("speeds").children) { b.disabled = !p.connected; b.classList.toggle("on", !!st && Math.abs(st.speed - Number(b.dataset.x)) < 1e-9); }
+  // (the top bar: where she is and how, whatever tab's open)
+  $("top-now").textContent = st
+    ? st.map + " \u00b7 " + fmtTime(st.seconds) + " \u00b7 health " + st.health + ", armor " + st.armor + (st.dead ? " \u00b7 dead" : st.paused ? " \u00b7 paused" : "")
+    : "";
   const rows = [];
   if (st) {
     const t = (a) => a[0] + "/" + a[1];
@@ -565,8 +622,11 @@ function setFeed(el, nodes, key, prev) {
 }
 function renderEvil(e, n) {
   const on = !!e;
-  $("evilcard").classList.toggle("dim", !on);
-  for (const b of $("evilcard").querySelectorAll("button, select, input")) b.disabled = !(on && n);
+  // (her side is three sections now, one a tab: all hers)
+  for (const part of document.querySelectorAll(".evil-part")) {
+    part.classList.toggle("dim", !on);
+    for (const b of part.querySelectorAll("button, select, input")) b.disabled = !(on && n);
+  }
   if (!on) { badge($("ev-link"), "not directing", ""); return; }
   badge($("ev-link"), n ? (n.connected ? (n.who || "connected") : "Neuro not connected") : "orders file", n && n.connected ? "ok" : (n ? "bad" : ""));
   const d = e.danger || "-";
@@ -574,12 +634,13 @@ function renderEvil(e, n) {
   $("ev-idle").textContent = "no action: " + e.idle;
   $("ev-rate").textContent = "a minute: " + e.per_minute[0] + " actions, " + e.per_minute[1] + " words told, " + e.per_minute[2] + " moments";
   $("ev-goal").textContent = e.goal || "none";
+  $("ev-goal-now").textContent = e.goal || "none";
   $("ev-policy").textContent = e.policy;
   // (her settings into the selects, unless they're being chosen here)
   const pol = {};
   for (const part of (e.policy || "").split(", ")) { const [k, v] = part.split(" "); pol[k] = v; }
   pol.instinct = /instinct/.test(e.idle || "") ? "on" : "off";
-  for (const el of $("evilcard").querySelectorAll("[data-p]")) if (!setsDirty && document.activeElement !== el && pol[el.dataset.p] != null) el.value = pol[el.dataset.p];
+  for (const el of document.querySelectorAll("[data-p]")) if (!setsDirty && document.activeElement !== el && pol[el.dataset.p] != null) el.value = pol[el.dataset.p];
   // (how soon she's pushed, as the game has it, unless it's being changed here)
   if (Date.now() - lockSentAt > 1500) for (const el of $("ev-locks").querySelectorAll("[data-lock]")) el.checked = (e.locked || []).includes(el.dataset.lock);
   if (!forceDirty) $("ev-fquiet").checked = !!e.next_silent;
@@ -786,13 +847,13 @@ $("e-order").onclick = () => {
   if (data) { try { JSON.parse(data); } catch (e) { say("The data isn't JSON: " + e.message); return; } }
   cmd({ cmd: "order", action: $("e-action").value, data: data || null });
 };
-for (const b of $("evilcard").querySelectorAll("[data-q]")) b.onclick = () => order(b.dataset.q, b.dataset.d ? JSON.parse(b.dataset.d) : null);
+for (const b of document.querySelectorAll("[data-q]")) b.onclick = () => order(b.dataset.q, b.dataset.d ? JSON.parse(b.dataset.d) : null);
 $("ev-goalset").onclick = () => {
   const g = $("ev-goalsel").value, r = $("ev-goalref").value;
   order("doom_goal", r ? { finish: g, prefer: r } : { finish: g });
 };
 $("ev-goaldrop").onclick = () => order("doom_goal", { finish: "none", prefer: "none" });
-for (const el of $("evilcard").querySelectorAll("[data-p]")) el.addEventListener("change", () => { setsDirty = true; });
+for (const el of document.querySelectorAll("[data-p]")) el.addEventListener("change", () => { setsDirty = true; });
 for (const id of ["ev-fidle", "ev-fask", "ev-fnext", "ev-fwait", "ev-fquiet"]) $(id).addEventListener("input", () => { forceDirty = true; });
 $("ev-forceapply").onclick = async () => {
   const n = (id) => { const v = $(id).value.trim(); return v === "" ? null : Math.max(0, Number(v)); };
@@ -804,7 +865,7 @@ for (const el of $("ev-locks").querySelectorAll("[data-lock]")) el.addEventListe
 });
 $("ev-setapply").onclick = async () => {
   const data = {};
-  for (const el of $("evilcard").querySelectorAll("[data-p]")) if (!el.disabled) data[el.dataset.p] = el.value;
+  for (const el of document.querySelectorAll("[data-p]")) if (!el.disabled) data[el.dataset.p] = el.value;
   if (await order("doom_policy", data)) setsDirty = false;
 };
 function gotoMap(map) {
@@ -865,7 +926,20 @@ $("tokenset").onclick = () => {
 };
 // The layout: each section folded or not by its title, and moved by its grip within its column
 // or to the other; kept in this browser.
-const LAYOUT_KEY = "evil-console-layout";
+// (a new name with the tabs: the layout kept from before them had other sections)
+const LAYOUT_KEY = "evil-console-layout-2";
+// The tabs: which kind of section is shown (kept in this browser).
+const TAB_KEY = "evil-console-tab";
+function showTab(tab) {
+  document.body.dataset.tab = tab;
+  for (const b of document.querySelectorAll("#tabs button[data-tab]")) b.classList.toggle("on", b.dataset.tab === tab);
+  try { localStorage.setItem(TAB_KEY, tab); } catch (e) { /* (not kept) */ }
+}
+for (const b of document.querySelectorAll("#tabs button[data-tab]")) b.onclick = () => showTab(b.dataset.tab);
+{ let t = "live"; try { t = localStorage.getItem(TAB_KEY) || t; } catch (e) { /* (the first) */ }
+  // (or the address's: ?tab=setup opens there, for a link to one)
+  t = new URLSearchParams(location.search).get("tab") || t;
+  showTab(["live", "evil", "setup", "debug"].includes(t) ? t : "live"); }
 const movable = () => [...document.querySelectorAll("main .col > section")].filter((s) => s.id !== "tokenbox");
 function saveLayout() {
   if (only) return;
