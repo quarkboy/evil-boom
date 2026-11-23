@@ -81,6 +81,13 @@ over. `Player::force_target` does the same for a target, from code.
   floor", "what's at that corner", and so on. Line specials are Doom's numbers (37 = W1 floor
   lower to lowest neighbour and change type; 16 = sector special: 20% damage).
 - `evil-boom dump-nav <wad> <map>`: the level's analysis.
+  At its end, the reach: the stages of what can be got to with every trigger fired and key
+  taken (`stage N: ...`), the sectors reached, the triggers `never fired`, and the edges where
+  the reach ends (`reach ends: sector A | sector B, line, k portals (j wide enough)`). On a
+  map with "no route (not reachable even in principle)" the far side of one of those edges
+  is what the model has no way into. `EVIL_DEBUG_AT=x,y[,x,y...]` adds the piece of the mesh
+  at each point with its portals (fits, passable as the map starts); `EVIL_DEBUG_FROM=x,y`
+  takes the reach from that point instead of the start (a place she was stranded in).
 - `EVIL_DEBUG_SHOT=1`: in the fight's log, where she and the target are (and their sectors)
   when fire's held for no shot, every bullet or shell out with the gap since the last, and
   each one that left with nothing on her line (what was in sight, how far off her aim).

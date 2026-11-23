@@ -72,6 +72,14 @@ fn dump_nav(wad: &str, map: &str) -> Result<(), String> {
         .player_start()
         .map(|t| (t.x, t.y))
         .ok_or("no player start")?;
+    // (EVIL_DEBUG_FROM=x,y: the reach from there instead, for a place she was stranded in)
+    let start = std::env::var("EVIL_DEBUG_FROM")
+        .ok()
+        .and_then(|v| {
+            let mut n = v.split(',').filter_map(|x| x.trim().parse::<f64>().ok());
+            Some((n.next()?, n.next()?))
+        })
+        .unwrap_or(start);
     let view = nav.full_view();
     let sp = nav.poly_at(start).ok_or("start off the map")?;
     let reach = view.reachable(sp, &nav.initial_states(), None);
