@@ -192,24 +192,43 @@ The maintainer pasted the Doom Wiki's walkthrough, and each step was looked for 
    (A rule tried and not kept: no barrel shot from a place with no way back. It kept her
    out of the hall once and she went down by choice later anyway; on E4M5 it cost 218 s.)
 
-**The planner on these maps** (`follow`, the "omniscient plan from there" of a stranding,
-and her own way to the exit once a level is all known): "no route to the exit" on MAP06,
-09, 12, 15, 17, 25, 28 though the exit is in the staged reach. Two things found:
-- The relaxed pass can't name the maker of a height two lines make between them (MAP06's
-  exit slab; the like on MAP12, 15, 28: "no maker got to without it (makers [])").
-- More, it reads the lines a goal needs off one path through the world with *everything*
-  fired, and that path can be by a way only the end of the level opens (MAP06: to the
-  nukage hall's lift by the last teleporter, not through the warehouses), so the lines of
-  the real way in are never among those searched with: "with its lines alone: 125 polys
-  of 689". The search with every line then runs out (20,000 expansions).
-  What it wants: the needs read off the stages of the reach in the order they open (each
-  goal by the heights of the stage it first comes into reach at), not off the end state.
-It matters in play: she got out of MAP06 by exploring, but a level she has all seen and
-no plan for is one with "nothing left to do". Not mended yet; the next thing to do here.
+**The planner on these maps** (`follow`, the "omniscient plan from there" of a stranding).
+"No route to the exit" on MAP06, 09, 12, 15, 17, 25, 28 though the exit is in the staged
+reach. It read the lines a goal needs off one way through the level with *everything*
+fired, which can be a way only the level's end opens (MAP06: into the last hall by the
+exit's teleporter), so the lines of the real way in were never among those searched with,
+and the search with every line ran out. Now, when that finds nothing, the needs are read
+off the level as it opens (054f552: `View::stages`; each target from what the stage
+before had, with the heights of its own stage; the same with no jump made; the ways back
+from each line to what it was for; a maker for each part of a height two lines make).
+Whole plans from the start on the 100 levels of DOOM, DOOM II and Memento Mori: 78 -> 82
+(MM MAP06 and MAP28, DOOM II MAP17 and MAP27). Still none on MM MAP09, 12, 15, 17, 25.
+
+**And it was not what stops her.** The guess was that a level all seen with no plan is one
+with "nothing left to do". Measured, no run changed: MAP06, 09, 12, 15, 28 charmed, and
+MAP06 and MAP28 with the level known beforehand, came out as they had. What her explorer
+goes by is her own reach (everything she *knows* fired), and on MAP09 in the late lives
+that reach ends at the two teleporters' pads: she has never learned the ways on from them.
+What's left to her there, and on MAP12 the same, is a list of things marked "(risky)" and
+dropped at once with "(no route)": MAP09's platform switch (440: a jump onto a platform
+with no way back *that she knows of*; pressing it is what makes the way back), MAP12's
+"step over line 597" into a sector she believes shut. That is the next thing to trace:
+what "(risky)" refuses, and why what's left when nothing else is isn't tried
+(`EVIL_DEBUG_NO_ROUTE=1` prints each refusal).
+
+**MAP22: a cave with no way out, by the model.** Twice in the hour she took a teleporter into
+a water cave (sectors 315, 316, 327, 328, 333, 339, 341, 548, 549) and was stranded there:
+the reach from the pad is those nine and no trigger. The way on is past a pit 128 across
+and 32 deep that the cave's floor runs round in strips too thin for her; out of the pit on
+the far side is a rise of 32. A run across it would just clear (32 of fall is eight tics;
+128 units in eight tics wants full pace), if there's the run-up. Needs the level's
+walkthrough before anything is called broken.
+
+**MAP31: not begun.** By the model 30 of 508 sectors can be reached; she sees 122. To trace.
 
 ## Still to look at
 
-MAP09 (the strandings), MAP12 (stranded at (5024, -2083), (4645, -4190), (4784, -3564), each
+MAP09 and MAP12 (the "(risky) ... (no route)" drops, above; MAP12 stranded at (5024, -2083), (4645, -4190), (4784, -3564), each
 with the exit in the reach from there: her explorer, not the model), MAP17, 23, 25, then the
 ones out on some skills only; MAP22 and MAP31 want their walkthroughs; MAP16, MAP31: no
 route in principle, the model first. The switch-texture list (`custom-textures-plan.md`):
