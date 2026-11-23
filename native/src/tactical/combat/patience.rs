@@ -23,6 +23,8 @@ pub enum Effort {
     MeleeUnhurt,
     /// closing in to hit it in melee: how near she's got is the measure
     MeleeNoNearer,
+    /// closing in on it invulnerable: how near she's got is the measure
+    UnhurtNoNearer,
     /// kept at out of sight, time and again, with no shot at it in between
     LostAgain,
     /// kept clear of, outmatched, with it in sight throwing nothing at her: her health is the

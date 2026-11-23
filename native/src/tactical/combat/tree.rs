@@ -19,7 +19,8 @@
 //!    │                 · at it
 //!    └─ fight          setting two bosses on each other · hemmed in: out by a gap ·
 //!                      backing off from what claws ·
-//!                      waiting out the crusher on it · sneaking past · shooting on the way
+//!                      waiting out the crusher on it · invulnerable: right up to it ·
+//!                      sneaking past · shooting on the way
 //!                      to an errand · out of ammo: getting past · closing in (out of reach) ·
 //!                      out of reach: going on · stepping for a shot · outmatched: keeping
 //!                      clear (or making a run for it) · getting past · keeping off ·
@@ -112,11 +113,12 @@ const BUSY: [Node; 1] = [busy];
 /// The weapon she'd fight her target with fought up close.
 const MELEE: [Node; 1] = [melee];
 /// The fight itself.
-const FIGHT: [Node; 16] = [
+const FIGHT: [Node; 17] = [
     setting_on,
     through_gap,
     backing_off,
     waiting_out_crusher,
+    unhurt_at_it,
     sneaking,
     to_errand,
     unarmed,
@@ -358,6 +360,25 @@ fn melee(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
         c.give_up(obs, t.id);
         return None;
     }
+    // The fist or the saw not up yet (the switch: 16 tics down, 16 up) and the thing claws:
+    // out of its reach while it's made, then at it. Stood at it meanwhile, a bite came before
+    // her first blow: end to end, episode 2, 27 of 33 switches to the fist at a demon were
+    // bitten within 2.5 s, 20 and 20 again off her and her armor.
+    if obs.weapon.is_some_and(|slot| slot != 1) {
+        c.melee_up.set(obs.tic + c.tune.engage.melee_raise);
+    }
+    // (not invulnerable: nothing to keep out of)
+    if obs.tic < c.melee_up.get()
+        && !c.now.invulnerable
+        && crate::bestiary::claw_max(t.name) > 0.0
+        && d < super::steering::CLAW_REACH + c.tune.engage.melee_wait
+    {
+        return Some(Act::new(
+            Move::BackingOff,
+            c.away_from(obs, (t.x, t.y)),
+            format!("off {} till the fist's up", t.name),
+        ));
+    }
     Some(if d > w.reach - c.tune.engage.melee_slack {
         // Nor closing in on what she gets no nearer to: the way straight at it is blocked (a
         // ledge above her, a wall between) and the fist has no other. It is given up on, and the
@@ -397,6 +418,38 @@ fn melee(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
 fn left_till(before: Option<&(i64, u32)>, tic: i64, first: i64) -> (i64, u32) {
     let times = before.map_or(0, |&(_, n)| n);
     (tic + (first << times.min(5)), times + 1)
+}
+
+/// Nothing can hurt her (a sphere), and she's something to shoot with: right up to it, where
+/// every shot lands and a rocket's blast is all its own, for as long as she gets nearer. The
+/// maintainer's rule, watching E2M7: thirty seconds stood four to eight hundred units off a
+/// cacodemon with no shot at it, when the thing to do is run up and blast.
+fn unhurt_at_it(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
+    if !c.now.invulnerable || !s.errand.is_empty() || !c.armed(obs) {
+        return None;
+    }
+    let t = s.target.as_ref()?;
+    let d = dist((t.x, t.y), s.pos);
+    if d <= c.tune.engage.unhurt_close {
+        return None;
+    }
+    // (no nearer for a while, a ledge or a gap between: fought from where she is)
+    let stall = c.tune.engage.melee_stall;
+    if c.patience.spent(
+        Effort::UnhurtNoNearer,
+        t.id,
+        obs.tic,
+        stall,
+        Some((d, c.tune.engage.melee_gain)),
+        Some(stall),
+    ) {
+        return None;
+    }
+    Some(Act::new(
+        Move::ClosingIn,
+        c.closing_in(obs, t, None),
+        format!("invulnerable: right up to {}", t.name),
+    ))
 }
 
 /// Backing off from the nearest thing that claws, when it's close and she is armed, or low, or

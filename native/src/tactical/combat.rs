@@ -251,6 +251,8 @@ pub struct Combat {
     pub(super) ordered_away_until: std::cell::Cell<i64>,
     /// the one she's gone at with the berserk fist (`best_gun`, `guns.fist_commit`)
     pub(super) fist_on: std::cell::Cell<Option<i32>>,
+    /// the fist or the saw, being brought up, is up by this tic (`tree::melee`)
+    pub(super) melee_up: std::cell::Cell<i64>,
     /// the trigger let go, whatever's in her sights (a choice forced likewise)
     pub ordered_hold_fire: bool,
     pub los: LineOfSight,
@@ -406,6 +408,7 @@ impl Combat {
             ordered_weapon: None,
             ordered_away_until: std::cell::Cell::new(i64::MIN),
             fist_on: std::cell::Cell::new(None),
+            melee_up: std::cell::Cell::new(0),
             ordered_hold_fire: false,
             los: LineOfSight::new(&nav.map),
             known: BTreeMap::new(),
@@ -727,7 +730,12 @@ impl Combat {
         {
             return None;
         }
-        if let Some(h) = self.rocket_way_out(obs) {
+        // (invulnerable: her own blast can't hurt her, and a rocket turned off is a rocket
+        // wasted. End to end, E2M7: a sphere's thirty seconds with the launcher, nineteen
+        // rockets turned off something near, two rounds spent and nothing hurt)
+        if !self.now.invulnerable
+            && let Some(h) = self.rocket_way_out(obs)
+        {
             return Some((h, true));
         }
         self.trigger.rocket_facing.map(|f| (f, false))

@@ -4159,3 +4159,49 @@ The same nine minutes: 793 slow tics, then 560 with the first, 479 with both; ti
 own planning (127 tics at 20 ms). A thread for the director was weighed: the explorer's
 knowledge isn't made to be shared, so it would want a copy of it each time; left till this
 proves not enough.
+
+### Six things from watching episode 2, and what the three-lives test said (2026-11-22)
+
+From the maintainer's list after the end-to-end run of episode 2 on skill 3. Each traced
+from that run's log; tested together and in two groups against the committed code
+(`1122-list-base`: 292 exits of 544, 1.105 deaths a run).
+
+- **A barrel shot from a floor that hurts.** E2M4's megaarmor sits in an alcove behind
+  three barrels, seen only from the nukage before it or from beside them, and a place to
+  shoot a barrel from was never on a floor that hurts: eight trips ended "nowhere to shoot
+  it from", and the ninth shot one from 33 units off and ran, 40 off her. Now, with the
+  shotgun and the shells for it and 50 health, a spot on the hurting floor out of every
+  blast is taken when the only other is one to run from, or none (the maintainer's rule).
+- **An errand a barrel stopped, remembered, for whoever directs her.** While the barrel's
+  there and she's no better able to clear it (a gun, the shotgun, the health), an order for
+  it is answered at once and it isn't suggested. Her own choices don't go by it: on
+  instinct it cost her (below), since where a barrel can be shot from depends on where she
+  comes at it from.
+- **A crusher waited at with never the time to go** is given up after it's come up and gone
+  down twice, not stood at till the errand times out (E2M2's hallway, set going fast by a
+  line on her way in: 29 s, twice). Going the moment she fits, from its edge at her real
+  pace, was tried and taken out: five times caught in one replay, none before. The margins
+  are for a monster in her way under it.
+- **Stocking up before an exit** only on health or ammo she'd use half of
+  (`errands.stock_use`): she went back for boxes of shells holding 94 to 99 of 100.
+- **Out of a claw's reach while the fist comes up.** The switch is 16 tics down and 16 up,
+  and she stood at the demon through it: 27 of 33 switches bitten within 2.5 s. Now she
+  keeps `engage.melee_wait` outside its reach till the fist's up. Eight runs of four
+  episode 2 levels: bitten after 50 of 66 switches, then 20 of 79.
+- **Invulnerable: at it.** A sphere's thirty seconds on E2M7 went on 19 rockets turned off
+  "something near" and standing 400 to 870 units off a cacodemon. Invulnerable, a rocket
+  isn't turned off (her own blast can't hurt her), and she goes right up to what she's
+  fighting (`engage.unhurt_close`) while she gets nearer.
+
+Three lives, run for run against the base:
+
+| | exits | deaths a run |
+|---|---|---|
+| barrels, the memory on instinct too, crusher | 289 (-3) | 1.119 |
+| the same, the memory not on instinct | 292 | 1.105 |
+| stocking, the fist, invulnerable | 296 (+4) | 1.088 |
+| all six as committed | 297 (+5) | 1.088 |
+
+All within the test's noise (exit +0.009, s.e. 0.011; deaths -0.017, s.e. 0.020), no run
+stalled in any. The first row is why the memory is the director's only: in the 14 runs it
+touched, 3 fewer exits and 8 more deaths.

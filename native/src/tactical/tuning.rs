@@ -272,6 +272,13 @@ pub struct Engage {
     /// in (it steps about). Not more: up against a demon she's 46 off, and stopped further out
     /// every punch falls short of its centre.
     pub melee_slack: f64,
+    /// the fist or the saw is up this many tics after it's in hand (RAISESPEED: 16), and till
+    /// then she keeps off what claws...
+    pub melee_raise: i64,
+    /// ...this far outside a claw's reach
+    pub melee_wait: f64,
+    /// invulnerable, she goes right up to what she's fighting: this near (units)
+    pub unhurt_close: f64,
     /// closing in to hit it in melee, no nearer by this much (units)...
     pub melee_gain: f64,
     /// ...in this long (tics): it's out of her reach, given up a while
@@ -317,6 +324,9 @@ impl Default for Engage {
             engaged_charge: 768.0,
             engaged_melee: 384.0,
             melee_slack: 12.0,
+            melee_raise: 16,
+            unhurt_close: 96.0,
+            melee_wait: 16.0,
             melee_gain: 32.0,
             melee_stall: 3 * 35,
             cant_reach_tics: 140,
