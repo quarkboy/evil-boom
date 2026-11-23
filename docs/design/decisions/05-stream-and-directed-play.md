@@ -4258,3 +4258,19 @@ start an area from) isn't looked for once a search this tic has used up its budg
 remembered as having no way. A suggestion cut short is none, not "nothing else in reach",
 and `doom_exit` then asks without naming a thing. Her own orders' ways and the bot's
 choices are searched in full as before. Not reproduced: the freeze was seen once.
+
+### Every secret found doesn't stop a wall being tried with no way out known (2026-11-23)
+
+Episode 2 on skill 4 through Gary, E2M1: at 322 s "nothing else to do", no exit known, and
+the last resorts she was asked about and said yes to (every wall among them) did nothing.
+On instinct for whoever directs her, the walls were dropped from what she'd do once every
+secret the level counts was found ("no wall's worth pressing for one"), whether or not she
+knew a way out. E2M1's way to its exit is behind a wall she presses (line 322), not one of
+its secrets; the run before pressed it with a secret still to find, this one found all
+four first. Five runs through the level had passed by the order she happened to find
+things in.
+
+Now the walls are dropped only with a way out known, as `searching_secrets` already had
+it. E2M1 on skill 4, three seeds, on instinct: no wall tried before, 10 to 15 after, the
+exit found each time both ways (those seeds didn't find the four secrets first: the case
+itself isn't reproduced). The director's only (`resorts` given): parity all 24 the same.

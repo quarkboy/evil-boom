@@ -1600,8 +1600,15 @@ impl Explorer {
         // for secrets, another look, a hunt, a spare pickup more than a short walk off) waits till
         // there's nothing new left. On a stream that's her wandering finished rooms; alone, the
         // run's own order stands.
-        if !self.directed && self.resorts.is_some() && self.secrets_done {
-            // (all the secrets found: no wall's worth pressing for one)
+        if !self.directed
+            && self.resorts.is_some()
+            && self.secrets_done
+            && !self.knowledge.exits().is_empty()
+        {
+            // (all the secrets found, and a way out known: no wall's worth pressing for one.
+            // With no way out known a wall may be the way on, secret or not: E2M1's exit is
+            // behind one, and with its four secrets found first she never pressed it, and
+            // stood with nothing left to do)
             weighed.retain(|(_, o)| o.kind != Kind::Wall);
         }
         if !self.directed && self.resorts.is_some() && self.going_back != GoingBack::AsItComes {
