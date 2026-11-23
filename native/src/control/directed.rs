@@ -314,7 +314,8 @@ fn gun_named(word: &str) -> Option<i32> {
     // (the game's numbers: the plain shotgun and the super are two guns, the fist and the
     // chainsaw two)
     Some(match w.as_str() {
-        "fist" | "fists" | "berserk" | "punch" => 0,
+        // ("berserk fist" is what her status calls it)
+        "fist" | "fists" | "berserk" | "berserkfist" | "punch" => 0,
         "chainsaw" | "saw" => 7,
         "pistol" => 1,
         "shotgun" | "sg" => 2,
