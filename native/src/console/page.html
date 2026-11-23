@@ -251,6 +251,24 @@ input[type=checkbox]:checked:not([data-lock]) { box-shadow: 0 0 10px -2px var(--
 .feed .loud { border-left-color: #ffffff30; } .feed .act { border-left-color: var(--evil); } .feed .st { border-left-color: var(--info); } .feed .fail { border-left-color: var(--bad); }
 #log .err { border-left-color: var(--bad); } #log .evil { border-left-color: var(--evil); }
 .views img { box-shadow: 0 0 0 1px var(--line), 0 16px 36px -20px #000; }
+/* (the drop-downs and boxes: dark wells, a violet chevron, a glow when they're being set;
+   their names in the stream's capitals, lit while the one they name is in hand) */
+input:not([type=checkbox]):not([type=range]), select { font: 500 14px/1.3 system-ui, "Segoe UI", sans-serif; text-transform: none; letter-spacing: normal;
+  background: linear-gradient(180deg, #1b1b23, #111116); border: 1px solid var(--line2); border-radius: 7px; padding: 8px 11px; box-shadow: inset 0 1px 0 #ffffff08, inset 0 -8px 14px -12px #000;
+  transition: border-color .12s, box-shadow .15s; }
+select { appearance: none; -webkit-appearance: none; cursor: pointer; padding-right: 32px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23a98bff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") right 11px center / 11px 8px no-repeat, linear-gradient(180deg, #1b1b23, #111116); }
+select option, select optgroup { background: #14141a; color: var(--text); font: 14px system-ui, "Segoe UI", sans-serif; }
+select option:disabled { color: var(--faint); }
+input:not([type=checkbox]):not([type=range]):hover:not(:disabled), select:hover:not(:disabled) { border-color: #6a58a8; }
+input:not([type=checkbox]):not([type=range]):focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px #8f6bf230, 0 0 18px -6px var(--accent), inset 0 1px 0 #ffffff08; }
+input::placeholder { color: var(--faint); }
+label:not(.check):not(.lock), .set-head > span { font: 600 12px/1.15 var(--display); letter-spacing: .14em; text-transform: uppercase; color: var(--dim); gap: 6px; transition: color .12s; }
+label:not(.check):not(.lock):focus-within, .set:focus-within .set-head > span { color: var(--accent-hi); text-shadow: 0 0 10px #8f6bf266; }
+.set:has(.lock input:checked) .set-head > span { color: var(--warn); }
+.set:has(.lock input:checked) select { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23e0a83a' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") right 11px center / 11px 8px no-repeat, linear-gradient(180deg, #221d12, #15130d); }
+.vol > label:not(.check) { font-size: 13px; color: var(--text); }
+.row > label:not(.check) { align-self: end; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 </style>
 </head>
