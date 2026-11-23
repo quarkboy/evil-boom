@@ -269,6 +269,19 @@ label:not(.check):not(.lock):focus-within, .set:focus-within .set-head > span { 
 .set:has(.lock input:checked) select { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23e0a83a' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") right 11px center / 11px 8px no-repeat, linear-gradient(180deg, #221d12, #15130d); }
 .vol > label:not(.check) { font-size: 13px; color: var(--text); }
 .row > label:not(.check) { align-self: end; }
+/* (every other button in the same capitals as the violet ones, a slate gradient to match) */
+button:not([data-tab]):not(.help):not(#layout-reset) { font: 600 15px/1.2 var(--display); letter-spacing: .08em; text-transform: uppercase; }
+button:not(.primary):not(.danger):not(.on):not(.def):not([data-tab]):not(.help):not(#layout-reset) { background: linear-gradient(180deg, #30303d, #1e1e27); border-color: #44445a; color: #dcdce6;
+  box-shadow: inset 0 1px 0 #ffffff17, 0 6px 16px -10px #000; }
+button:not(.primary):not(.danger):not(.on):not(.def):not([data-tab]):not(.help):not(#layout-reset):hover:not(:disabled) { background: linear-gradient(180deg, #3b3b4c, #25252f); border-color: #6a6a80; color: #fff; }
+button.on { background: linear-gradient(180deg, #3d2f72, #251c47); box-shadow: inset 0 1px 0 #ffffff1c, 0 0 16px -6px var(--accent); }
+button.danger { background: linear-gradient(180deg, #2a1618, #1a1012); }
+#speeds button { text-transform: none; }
+header { gap: 8px 10px; } header h1 { font-size: 16px; letter-spacing: .18em; gap: 10px; } .badge { font-size: 12px; padding: 2px 9px; }
+.hud-cell { padding: 5px 12px 7px; min-width: 58px; } .hud-cell b { font-size: 21px; }
+/* (a laptop's width: the word "console" makes way, so the bar keeps to one line) */
+@media (max-width: 1440px) { header h1 span { display: none; } }
+#top-actions { gap: 6px; } #top-actions button { font-size: 14px; letter-spacing: .06em; padding: 6px 11px; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 </style>
 </head>
