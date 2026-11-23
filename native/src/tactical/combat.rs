@@ -578,6 +578,7 @@ impl Combat {
     // --- what's about -----------------------------------------------------------------------
 
     pub fn observe(&mut self, obs: &Observation) {
+        let _timed = crate::debug::Timed::new("fight.observe");
         let pos = obs.pos();
         if obs
             .message
@@ -745,13 +746,14 @@ impl Combat {
     /// something that wants the controls (a run-up, a jump). `errand`: the route's going for
     /// something to fight with: the fight only aims and shoots on the way.
     pub fn decide(&mut self, obs: &Observation, busy: bool, errand: &str) -> Option<Decision> {
+        let _timed = crate::debug::Timed::new("fight.decide");
         // Invulnerable: nothing to dodge, a missile does nothing.
         let missiles = if self.now.invulnerable {
             Vec::new()
         } else {
             self.incoming(obs)
         };
-        let target = self.pick_target(obs);
+        let target = crate::debug::timed("fight.pick_target", || self.pick_target(obs));
         self.last_move = None;
         if target.is_none() && missiles.is_empty() {
             // The fight over with a rocket still to go out: the way is held all the same, and the
@@ -774,8 +776,10 @@ impl Combat {
             self.last_move = d.as_ref().map(|d| d.kind);
             return d;
         }
-        let (s, fire, weapon) = self.size_up(obs, busy, errand, missiles, target);
-        let mut act = tree::engage(self, obs, &s);
+        let (s, fire, weapon) = crate::debug::timed("fight.size_up", || {
+            self.size_up(obs, busy, errand, missiles, target)
+        });
+        let mut act = crate::debug::timed("fight.engage", || tree::engage(self, obs, &s));
         // A rocket on its way out, 8 tics after the trigger, the way she faces then: if that way it
         // would go off near her, she turns to the nearest way it won't.
         if s.vile.is_none()
@@ -988,6 +992,7 @@ impl Combat {
 
     /// The route's controls this tic (the way it walks her, for what's in her way).
     pub fn route_walks(&mut self, obs: &Observation, b: &Controls) {
+        let _timed = crate::debug::Timed::new("fight.route_walks");
         self.route_way = (b.forward.hypot(b.strafe) > 0.0)
             .then(|| obs.angle - b.turn + (-b.strafe).atan2(b.forward).to_degrees());
     }

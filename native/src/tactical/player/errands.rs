@@ -4,6 +4,7 @@
 //! What's worth going for in a fight: a better gun, what she's short of, the errands open.
 
 use super::*;
+use crate::bestiary::Monster;
 
 impl Fight {
     pub(super) fn new_gun(obs: &Observation, name: &str) -> bool {
@@ -62,14 +63,21 @@ impl Fight {
 
     /// Would that gun do more than the best she has (worth dropping what she's doing for)?
     pub(super) fn better_gun(&self, obs: &Observation, name: &str) -> bool {
-        // Judged on a boss she knows of still about, if any: that is what the level's fight comes
-        // down to, and it takes no rocket's blast.
-        let boss = self
-            .combat
-            .remaining()
-            .iter()
+        // (one she has, the commonest answer, needs no look through what's about)
+        name != "Chainsaw" && Self::new_gun(obs, name) && self.better_on(obs, name, &self.boss())
+    }
+
+    /// A boss she knows of still about, if any: what a gun is judged on. That is what the
+    /// level's fight comes down to, and it takes no rocket's blast.
+    fn boss(&self) -> Option<Monster> {
+        self.combat
+            .about()
             .filter_map(|s| monster(s.name))
-            .find(|m| m.boss);
+            .find(|m| m.boss)
+    }
+
+    /// `better_gun`, the boss it's judged on in hand (`boss`).
+    fn better_on(&self, obs: &Observation, name: &str, boss: &Option<Monster>) -> bool {
         name != "Chainsaw"
             && Self::new_gun(obs, name)
             && Combat::dps_on(&Self::gun(obs, name), boss.as_ref())
@@ -79,17 +87,23 @@ impl Fight {
     /// Seconds of walking a gun is worth: what it'd save killing what she knows is still about
     /// (and some, for what's to come).
     pub(super) fn gun_worth(&self, obs: &Observation, name: &str) -> f64 {
-        let w = Self::gun(obs, name);
-        let now = self.combat.now.firepower;
-        // What she's met this life. With a level known beforehand "still about" would be everything
-        // in it, and every gun in it worth any walk.
-        let hp: f64 = self
-            .combat
-            .remaining()
-            .iter()
+        self.worth_against(obs, name, self.met())
+    }
+
+    /// The health of what she's met this life and is still about. With a level known beforehand
+    /// "still about" would be everything in it, and every gun in it worth any walk.
+    fn met(&self) -> f64 {
+        self.combat
+            .about()
             .filter(|s| !s.foreknown)
             .map(|s| mhealth(s.name))
-            .sum();
+            .sum()
+    }
+
+    /// `gun_worth`, the health it's to save killing in hand (`met`).
+    fn worth_against(&self, obs: &Observation, name: &str, hp: f64) -> f64 {
+        let w = Self::gun(obs, name);
+        let now = self.combat.now.firepower;
         self.tune.errands.gun_worth + (hp / now - hp / w.dps().max(now)).max(0.0)
     }
 
@@ -152,6 +166,10 @@ impl Fight {
         let pos = obs.pos();
         let short = self.combat.now.short_of_ammo;
         let held = obs.weapons.clone().unwrap_or_else(|| vec![1, 2]);
+        // What the guns are judged on: looked up once, and only if there's a gun to judge (a
+        // level may have a thousand lying about, and ten thousand monsters to look through).
+        let boss = std::cell::LazyCell::new(|| self.boss());
+        let met = std::cell::LazyCell::new(|| self.met());
         obs.things
             .iter()
             .flatten()
@@ -171,9 +189,10 @@ impl Fight {
                         && held.contains(&slot)
                         && dist((t.x, t.y), pos) < self.tune.errands.item_range
                 } else if weapon_item(t.name).is_some() {
-                    (self.better_gun(obs, t.name)
+                    ((Self::new_gun(obs, t.name) && self.better_on(obs, t.name, &boss))
                         || (short && Self::new_gun(obs, t.name) && t.name != "Chainsaw"))
-                        && dist((t.x, t.y), pos) <= self.gun_worth(obs, t.name) * RUN_SPEED
+                        && dist((t.x, t.y), pos)
+                            <= self.worth_against(obs, t.name, *met) * RUN_SPEED
                 } else {
                     short
                         && ammo_item(t.name)

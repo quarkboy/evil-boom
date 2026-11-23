@@ -240,11 +240,16 @@ impl Combat {
     /// hunt down, to keep clear of): not one she knows is dead, nor one she's seen isn't where
     /// she left it.
     pub fn remaining(&self) -> Vec<Seen> {
+        self.about().cloned().collect()
+    }
+
+    /// The same, looked through where they lie: for what's asked many times a tic (ten thousand
+    /// of them copied for each of a thousand guns lying about was a fifth of a second a tic).
+    pub fn about(&self) -> impl Iterator<Item = &Seen> {
         self.known
             .iter()
             .filter(|(i, s)| !self.dead.contains(i) && !s.lost)
-            .map(|(_, s)| s.clone())
-            .collect()
+            .map(|(_, s)| s)
     }
 
     /// The monsters she's in a fight with: in sight, awake, after her, and able to hurt her from

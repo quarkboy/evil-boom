@@ -17,6 +17,7 @@ impl Combat {
         base: Option<&Controls>,
         legs: bool,
     ) -> Controls {
+        let _timed = crate::debug::Timed::new("fight.controls");
         let turn = self.turn(obs, d.aim);
         if let Some(b) = base {
             self.route_walks(obs, b);

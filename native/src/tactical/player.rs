@@ -937,17 +937,18 @@ impl Player {
                 .combat
                 .bumped(obs, obs.angle + (-c.strafe).atan2(c.forward).to_degrees());
         }
-        self.explorer.sense(obs, last);
-        self.notice_things(obs);
-        let seen = self.percept(obs);
+        use crate::debug::timed;
+        timed("player.sense", || self.explorer.sense(obs, last));
+        timed("player.notice_things", || self.notice_things(obs));
+        let seen = timed("player.percept", || self.percept(obs));
         let obs = &seen;
-        self.consult(obs);
-        self.plight = self.plight_now(obs);
-        self.keep_trail(obs);
+        timed("player.consult", || self.consult(obs));
+        self.plight = timed("player.plight", || self.plight_now(obs));
+        timed("player.keep_trail", || self.keep_trail(obs));
         for line in std::mem::take(&mut self.fight.combat.log) {
             self.explorer.log.push(format!("  [fight] {line}"));
         }
-        self.keep_out_of_sight(obs);
+        timed("player.keep_out_of_sight", || self.keep_out_of_sight(obs));
         // A boss brain awake and rockets in hand: that's all there is to do, and it's done its
         // own way.
         let turn = match self.boss(obs) {
@@ -958,7 +959,7 @@ impl Player {
             t => t,
         };
         let Some(turn) = turn else {
-            return self.decide_on(obs, last, None);
+            return timed("player.decide_on", || self.decide_on(obs, last, None));
         };
         // Its route stands in for the exploring's while the fight has its say.
         self.explorer.hold(obs, last);
@@ -989,15 +990,14 @@ impl Player {
                 .follower
                 .as_ref()
                 .is_some_and(|f| f.jumping() || f.crossing_crusher())
-            || self.fight.dashing(&self.explorer, obs)
+            || crate::debug::timed("player.dashing", || self.fight.dashing(&self.explorer, obs))
             // ...and with the sphere on, on her way to what it's for: straight there, through
             // whatever's between, shooting only what's ahead. Its seconds aren't for them.
             || (self.fight.charge.is_some() && self.fight.combat.now.invulnerable);
         let (errand, toward) = if busy {
             (String::new(), None)
         } else {
-            self.fight
-                .errand(&self.explorer, obs)
+            crate::debug::timed("player.errand", || self.fight.errand(&self.explorer, obs))
                 .map_or((String::new(), None), |(e, at)| (e, Some(at)))
         };
         // Falling back, the retreat's way is the way she's going: a dodge that's as clear along it
@@ -1038,7 +1038,8 @@ impl Player {
         // (the Icon of Sin's business: no looking round at what she hears, the brain's cries
         // among it)
         let d = d.filter(|d| !(busy && icon.is_some() && d.kind == Move::Looking));
-        let retreating = !busy && !free && self.retreating(obs);
+        let retreating =
+            !busy && !free && crate::debug::timed("player.retreating", || self.retreating(obs));
         let legs = arbiter::arbitrate(
             d.as_ref(),
             busy,
@@ -1175,7 +1176,9 @@ impl Player {
                     f.motion.any_way = true;
                     f.act(obs)
                 }),
-            None => self.explorer.act(obs, last, &mut self.fight),
+            None => crate::debug::timed("player.explorer_act", || {
+                self.explorer.act(obs, last, &mut self.fight)
+            }),
         };
         for line in std::mem::take(&mut self.fight.pending_log) {
             self.explorer.log.push(format!("  [fight] {line}"));

@@ -114,6 +114,7 @@ impl Combat {
     /// The monsters in her sight this tic (`visible`), and what she keeps of each: where and
     /// how she last saw it, whether it's awake, whom it's after, its health as she reckons it.
     pub(super) fn see_monsters(&mut self, obs: &Observation, me: Body) {
+        let _timed = crate::debug::Timed::new("fight.see_monsters");
         let pos = obs.pos();
         self.visible.clear();
         for t in self.senses.game_monsters.values() {
@@ -280,6 +281,7 @@ impl Combat {
     /// missile in flight makes no sound, only its launch, which turns her to look. Her own she
     /// knows of.
     pub(super) fn see_missiles(&mut self, obs: &Observation, me: Body) {
+        let _timed = crate::debug::Timed::new("fight.see_missiles");
         let pos = obs.pos();
         let flying: BTreeMap<i32, &Thing> = obs
             .things

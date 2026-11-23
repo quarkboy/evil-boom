@@ -1184,6 +1184,7 @@ impl Explorer {
     }
 
     pub fn hold(&mut self, obs: &Observation, last: Option<&Controls>) {
+        let _timed = crate::debug::Timed::new("explorer.hold");
         self.sense(obs, last);
         if self.held_since.is_none() {
             self.held_since = Some(obs.tic);
