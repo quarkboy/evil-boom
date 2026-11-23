@@ -45,6 +45,9 @@ pub(super) struct Console {
     shown: usize,
     /// (map, dead, exited) as last told: what's changed is an event
     told: (String, bool, bool),
+    /// orders given before the level had begun (what the console starts her with): done once
+    /// it has
+    held: Vec<(String, Option<String>)>,
 }
 
 impl Console {
@@ -82,6 +85,7 @@ impl Console {
             wanted_until: None,
             shown: 0,
             told: (String::new(), false, false),
+            held: Vec::new(),
         })
     }
 
@@ -260,12 +264,41 @@ pub(super) fn goto(
 }
 
 impl Watch {
+    /// An action as if Evil's, from the console (`Command::Order`), and what came of it logged.
+    fn order(&mut self, action: &str, data: Option<&str>) {
+        let lines = match (self.neuro.as_mut(), self.obs.as_ref()) {
+            (Some(n), Some(obs)) => {
+                let (ok, msg) = n.console_action(&mut self.agent, obs, action, data);
+                vec![
+                    format!(
+                        ">> ({}) {action} {}",
+                        n.director.console_name,
+                        data.unwrap_or("")
+                    ),
+                    format!(
+                        "<< {}{}",
+                        if ok { "" } else { "FAILED: " },
+                        msg.lines().next().unwrap_or("")
+                    ),
+                ]
+            }
+            (None, _) => vec!["console: not directed by Neuro: no orders to give".into()],
+            (_, None) => vec!["console: the game hasn't started yet".into()],
+        };
+        self.agent.x_mut().log.extend(lines);
+    }
+
     /// The console's commands carried out; what's new sent to it; what the loop's to do.
     pub(super) fn console_frame(&mut self) -> Frame {
         let Some(mut c) = self.console.take() else {
             return Frame::Go;
         };
         let mut frame = Frame::Go;
+        if self.obs.is_some() {
+            for (action, data) in std::mem::take(&mut c.held) {
+                self.order(&action, data.as_deref());
+            }
+        }
         // (till one that ends the frame: another level or quitting; what's after it waits for the
         // next frame, the level it's for then the one there)
         while matches!(frame, Frame::Go) {
@@ -399,29 +432,12 @@ impl Watch {
                     self.agent.x_mut().log.push(line);
                 }
                 Command::Order { action, data } => {
-                    let lines = match (self.neuro.as_mut(), self.obs.as_ref()) {
-                        (Some(n), Some(obs)) => {
-                            let (ok, msg) =
-                                n.console_action(&mut self.agent, obs, &action, data.as_deref());
-                            vec![
-                                format!(
-                                    ">> ({}) {action} {}",
-                                    n.director.console_name,
-                                    data.as_deref().unwrap_or("")
-                                ),
-                                format!(
-                                    "<< {}{}",
-                                    if ok { "" } else { "FAILED: " },
-                                    msg.lines().next().unwrap_or("")
-                                ),
-                            ]
-                        }
-                        (None, _) => {
-                            vec!["console: not directed by Neuro: no orders to give".into()]
-                        }
-                        (_, None) => vec!["console: the game hasn't started yet".into()],
-                    };
-                    self.agent.x_mut().log.extend(lines);
+                    // (before the level's begun, with Neuro to direct her: kept till it has)
+                    if self.neuro.is_some() && self.obs.is_none() {
+                        c.held.push((action, data));
+                    } else {
+                        self.order(&action, data.as_deref());
+                    }
                 }
                 Command::ExitLevel { secret } => {
                     let line = if self.engine.exit_level(secret) {

@@ -97,6 +97,13 @@ pub struct Settings {
     pub evil_instinct: bool,
     /// the settings not hers to change (`Command::Lock`), given to each game as it starts
     pub evil_locked: Vec<String>,
+    /// what Evil starts each game with, set from the page with no game running: her settings
+    /// (`doom_policy`'s data, JSON) and her goal (`doom_goal`'s); none: the game's own. Given
+    /// to a directed game as it starts, as the console's orders (she's told of them).
+    #[serde(default)]
+    pub evil_policy: Option<String>,
+    #[serde(default)]
+    pub evil_goal: Option<String>,
     /// Evil asked what next without a word aloud (none: the game's own, on)
     #[serde(default)]
     pub next_silent: Option<bool>,
@@ -174,6 +181,8 @@ impl Default for Settings {
             force_next: None,
             evil_instinct: true,
             evil_locked: Vec::new(),
+            evil_policy: None,
+            evil_goal: None,
             next_silent: None,
             answer_wait: None,
             auto_restart: true,
@@ -782,6 +791,19 @@ fn read_game(stream: TcpStream, hub: &Hub) {
                     answers,
                     quiet,
                 });
+                // (what she starts with: the game does them once the level's begun)
+                if s.settings.mode != "bot" {
+                    let starts = [
+                        ("doom_policy", s.settings.evil_policy.clone()),
+                        ("doom_goal", s.settings.evil_goal.clone()),
+                    ];
+                    for (action, data) in starts {
+                        if data.is_some() {
+                            let action = action.to_string();
+                            let _ = s.send(&Command::Order { action, data });
+                        }
+                    }
+                }
                 // (the pictures pages want told it on their next ask)
                 s.views_told = (Vec::new(), None);
                 let spec = s.settings.choices();
@@ -1272,6 +1294,22 @@ fn handle(hub: &Hub, mut req: Request) {
                     let saved = s.save();
                     let sent = if s.to_game.is_some() { s.send(&c) } else { Ok(()) };
                     done(saved.and(sent))
+                } else if let Command::Order { action, data } = &c
+                    && s.to_game.is_none()
+                    && matches!(action.as_str(), "doom_policy" | "doom_goal")
+                {
+                    // (no game: her settings or goal for the next one to start with)
+                    match start_value(data.as_deref()) {
+                        Ok(v) => {
+                            if action == "doom_policy" {
+                                s.settings.evil_policy = v;
+                            } else {
+                                s.settings.evil_goal = v;
+                            }
+                            done(s.save())
+                        }
+                        Err(e) => (400, json!({ "error": e })),
+                    }
                 } else {
                     done(s.send(&c))
                 }
@@ -1393,6 +1431,33 @@ fn poll(hub: &Hub, since: u64, views: &str) -> Value {
         "log": log,
         "seq": seq,
     })
+}
+
+/// An order's data as kept for a game's start: a JSON object of words, what says "none" left
+/// out; nothing left: none kept. (The game checks the words themselves when it's given them.)
+fn start_value(data: Option<&str>) -> Result<Option<String>, String> {
+    let Some(data) = data.filter(|d| !d.trim().is_empty()) else {
+        return Ok(None);
+    };
+    let v: Value = serde_json::from_str(data).map_err(|e| format!("not JSON: {e}"))?;
+    let o = v
+        .as_object()
+        .ok_or("an object of settings, as she sends it")?;
+    let mut kept = serde_json::Map::new();
+    for (k, v) in o {
+        let w = v.as_str().ok_or_else(|| format!("{k}: a word"))?;
+        if w.len() > 32 || k.len() > 32 {
+            return Err(format!("{k}: too long"));
+        }
+        if w != "none" || k == "save" {
+            kept.insert(k.clone(), v.clone());
+        }
+    }
+    // (a goal with nothing to finish is no goal)
+    if kept.is_empty() || (o.contains_key("finish") && !kept.contains_key("finish")) {
+        return Ok(None);
+    }
+    Ok(Some(Value::Object(kept).to_string()))
 }
 
 fn done(r: Result<(), String>) -> (u16, Value) {

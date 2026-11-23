@@ -94,6 +94,12 @@ what's switched on; a red outline ends or restarts something (Stop, Restart leve
 is a switch. A padlock by one of her settings, shut and gold, is that setting locked from her:
 click it to lock or free it.
 
+With no game running, the Evil tab is what she starts the next game with: her goal and settings
+kept there (`evil_goal`, `evil_policy` in the file) are given to a directed game once its first
+level has begun, as orders of yours, and she's told so. "Forget what's kept" leaves her the
+game's own. The locks and how soon she's pushed can be set there before a game too. While she
+plays, the tab acts on the game as it is, and what's kept for the start isn't changed.
+
 Evil's card. Evil's card shows her goal, her settings, an open question with
 its choices and countdown, `doom_why`, the last lines told her and her last actions. It can act
 for her: answer the question, set a goal, change a setting, look, ask why, take over the fight.

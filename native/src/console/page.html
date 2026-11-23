@@ -426,6 +426,7 @@ body[data-tab="live"] #e-say { font-size: 15px; padding: 9px 11px; }
 
   <section id="sec-evil-set" data-tab="evil" class="evil-part">
     <h2>Her goal and settings</h2>
+    <p class="note lead" id="ev-startnote" hidden>No game running: what you keep here is what she starts the next game with (she's told it's yours). While she plays, this tab acts on the game as it is. <button id="ev-startclear" class="fit" hidden>Forget what's kept</button></p>
     <div class="ev-grid">
       <div class="ev-col">
         <div class="ev-box">
@@ -691,7 +692,7 @@ function render(p) {
   fillColumn(p.settings);
   showChatBox(p.state);
   for (const name of ["map", "game", "stream"]) showView(name, (p.views || {})[name]);
-  renderEvil(p.connected && st && st.evil, n);
+  renderEvil(p.connected && st && st.evil, n, p);
   addLog(p.log);
 }
 let evilTold = "", evilActs = "", replySeen = 0, qShown = null;
@@ -708,8 +709,50 @@ function setFeed(el, nodes, key, prev) {
   if (atEnd) el.scrollTop = el.scrollHeight;
   return key;
 }
-function renderEvil(e, n) {
+// No game running: her goal and settings are what she starts the next one with.
+let startShown = null;
+function renderStart(sv) {
+  let pol = {}, goal = {};
+  try { pol = JSON.parse(sv.evil_policy || "{}"); goal = JSON.parse(sv.evil_goal || "{}"); } catch (e) { /* (none kept) */ }
+  const key = (sv.evil_policy || "") + "|" + (sv.evil_goal || "");
+  if (key !== startShown && !setsDirty) {
+    startShown = key;
+    for (const el of document.querySelectorAll("[data-p]")) if (pol[el.dataset.p] != null) el.value = pol[el.dataset.p];
+    if (goal.finish) $("ev-goalsel").value = goal.finish;
+    $("ev-goalref").value = goal.prefer || "";
+  }
+  const words = Object.entries(pol).map(([k, v]) => k + " " + v).join(", ");
+  $("ev-policy").textContent = words ? "she starts with: " + words : "none kept: she starts with the game's own";
+  $("ev-goal").textContent = goal.finish ? "she starts with: " + goal.finish + (goal.prefer ? ", prefer " + goal.prefer : "") : "none kept";
+  if (Date.now() - lockSentAt > 1500) {
+    const locked = (sv.evil_locked || []).concat(sv.evil_instinct === false ? ["instinct"] : []);
+    for (const el of document.querySelectorAll("[data-lock]")) el.checked = locked.includes(el.dataset.lock);
+  }
+  if (!forceDirty) {
+    [["ev-fidle", sv.force_idle], ["ev-fask", sv.force_ask], ["ev-fnext", sv.force_next], ["ev-fwait", sv.answer_wait]].forEach(([id, v]) => {
+      if (document.activeElement !== $(id)) { $(id).value = v == null ? "" : Math.round(v * 10) / 10; $(id).placeholder = "the game's own"; }
+    });
+    $("ev-fquiet").checked = sv.next_silent !== false;
+  }
+  $("ev-startclear").hidden = !(sv.evil_policy || sv.evil_goal);
+}
+function renderEvil(e, n, p) {
   const on = !!e;
+  const start = !on && !!p && !p.connected && !p.game.running;
+  $("ev-startnote").hidden = !start;
+  $("ev-setapply").textContent = start ? "Keep for her start" : "Apply as hers";
+  $("ev-goalset").textContent = start ? "Keep" : "Set";
+  if (!start) { $("ev-startclear").hidden = true; startShown = null; }
+  if (start) {
+    for (const part of document.querySelectorAll(".evil-part")) {
+      const hers = part.id === "sec-evil-set";
+      part.classList.toggle("dim", !hers);
+      for (const b of part.querySelectorAll("button, select, input")) b.disabled = !hers;
+    }
+    renderStart(p.settings);
+    badge($("ev-link"), "not directing", "");
+    return;
+  }
   // (her side is three sections now, one a tab: all hers)
   for (const part of document.querySelectorAll(".evil-part")) {
     part.classList.toggle("dim", !on);
@@ -940,6 +983,7 @@ $("ev-goalset").onclick = () => {
   const g = $("ev-goalsel").value, r = $("ev-goalref").value;
   order("doom_goal", r ? { finish: g, prefer: r } : { finish: g });
 };
+$("ev-startclear").onclick = async () => { setsDirty = false; await order("doom_policy", null); await order("doom_goal", null); };
 $("ev-goaldrop").onclick = () => order("doom_goal", { finish: "none", prefer: "none" });
 for (const el of document.querySelectorAll("[data-p]")) el.addEventListener("change", () => { setsDirty = true; });
 for (const id of ["ev-fidle", "ev-fask", "ev-fnext", "ev-fwait", "ev-fquiet"]) $(id).addEventListener("input", () => { forceDirty = true; });
