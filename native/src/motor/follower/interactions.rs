@@ -197,7 +197,17 @@ impl RouteFollower {
             if d > DOOR_CHECK_DIST {
                 return None;
             }
-            if ns != cs && !can_cross(obs.heights[cs], obs.heights[ns]) {
+            // (stood on the next floor already, her box over it and her middle not: it has her,
+            // and the crossing's made as far as heights go. A lift narrower than she is, a bar
+            // across a window that goes down to let her in, carries her up by the part of her
+            // box that's on it; taken for a floor gone up out of her reach, she stepped back to
+            // wait "squarely at its edge" and off it, every time it came. Memento Mori MAP06,
+            // the way back into the first building)
+            let riding = j == self.poly_i
+                && obs.z.is_some_and(|z| {
+                    (z - obs.heights[ns].floor).abs() < 1.0 && z > obs.heights[cs].floor + 1.0
+                });
+            if ns != cs && !riding && !can_cross(obs.heights[cs], obs.heights[ns]) {
                 // past the next crossing only for doors (they hide behind thin door tracks);
                 // a lift: step on and ride, the crossing off it opens up on the way
                 let door = self.doors.contains_key(&ns);
