@@ -12,7 +12,7 @@ use evilboom::specials::classify_line;
 #[cfg(feature = "viewer")]
 use evilboom::sweep::run_map;
 use evilboom::wad::{load_level, Wad};
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, ExitCode, Stdio};
 use std::rc::Rc;
@@ -76,6 +76,66 @@ fn dump_nav(wad: &str, map: &str) -> Result<(), String> {
     let sp = nav.poly_at(start).ok_or("start off the map")?;
     let reach = view.reachable(sp, &nav.initial_states(), None);
     println!("reach from start {}", reach.len());
+    // Where the reach ends with every trigger she could get to fired and every key taken: the
+    // edges from a sector reached to one that isn't, with both as the map starts. What's on
+    // the far side of one is what the planner has no way into (for a map with no route).
+    let stages = view.progression(sp);
+    for (i, st) in stages.iter().enumerate() {
+        println!(
+            "stage {i}: {} polys reached, {} triggers fired, exits {:?}",
+            st.reached.len(),
+            st.fired.len(),
+            st.exits
+        );
+    }
+    if let Some(last) = stages.last() {
+        let sector = |p: usize| nav.mesh.polys[p].as_ref().map(|q| q.sector);
+        let reached: BTreeSet<usize> = last.reached.iter().filter_map(|&p| sector(p)).collect();
+        let all: BTreeSet<usize> = (0..nav.mesh.polys.len()).filter_map(sector).collect();
+        println!("sectors reached {} of {}", reached.len(), all.len());
+        let mut edges: BTreeMap<(usize, usize), (usize, Option<usize>)> = BTreeMap::new();
+        for &p in &last.reached {
+            let Some(poly) = nav.mesh.polys[p].as_ref() else {
+                continue;
+            };
+            for &pi in &poly.portals {
+                let portal = &nav.mesh.portals[pi];
+                let q = portal.other(p);
+                if let (false, Some(to)) = (last.reached.contains(&q), sector(q)) {
+                    let e = edges
+                        .entry((poly.sector, to))
+                        .or_insert((0, portal.linedef));
+                    e.0 += 1;
+                }
+            }
+        }
+        let h = |s: usize| {
+            let h = nav.movers.initial[s];
+            format!(
+                "{s} ({}..{}, tag {})",
+                h.floor, h.ceiling, nav.map.sectors[s].tag
+            )
+        };
+        // (and the triggers never fired: where each would be set off from)
+        let fired: BTreeSet<usize> = stages
+            .iter()
+            .flat_map(|s| s.fired.iter().copied())
+            .collect();
+        for t in view.triggers.iter().filter(|t| !fired.contains(&t.id)) {
+            let from: BTreeSet<usize> = t.activators.iter().filter_map(|&p| sector(p)).collect();
+            println!(
+                "  never fired: line {} {} {:?} (lock {:?}), set off from sectors {from:?}",
+                t.line, t.info.description, t.sectors, t.info.lock
+            );
+        }
+        for ((a, b), (n, line)) in &edges {
+            println!(
+                "  reach ends: sector {} | sector {}, line {line:?}, {n} portals",
+                h(*a),
+                h(*b)
+            );
+        }
+    }
     let t0 = std::time::Instant::now();
     let plan = evilboom::walkthrough::plan_level(&view, start, 60.0, 20000);
     eprintln!("planned in {:.2}s", t0.elapsed().as_secs_f64());

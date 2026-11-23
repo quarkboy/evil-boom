@@ -54,6 +54,9 @@ const LONG_LEDGE_TICS: usize = 30;
 const PIN_MARGIN: f64 = 3.0;
 /// sectors within this of an edge are aimed at
 const AIM_RANGE: f64 = 400.0;
+/// ...and off a step no higher than she could walk down, a ledge no further than this: a fall
+/// of a step lasts some six tics, a hundred units at a run
+const STEP_FLIGHT: f64 = 160.0;
 
 /// Fractions along the ledge in trial order, nearest the midpoint first.
 fn takeoff_samples(width: f64) -> Vec<f64> {
@@ -157,7 +160,25 @@ impl JumpLab {
                 }
                 for &ha in rising.map_or(&input.options[sa], |r| &r[sa]) {
                     for &hb in &input.options[sb] {
-                        if ha.floor - hb.floor <= MAX_STEP {
+                        if ha.floor <= hb.floor {
+                            continue;
+                        }
+                        // A step down, not a ledge, is a takeoff too, for a floor past it that
+                        // can't be stepped up to from the floor below yet isn't too high to
+                        // come down onto from here: a run down a stair, over the well at its
+                        // foot, onto a ledge. (Memento Mori MAP04: its blue key is in an
+                        // alcove 32 up from the foot of a stair, got by running down it.)
+                        let low = ha.floor - hb.floor <= MAX_STEP;
+                        if low
+                            && (rising.is_some()
+                                || !self.ledge_past(
+                                    mid,
+                                    (nx, ny),
+                                    hb.floor,
+                                    ha.floor,
+                                    &input.options,
+                                ))
+                        {
                             continue;
                         }
                         // fixed angles, plus aiming at nearby sectors high enough to land on (an
@@ -256,6 +277,14 @@ impl JumpLab {
                                     });
                                 if let Some(j) = found.filter(|j| {
                                     let dest = mesh.poly(j.dest_poly).sector;
+                                    // (off a step: only onto what stepping down wouldn't reach)
+                                    if low
+                                        && input.options[dest]
+                                            .iter()
+                                            .all(|h| h.floor <= hb.floor + MAX_STEP)
+                                    {
+                                        return false;
+                                    }
                                     rising.is_none()
                                         || (!input.moving.contains(&dest)
                                             && (self.initial[dest].0 - ha.floor).abs() < 0.5
@@ -337,6 +366,28 @@ impl JumpLab {
 
     /// Angles (degrees off normal n, within +-75) towards nearby sectors whose floor could be
     /// landed on (above min_floor): their middles, then their nearest parts (a little in).
+    /// Is there a floor ahead of a step down (within `STEP_FLIGHT` of it, on its far side)
+    /// more than a step above the floor below it, and no more than a step above the one she
+    /// leaves?
+    fn ledge_past(
+        &self,
+        origin: Point,
+        n: Point,
+        below: f64,
+        from: f64,
+        options: &[Vec<Heights>],
+    ) -> bool {
+        self.sector_centres.iter().any(|&(s, c)| {
+            let d = dist(origin, c);
+            d <= STEP_FLIGHT
+                && d >= 16.0
+                && (c.0 - origin.0) * n.0 + (c.1 - origin.1) * n.1 > 0.0
+                && options[s]
+                    .iter()
+                    .any(|h| h.floor > below + MAX_STEP && h.floor <= from + MAX_STEP)
+        })
+    }
+
     fn aim_angles(
         &self,
         origin: Point,
