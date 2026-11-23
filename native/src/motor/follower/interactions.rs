@@ -126,6 +126,57 @@ impl RouteFollower {
         if let Some(i) = window.iter().position(|&p| p == here) {
             self.poly_i += i;
         }
+        // A drop with no room past the ledge as things stand, and a door of hers to open hung
+        // there: the door's the thing to press. Asked of the crossing she's at and the one just
+        // behind her (her box held on the ledge, her middle already past its edge). (Memento
+        // Mori MAP26: the exit is down a shaft with a blue door hung in it, shut at the height
+        // of the ledge.)
+        for j in
+            self.poly_i.saturating_sub(1)..(self.poly_i + 1).min(path.polys.len().saturating_sub(1))
+        {
+            let (cur, nxt) = (path.polys[j], path.polys[j + 1]);
+            let (cs, ns) = (mesh.poly(cur).sector, mesh.poly(nxt).sector);
+            let top = obs.heights[cs].floor;
+            let Some(portal_i) = self.walk_portal(cur, nxt) else {
+                continue;
+            };
+            let portal = &mesh.portals[portal_i];
+            let Some(li) = portal.linedef else { continue };
+            if top - obs.heights[ns].floor <= MAX_STEP
+                || obs.z.is_some_and(|z| z < top - 1.0)
+                || dist(
+                    closest_on_portal(obs.pos(), portal.p1, portal.p2),
+                    obs.pos(),
+                ) > DOOR_CHECK_DIST
+            {
+                continue;
+            }
+            let live: Vec<(f64, f64)> = obs.heights.iter().map(|h| (h.floor, h.ceiling)).collect();
+            if nav.landable_at(li, cs, top, &live) {
+                continue;
+            }
+            let near_polys: BTreeSet<usize> = [cur, here].into_iter().collect();
+            // (the map's lines, not what she's learned: a door in her way is pressed to find out)
+            let hung = nav.triggers.iter().find_map(|t| {
+                let door = *t.sectors.first()?;
+                let line = t.linedef()?;
+                (matches!(t.info.trigger, Trigger::DR | Trigger::D1)
+                    && !near_polys.is_disjoint(&t.activators)
+                    && t.info.lock.satisfied(self.keys)
+                    && obs.heights[door].ceiling - top < PLAYER_HEIGHT
+                    // (and opening it gives her the room)
+                    && t.effects.iter().any(|(s, hs)| {
+                        *s == door && hs.iter().any(|h| h.ceiling - top >= PLAYER_HEIGHT)
+                    }))
+                .then(|| {
+                    let (a, b) = nav.map.line_seg(line);
+                    (door, closest_point(obs.pos(), a, b))
+                })
+            });
+            if let Some((door, point)) = hung {
+                return Some((cur, door, portal_i, Some(point)));
+            }
+        }
         let upto = (self.poly_i + 8).min(path.polys.len().saturating_sub(1));
         for j in self.poly_i..upto {
             let (cur, nxt) = (path.polys[j], path.polys[j + 1]);
@@ -333,10 +384,12 @@ impl RouteFollower {
         let portal: Portal = nav.mesh.portals[portal_i].clone();
         let live = &obs.heights;
         let pos = obs.pos();
-        let opener = self
-            .doors
-            .get(&sector)
-            .is_some_and(|d| use_point.is_some() || d.users.contains(&cur));
+        // (a use point given: a door to press from here, one of the plan's or one hung in a drop)
+        let opener = use_point.is_some()
+            || self
+                .doors
+                .get(&sector)
+                .is_some_and(|d| d.users.contains(&cur));
         // the part of the doorway in front of her, or the gate door's line; for a door, its use
         // line (the face with the special: a door set aslant needn't have it on the side the
         // path goes in by)

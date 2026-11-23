@@ -400,9 +400,38 @@ impl Navigator {
         if let Some(&v) = self.caches.borrow().landable.get(&key) {
             return v;
         }
-        let v = landable(&self.map, &self.jump_lab, li, high, top);
+        let opened = opened_heights(&self.movers, &self.triggers);
+        let v = landable(&self.map, &self.jump_lab, li, high, top, &opened);
         self.caches.borrow_mut().landable.insert(key, v);
         v
+    }
+
+    /// `landable`, by these heights alone (the sectors as they stand now): is there room past
+    /// the ledge this moment?
+    pub fn landable_at(&self, li: usize, high: usize, top: f64, heights: &[(f64, f64)]) -> bool {
+        landable(&self.map, &self.jump_lab, li, high, top, heights) && {
+            // (`landable` asks the map as it starts too: only what these heights give)
+            let m = &self.map;
+            let (a, b) = m.line_seg(li);
+            let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+            let length = dx.hypot(dy).max(1e-6);
+            let (mut nx, mut ny) = (-dy / length, dx / length);
+            if m.back_sector(&m.linedefs[li]) == Some(high) {
+                (nx, ny) = (-nx, -ny);
+            }
+            let clear = PLAYER_RADIUS * (nx.abs() + ny.abs()) + 0.5;
+            let steps = ((length / 8.0).floor() as usize).max(2);
+            (1..steps).any(|i| {
+                let t = i as f64 / steps as f64;
+                [clear, clear + 4.0, clear + 8.0, clear + 16.0, clear + 32.0]
+                    .into_iter()
+                    .any(|d| {
+                        let p: Point = (a.0 + dx * t + nx * d, a.1 + dy * t + ny * d);
+                        let (fits, _floor, ceil) = self.jump_lab.fits_at_heights(p, heights);
+                        fits && ceil - top >= PLAYER_HEIGHT
+                    })
+            })
+        }
     }
 
     /// Is the portal ruled out whatever the heights (a blocking line, a teleport line walked
@@ -441,7 +470,20 @@ impl Navigator {
 /// `top`). A gap exactly as wide as the box can't be dropped into. Only walls and ceilings
 /// are checked (the map's): floors past the ledge may have moved, and a teleport line just
 /// past it means she never lands.
-pub(super) fn landable(m: &MapData, lab: &JumpLab, li: usize, high: usize, top: f64) -> bool {
+///
+/// `opened`: each sector with its ceiling as high as anything raises it. Where there's no
+/// room by the map as it starts there may be with a door under the ledge opened: Memento Mori
+/// MAP26's exit is down a shaft with a blue door hung in it, shut from the ledge's height till
+/// it's opened with the key. (Taken as open here, whether or not it is yet: where it isn't
+/// she's stopped at the edge, which is the follower's to find.)
+pub(super) fn landable(
+    m: &MapData,
+    lab: &JumpLab,
+    li: usize,
+    high: usize,
+    top: f64,
+    opened: &[(f64, f64)],
+) -> bool {
     let (a, b) = m.line_seg(li);
     let (dx, dy) = (b.0 - a.0, b.1 - a.1);
     let length = dx.hypot(dy);
@@ -460,9 +502,32 @@ pub(super) fn landable(m: &MapData, lab: &JumpLab, li: usize, high: usize, top: 
             if fits && ceil - top >= PLAYER_HEIGHT {
                 return true;
             }
+            let (fits, _floor, ceil) = lab.fits_at_heights(p, opened);
+            if fits && ceil - top >= PLAYER_HEIGHT {
+                return true;
+            }
         }
     }
     false
+}
+
+/// Every sector at its starting floor, its ceiling as high as any trigger takes it.
+pub(super) fn opened_heights(movers: &MoverModel, triggers: &[TriggerLine]) -> Vec<(f64, f64)> {
+    let mut out: Vec<(f64, f64)> = movers
+        .initial
+        .iter()
+        .map(|h| (h.floor, h.ceiling))
+        .collect();
+    for t in triggers {
+        for (s, hs) in &t.effects {
+            for h in hs {
+                if h.ceiling > out[*s].1 {
+                    out[*s].1 = h.ceiling;
+                }
+            }
+        }
+    }
+    out
 }
 
 /// Where along line `li` she can drop off it from sector `high`, whose floor is at `top`: the

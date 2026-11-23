@@ -145,11 +145,14 @@ impl Core {
         };
         let fit = Rc::clone(&n.fit);
         let (map, lab) = (Arc::clone(&n.map), Arc::clone(&n.jump_lab));
+        let opened = super::widths::opened_heights(&n.movers, &n.triggers);
         let walker = Arc::clone(&n.jump_lab);
         let (span_map, span_lab) = (Arc::clone(&n.map), Arc::clone(&n.jump_lab));
         let callbacks = Callbacks::new(
             Box::new(move |pi, blocking| fit.fits_without(pi, blocking)),
-            Box::new(move |li, high, top| super::widths::landable(&map, &lab, li, high, top)),
+            Box::new(move |li, high, top| {
+                super::widths::landable(&map, &lab, li, high, top, &opened)
+            }),
             Box::new(move |li, high, top| {
                 super::widths::landing_span(&span_map, &span_lab, li, high, top)
             }),
