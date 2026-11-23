@@ -86,6 +86,14 @@ pub enum Command {
         brightness: Option<i32>,
         #[serde(default)]
         fov: Option<i32>,
+        /// how strong the game's flashes are shown, 0 (none) to 100 (Doom's own): the red of
+        /// a hit and the berserk, a pickup's gold, the radiation suit's green
+        #[serde(default)]
+        flash_red: Option<i32>,
+        #[serde(default)]
+        flash_gold: Option<i32>,
+        #[serde(default)]
+        flash_green: Option<i32>,
     },
     /// the settings not hers to change (Neuro's; of stance, save, risk, powerups, explore,
     /// instinct, finish, prefer): each stays as it is (instinct: on) and leaves her actions;
@@ -250,6 +258,9 @@ pub struct GameState {
     pub brightness: i32,
     /// how wide the view's drawn, in degrees; none from an engine without the control
     pub fov: Option<i32>,
+    /// how strong the game's flashes are shown (0-100): red, gold, green
+    #[serde(default)]
+    pub flashes: [i32; 3],
     /// what's on the screen: "title", "menu", "level", "dead", "between levels", "over", ...
     pub screen: String,
     /// who directs her: "bot" (on her own), "orders file", "neuro"
@@ -362,7 +373,10 @@ mod tests {
             serde_json::from_str::<Command>(r#"{"cmd":"picture","fov":105}"#).ok(),
             Some(Command::Picture {
                 brightness: None,
-                fov: Some(105)
+                fov: Some(105),
+                flash_red: None,
+                flash_gold: None,
+                flash_green: None,
             })
         );
         assert_eq!(

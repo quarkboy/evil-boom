@@ -156,6 +156,9 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
     <h2>Picture <span class="dim" style="text-transform:none;letter-spacing:0">(kept for the next game)</span></h2>
     <div class="vol"><label for="p-brightness">Brightness</label><input type="range" id="p-brightness" min="0" max="10" value="0" data-k="brightness"><output id="p-brightness-n"></output></div>
     <div class="vol"><label for="p-fov">View (FOV)</label><input type="range" id="p-fov" min="60" max="120" step="5" value="90" data-k="fov"><output id="p-fov-n"></output></div>
+    <div class="vol"><label for="p-flash_red" title="The red of being hurt and of the berserk pack. 100 is Doom's own; 0 none.">Red flash</label><input type="range" id="p-flash_red" min="0" max="100" step="10" value="50" data-k="flash_red"><output id="p-flash_red-n"></output></div>
+    <div class="vol"><label for="p-flash_gold" title="The gold of a pickup.">Gold flash</label><input type="range" id="p-flash_gold" min="0" max="100" step="10" value="50" data-k="flash_gold"><output id="p-flash_gold-n"></output></div>
+    <div class="vol"><label for="p-flash_green" title="The green of the radiation suit.">Green tint</label><input type="range" id="p-flash_green" min="0" max="100" step="10" value="50" data-k="flash_green"><output id="p-flash_green-n"></output></div>
     <p class="dim" id="p-note" style="margin:0;font-size:12px"></p>
   </section>
 
@@ -393,6 +396,8 @@ let token = new URLSearchParams(location.search).get("t") || "";
 try { if (token) localStorage.setItem("evil-console-token", token); else token = localStorage.getItem("evil-console-token") || ""; } catch (e) { /* (storage off: the URL's token only) */ }
 let urlsShown = null, volSentAt = 0, volTimer = null, volPending = {};
 let picPending = {}, picTimer = null, picSentAt = 0;
+const PIC = ["brightness", "fov", "flash_red", "flash_gold", "flash_green"];
+const picShown = (k, v) => k === "fov" ? v + "°" : k.startsWith("flash") ? v + "%" : v;
 let fontsShown = null, tokenRefused = false;
 // (the token the page goes by in the address bar too: a reload or a bookmark keeps it)
 function showToken() {
@@ -515,14 +520,15 @@ function render(p) {
   }
   $("v-note").textContent = live && !vol ? "This game's engine has no volume control (rebuild it: tools/build-engine.sh)." : (!p.connected ? "No game running: the levels are kept for the next one." : "");
   // (the picture: the game's own while it's connected, else what's kept)
-  const shownPic = { brightness: live ? st.brightness : sv.brightness, fov: live ? st.fov : sv.fov };
-  for (const k of ["brightness", "fov"]) {
+  const fl = live && st.flashes && st.flashes.length === 3 ? st.flashes : [sv.flash_red, sv.flash_gold, sv.flash_green];
+  const shownPic = { brightness: live ? st.brightness : sv.brightness, fov: live ? st.fov : sv.fov, flash_red: fl[0], flash_gold: fl[1], flash_green: fl[2] };
+  for (const k of PIC) {
     const el = $("p-" + k);
     el.disabled = k === "fov" && !!live && st.fov == null;
     if (document.activeElement !== el && Date.now() - picSentAt > 1500 && shownPic[k] != null) el.value = shownPic[k];
-    $("p-" + k + "-n").textContent = k === "fov" ? el.value + "°" : el.value;
+    $("p-" + k + "-n").textContent = picShown(k, el.value);
   }
-  $("p-note").textContent = live && st.fov == null ? "This game's engine has no view setting (rebuild it: tools/build-engine.sh)." : "Brightness 0 and a view of 90° are Doom's own. A wider view makes movement look slower.";
+  $("p-note").textContent = live && st.fov == null ? "This game's engine has no view setting (rebuild it: tools/build-engine.sh)." : "Brightness 0, a view of 90° and flashes at 100% are Doom's own. A wider view makes movement look slower.";
   const urls = (p.neuro_urls || []).join("\n");
   if (urls !== urlsShown) {
     urlsShown = urls;
@@ -823,9 +829,9 @@ for (const k of ["master", "sfx", "music"]) {
     if (!volTimer) volTimer = setTimeout(() => { const v = volPending; volPending = {}; volTimer = null; cmd(Object.assign({ cmd: "volume" }, v)); }, 150);
   });
 }
-for (const k of ["brightness", "fov"]) {
+for (const k of PIC) {
   $("p-" + k).addEventListener("input", (e) => {
-    $("p-" + k + "-n").textContent = k === "fov" ? e.target.value + "°" : e.target.value;
+    $("p-" + k + "-n").textContent = picShown(k, e.target.value);
     picPending[k] = Number(e.target.value);
     picSentAt = Date.now();
     if (!picTimer) picTimer = setTimeout(() => { const v = picPending; picPending = {}; picTimer = null; cmd(Object.assign({ cmd: "picture" }, v)); }, 150);

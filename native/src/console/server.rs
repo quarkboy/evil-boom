@@ -82,6 +82,10 @@ pub struct Settings {
     /// (60-120 degrees); none: as the game has it (0, 90). Changed from the page as it plays.
     pub brightness: Option<i32>,
     pub fov: Option<i32>,
+    /// how strong the game's flashes are shown (0-100; none: 50): red, gold, green
+    pub flash_red: Option<i32>,
+    pub flash_gold: Option<i32>,
+    pub flash_green: Option<i32>,
     /// how soon a decision's forced on Evil, in seconds: waiting with nothing to do, a question
     /// unanswered, asked what next while she's on with something (at most that often); 0:
     /// never; none: the game's own (6, 3 and 15). Changed from the page as it plays.
@@ -162,6 +166,9 @@ impl Default for Settings {
             master_volume: None,
             brightness: None,
             fov: None,
+            flash_red: None,
+            flash_gold: None,
+            flash_green: None,
             force_idle: None,
             force_ask: None,
             force_next: None,
@@ -744,10 +751,15 @@ fn read_game(stream: TcpStream, hub: &Hub) {
                     settings.push("instinct".into());
                 }
                 let _ = s.send(&Command::Lock { settings });
-                let (brightness, fov) = (s.settings.brightness, s.settings.fov);
-                if brightness.is_some() || fov.is_some() {
-                    let _ = s.send(&Command::Picture { brightness, fov });
-                }
+                let st = &s.settings;
+                let picture = Command::Picture {
+                    brightness: st.brightness,
+                    fov: st.fov,
+                    flash_red: st.flash_red,
+                    flash_gold: st.flash_gold,
+                    flash_green: st.flash_green,
+                };
+                let _ = s.send(&picture);
                 let name = s.settings.console_name.trim().to_string();
                 let _ = s.send(&Command::ConsoleName { name });
                 let hide = s.settings.column_hide.clone();
@@ -1199,11 +1211,21 @@ fn handle(hub: &Hub, mut req: Request) {
                     let saved = s.save();
                     let sent = if s.to_game.is_some() { s.send(&c) } else { Ok(()) };
                     done(saved.and(sent))
-                } else if let Command::Picture { brightness, fov } = c {
+                } else if let Command::Picture {
+                    brightness,
+                    fov,
+                    flash_red,
+                    flash_gold,
+                    flash_green,
+                } = c
+                {
                     // (kept for the next game as well; not logged, as the volume isn't)
                     let st = &mut s.settings;
                     st.brightness = brightness.map(|v| v.clamp(0, 10)).or(st.brightness);
                     st.fov = fov.map(|v| v.clamp(60, 120)).or(st.fov);
+                    st.flash_red = flash_red.map(|v| v.clamp(0, 100)).or(st.flash_red);
+                    st.flash_gold = flash_gold.map(|v| v.clamp(0, 100)).or(st.flash_gold);
+                    st.flash_green = flash_green.map(|v| v.clamp(0, 100)).or(st.flash_green);
                     let saved = s.save();
                     let sent = if s.to_game.is_some() { s.send(&c) } else { Ok(()) };
                     done(saved.and(sent))

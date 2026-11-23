@@ -1326,6 +1326,27 @@ pub fn snapshot_to(
 /// program's, so a new level's watch has it too).
 static BRIGHTNESS: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
 
+/// How strong the game's flashes are shown, a hundredth each: the reds (hurt, the berserk),
+/// the gold (a pickup), the green (the radiation suit). 100 is Doom's own; half unless set
+/// (the stream's viewers found the old game hard on the eyes).
+static FLASHES: [std::sync::atomic::AtomicI32; 3] = [
+    std::sync::atomic::AtomicI32::new(50),
+    std::sync::atomic::AtomicI32::new(50),
+    std::sync::atomic::AtomicI32::new(50),
+];
+
+fn flashes() -> [i32; 3] {
+    [0, 1, 2].map(|i| FLASHES[i].load(std::sync::atomic::Ordering::Relaxed))
+}
+
+fn set_flashes(to: [Option<i32>; 3]) {
+    for (i, v) in to.into_iter().enumerate() {
+        if let Some(v) = v {
+            FLASHES[i].store(v.clamp(0, 100), std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+}
+
 fn brightness() -> i32 {
     BRIGHTNESS.load(std::sync::atomic::Ordering::Relaxed)
 }
@@ -1388,11 +1409,30 @@ impl Watch {
         }
     }
 
-    /// `palette` made again from the game's one in use (the brightness changed, or which).
+    /// `palette` made again from the game's one in use (the brightness changed, or which, or
+    /// how strong its flashes are shown): the plain one tinted towards it by that much.
     fn set_palette(&mut self) {
-        if let Some(p) = self.palettes.get(self.palette_now) {
-            self.palette = brightened(p);
-        }
+        let (Some(plain), Some(p)) = (self.palettes.first(), self.palettes.get(self.palette_now))
+        else {
+            return;
+        };
+        let share = match self.palette_now {
+            0 => 0,
+            1..=8 => flashes()[0],
+            9..=12 => flashes()[1],
+            _ => flashes()[2],
+        };
+        let mix = |a: u32, b: u32| (a * (100 - share as u32) + b * share as u32 + 50) / 100;
+        let tinted: Vec<u32> = plain
+            .iter()
+            .zip(p)
+            .map(|(&a, &b)| {
+                (mix(a >> 16 & 0xFF, b >> 16 & 0xFF) << 16)
+                    | (mix(a >> 8 & 0xFF, b >> 8 & 0xFF) << 8)
+                    | mix(a & 0xFF, b & 0xFF)
+            })
+            .collect();
+        self.palette = brightened(&tinted);
     }
 }
 

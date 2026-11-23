@@ -326,11 +326,18 @@ impl Watch {
                         .log
                         .push("console: not directed by Neuro: no settings to lock".into()),
                 },
-                Command::Picture { brightness, fov } => {
+                Command::Picture {
+                    brightness,
+                    fov,
+                    flash_red,
+                    flash_gold,
+                    flash_green,
+                } => {
                     if let Some(b) = brightness {
                         super::set_brightness(b);
-                        self.set_palette();
                     }
+                    super::set_flashes([flash_red, flash_gold, flash_green]);
+                    self.set_palette();
                     if let Some(f) = fov {
                         self.engine.set_fov(f);
                     }
@@ -568,6 +575,7 @@ impl Watch {
             volume: self.engine.volume(),
             brightness: super::brightness(),
             fov: self.engine.fov(),
+            flashes: super::flashes(),
             chat_box: self
                 .stream
                 .as_ref()

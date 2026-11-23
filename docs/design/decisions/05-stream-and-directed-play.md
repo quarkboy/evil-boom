@@ -4123,3 +4123,8 @@ of the berserk, 9-12 a pickup's gold, 13 the suit's green); `evil_palette` gives
 watch colours the frame with that one (through the brightness set). The window, the
 stream's view, the console's picture and a recording all take it. Seen in a recording of
 E2M2: red for 22 s from the berserk pack, and a moment at each hit.
+
+The flashes are shown at half strength unless set (the maintainer's call, after viewers
+found the old game hard on the eyes): the plain palette tinted halfway to the game's one.
+DSDA's own settings only turn each kind on or off, so the strength is ours: three of them
+in the console's Picture section (`flash_red`, `flash_gold`, `flash_green`, 0 to 100).

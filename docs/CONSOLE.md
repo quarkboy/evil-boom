@@ -56,6 +56,7 @@ form's changes first).
 | MIDI synth | `soundfont` | for the songs not recorded: empty for the default (`soundfonts/SC-55.sf2` if it's there, else OPL), `opl`, or a SoundFont in `soundfonts/` by name |
 | Start muted | `muted`, and the Sound section's `sfx_volume`, `music_volume`, `master_volume` | the game's sound |
 | **Picture:** Brightness, View (FOV) | `brightness`, `fov` | how bright the game's frame is shown (0, Doom's own, to 10: a gamma curve, the dark lifted most), and how wide its view in degrees (60 to 120; Doom's own is 90). Both change as it plays and are kept for the next game. A wider view makes movement look slower; the weapon is drawn the same |
+| Red flash, Gold flash, Green tint | `flash_red`, `flash_gold`, `flash_green` | how strong the game's screen flashes are shown, 0 (none) to 100 (Doom's own); 50 unless set: the red of being hurt and of the berserk pack, the gold of a pickup, the green of the radiation suit |
 
 Settings that apply only under others are shown only then: the Neuro URL for Neuro, Evil's for
 Neuro or GPT, the title card's choice with Doom's own screens, the column for the stream.
