@@ -1141,6 +1141,10 @@ impl View {
                     if !t.permanent() {
                         mixed.insert(s);
                     }
+                    // (but a door opened for good isn't also shut: `opened_for_good`)
+                    if t.permanent() && crate::nav::opened_for_good(&states[s], &hs) {
+                        states[s].clear();
+                    }
                     for h in hs {
                         if t.permanent() && !states[s].contains(&h) {
                             add_height(after.entry(s).or_default(), h);

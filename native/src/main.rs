@@ -106,9 +106,16 @@ fn dump_nav(wad: &str, map: &str) -> Result<(), String> {
             for q in c.chunks(2) {
                 let p = nav.poly_at((q[0], q[1]));
                 println!(
-                    "  at ({}, {}): poly {p:?}, sector {:?}, reached {}",
+                    "  at ({}, {}): poly {p:?} {:?}, sector {:?}, reached {}",
                     q[0],
                     q[1],
+                    p.and_then(|p| nav.mesh.polys[p].as_ref())
+                        .map(|q| q
+                            .vertices
+                            .iter()
+                            .map(|v| (v.0.round(), v.1.round()))
+                            .collect::<Vec<_>>())
+                        .unwrap_or_default(),
                     p.and_then(sector),
                     p.is_some_and(|p| last.reached.contains(&p))
                 );
@@ -116,7 +123,7 @@ fn dump_nav(wad: &str, map: &str) -> Result<(), String> {
                     for &pi in &nav.mesh.polys[p].as_ref().unwrap().portals {
                         let portal = &nav.mesh.portals[pi];
                         let o = portal.other(p);
-                        println!("    portal {pi} line {:?} to poly {o} sector {:?} reached {} fits {} passable now {}", portal.linedef, sector(o), last.reached.contains(&o), nav.portal_fits[pi], view.nav.passable(pi, p, &nav.initial_states(), None, &BTreeSet::new()));
+                        println!("    portal {pi} ({:.0}, {:.0})-({:.0}, {:.0}) line {:?} to poly {o} sector {:?} reached {} fits {} passable now {}", portal.p1.0, portal.p1.1, portal.p2.0, portal.p2.1, portal.linedef, sector(o), last.reached.contains(&o), nav.portal_fits[pi], view.nav.passable(pi, p, &nav.initial_states(), None, &BTreeSet::new()));
                     }
                 }
             }
