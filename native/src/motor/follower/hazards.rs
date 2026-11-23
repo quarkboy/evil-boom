@@ -89,6 +89,18 @@ impl RouteFollower {
             self.crusher.pinned_since = None;
             return None;
         }
+        // (by the game's own rule before it's believed: the sector under her middle and those
+        // across the lines her box touches, not the sector under each corner. Memento Mori
+        // MAP20: a lift's doorway whose piece of the map's tree reaches 80 units into the
+        // lift's room with no line between. A corner of her box over that piece, the lift
+        // up, read as a ceiling at her feet: three tics out from under it, three back on her
+        // way, and twenty seconds on the errand was given up, to the hour.)
+        let live: Vec<(f64, f64)> = obs.heights.iter().map(|h| (h.floor, h.ceiling)).collect();
+        let (_, f, c) = self.view.nav.jump_lab.fits_at_heights(obs.pos(), &live);
+        if c - f >= PLAYER_HEIGHT {
+            self.crusher.pinned_since = None;
+            return None;
+        }
         if self.mortal {
             // (mortal: a ceiling on her may be a crusher, known or not; waiting is dying. Out from
             // under it to the nearest spot round her with room, straight there, whatever route she
