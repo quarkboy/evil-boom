@@ -26,11 +26,24 @@
 | | exits of 32 |
 |---|---|
 | 0.9.1 | 12 (MAP16 and MAP17 wouldn't load) |
-| the loader and the gate rule (below) | 13 |
+| the loader, the gate rule, MAP04's four, the mesh (7420edb) | 15 |
+| MAP26's door and exit ring (0aedce7) | 16 |
+| MAP14's door, MAP05's switch (f895af5) | 18 |
+
+Not out at f895af5: MAP06, 09, 12, 15, 16, 17, 18, 20, 22, 23, 25, 28, 30 (the Icon of Sin), 31.
 
 By the omniscient planner at 0.9.1, 17 of the 32 had no route: MAP04, 06, 09, 12, 15, 16, 17,
 19, 21, 23, 25, 26, 28, 29, 30, 31, 32 (of which she got out of 19, 29 and 32 anyway, by
-exploring).
+exploring). At 575ceee, of those she isn't out of: no route even in principle on MAP06 (107 of
+281 sectors reached), 09 (325 of 513), 16 (218 of 444), 31 (30 of 508): the model lacks
+something there; a route in principle but none planned on MAP12, 15, 17, 23, 25, 28; a whole
+plan on MAP18, 20, 22, where what stops her is in the playing.
+
+**Ammo, not the way.** From a pistol start she can run dry on these maps, and charmed she
+still won't close on a Hell Knight with her fists: on MAP18 one stood on a stair 64 wide and
+that was the level. `--charmed --endless-bullets` takes that out (MAP18: out in 3,488 s with
+it): use both when the question is the way through, and charmed alone when it's whether she
+gets through as she'd play it.
 
 ## What was found, by level
 
@@ -63,16 +76,58 @@ with, a press's reach past it, a thin sector too low to walk through, counts as 
 
    Stuck -> out in 2,271 s, 106/106 kills.
 
-**MAP05: open.** Two things seen, neither mended yet:
-- The lift that is a whole room's floor (sector 112, tag 9) is called from a wall in a
-  recess eight units deep in the nukage moat (line 717), faced in the same metal as the walls
-  beside it. Mapped, never pressed. A rule tried (a use line at the back of a niche too
-  shallow to stand in is offered) didn't get it pressed: the place to press from is in the
-  moat, with no way back that she knows of. Not kept.
-- She wedges at (-288, 22) against the corner of an island in the moat, "stuck" six times a
-  life, and starts again.
+**MAP05: the switch in the moat.** The lift that is a whole room's floor (sector 112) is
+called from a switch in a recess of the nukage moat (line 717). She saw it in the first
+minutes and pressed it in the 58th: no switch is pressed from a floor that hurts while
+there's other floor, bar with nothing else at all to do, and that came after every suspect
+wall of the level (46 minutes of them). Now a pass for such switches comes before the walls
+(`switches_waded_for`), the health margin and the cut-off rules standing. Stuck at the hour
+-> out in 1,628 s. (A rule tried earlier, a use line at the back of a shallow niche, did
+nothing for it and wasn't kept. She also wedges at (-288, 22) on an island's corner in the
+moat now and then: not looked into.) This one changes play on any level with a switch in a
+hurting floor: DOOM II MAP09 with a loadout, eight seeds on one life, 0 out before and 2 after.
+
+**MAP14: a door on a timer, 900 units from its switch.** She learned the switch (heard the
+door) and never went: the planner had her at the door 220 tics after the press and the door
+"lasting" 213. A door coming down is walked under till the gap is less than her height: 34
+tics more here. Counted (`MoverModel::timing_from`). Stuck (9 restarts) -> out in 2,128 s.
+
+**MAP18: ammo** (above). Out with endless bullets; nothing wrong with the way found.
+
+**MAP20: three things, and not out yet.**
+1. *The nodes.* Both lifts' doorways are leaves of the map's tree that reach 80 units into
+   the lift's room with no line between: the game itself takes a point there for the
+   doorway's sector (floor 128, ceiling 192), so with the lift up it's a wall nobody can
+   see, and whoever stands there when the lift goes up stays down inside it. The mesh has
+   it as the game does. Her own check for a ceiling come down on her went by the sector
+   under each corner of her box and fled a ceiling that wasn't there, three tics in six,
+   silently, till every errand from that room timed out. Now checked by the game's rule
+   (the sector under her middle, the lines her box touches) first.
+2. *The red card's ledge.* Its face, a fall of slime over a nukage pit, is a use line that
+   raises the pit's floor. Offered now as the face of a ledge with a key on it
+   (`under_a_key`), and gone for as a key is. Pressed at 674 s; before, never.
+3. *Still open:* she walks into the piece of the doorway that's inside the lift's room, the
+   lift goes up round her, and she's stranded (a restart). And from the top of the other
+   lift a path is planned across that piece as if the lift were down, waited at ("waiting
+   at mover (sector 211)") every 0.8 s. The way out of either is the switch on the room's
+   pillar, in reach from there.
+
+**MAP26: the exit's shaft, and its ring.**
+1. The way to the exit is a drop of 128 into a shaft where a blue door's slab stands shut
+   at the ledge's height. No room past the ledge as the map starts, so no drop, so no exit
+   "even in principle". The drop's now judged with doors as open as any line takes them, and
+   at such a drop she presses a door of hers that's hung in it.
+2. The exit is a ring of walk-over lines round a pit that a line on the way in shuts. She
+   went at one line, found it uncrossable three times, and was offered it again for ever
+   (the finding only reached the triggers she'd learned, not the exit's objective). Not
+   offered from that ground now. She tries each of the eight lines three times before
+   looking elsewhere and finding the switch that opens the pit: clumsy, and out in 1,989 s.
+
+**MAP31: not begun.** By the model 30 of 508 sectors can be reached; she sees 122. To trace.
 
 ## Still to look at
 
-MAP06, 09, 12, 14 to 18, 20 to 23, 25, 26, 28, 30 (the Icon of Sin), 31; then skills 1, 2 and 4
-(the same maps with other things in them); then with monsters able to hurt her.
+MAP06, 09, 16, 31 (no route in principle: the model first); MAP12, 15, 17, 23, 25, 28 (no plan);
+MAP20's lift rooms, MAP22; the switch-texture list (`custom-textures-plan.md`), which none of
+the above has needed yet: the switches met so far have DOOM II's names. Then skills 1, 2 and 4
+(a first survey of each is in `out/mm-survey/`), and with monsters able to hurt her.
