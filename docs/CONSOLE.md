@@ -89,6 +89,11 @@ synth, how soon she's pushed); a fold stays as you left it. A **?** beside a hea
 the section is: hover, or click to keep it shown. The stream column's controls show only when
 the window's layout is the stream's.
 
+What the looks mean: the violet button is the main thing to do in its place, and violet is
+what's switched on; a red outline ends or restarts something (Stop, Restart level). A tick box
+is a switch. A padlock by one of her settings, shut and gold, is that setting locked from her:
+click it to lock or free it.
+
 Evil's card. Evil's card shows her goal, her settings, an open question with
 its choices and countdown, `doom_why`, the last lines told her and her last actions. It can act
 for her: answer the question, set a goal, change a setting, look, ask why, take over the fight.

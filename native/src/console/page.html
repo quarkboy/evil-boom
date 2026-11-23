@@ -7,130 +7,198 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Evil BOOM console</title>
 <style>
+/* Colours by what they mean: the accent for the one main action of a place and for what's
+   switched on; red for what ends or restarts something; her own violet-pink for what's hers. */
 :root {
-  --bg: #121216; --panel: #1c1c23; --line: #2e2e38; --text: #e6e6ea; --dim: #8b8b96;
-  --accent: #e04848; --ok: #4fbf72; --warn: #e0a83a; --bad: #e05252; --evil: #c58cf0; --info: #6fa8e8;
+  --bg: #0e0e12; --panel: #17171d; --inset: #101015; --raised: #22222b; --line: #2a2a35; --line2: #3a3a48;
+  --text: #ececf1; --dim: #9292a2; --faint: #5f5f6e;
+  --accent: #8f6bf2; --accent-hi: #a98bff; --accent-bg: #2a2147;
+  --danger: #e5565b; --danger-bg: #3a1a1d;
+  --ok: #4fbf72; --warn: #e0a83a; --bad: #e05252; --evil: #e58bd0; --info: #6fa8e8;
+  --brand: #e04848;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; }
-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
-header h1 { font-size: 16px; margin: 0; letter-spacing: .02em; }
-header h1 b { color: var(--accent); }
-.badge { padding: 2px 8px; border-radius: 10px; font-size: 12px; background: var(--line); color: var(--dim); }
-.badge.ok { background: #1f3b29; color: var(--ok); } .badge.warn { background: #3d3119; color: var(--warn); } .badge.bad { background: #432020; color: var(--bad); }
-main { display: grid; gap: 12px; padding: 12px 16px 24px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, "Segoe UI", sans-serif; }
+
+/* --- the top bar and the tabs ---------------------------------------------------------- */
+header { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 20px; background: var(--bg); border-bottom: 1px solid var(--line); }
+header h1 { font-size: 17px; margin: 0 6px 0 0; letter-spacing: .01em; font-weight: 700; }
+header h1 b { color: var(--brand); }
+.badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12px; background: var(--raised); color: var(--dim); white-space: nowrap; }
+.badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .8; }
+.badge.ok { background: #16301f; color: var(--ok); } .badge.warn { background: #3a2e15; color: var(--warn); } .badge.bad { background: #3d1c1c; color: var(--bad); }
+#top-now { font-size: 14px; color: var(--text); font-variant-numeric: tabular-nums; margin-left: 6px; }
+#top-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+#tabs { display: flex; gap: 2px; padding: 0 20px; border-bottom: 1px solid var(--line); }
+#tabs button[data-tab] { border: none; border-radius: 0; background: transparent; color: var(--dim); padding: 11px 18px 10px; font-size: 14px; font-weight: 600; border-bottom: 2px solid transparent; }
+#tabs button[data-tab]:hover { color: var(--text); }
+#tabs button[data-tab].on { color: var(--text); border-bottom-color: var(--accent); }
+#tabs #layout-reset { margin-left: auto; align-self: center; padding: 3px 10px; font-size: 12px; color: var(--dim); background: transparent; border-color: transparent; }
+#tabs #layout-reset:hover { color: var(--text); border-color: var(--line2); }
+
+/* --- the page: two columns on Live, one elsewhere --------------------------------------- */
+main { display: grid; gap: 14px; padding: 16px 20px 28px; grid-template-columns: minmax(0, 1fr); align-items: start; }
 #col-split { display: none; }
 @media (min-width: 980px) {
-  main { grid-template-columns: var(--left, 360px) 10px minmax(0, 1fr); column-gap: 2px; }
+  main { grid-template-columns: var(--left, 380px) 10px minmax(0, 1fr); column-gap: 2px; }
   #col-split { display: block; align-self: stretch; cursor: col-resize; border-radius: 4px; min-height: 200px; }
-  #col-split::after { content: ""; display: block; width: 2px; height: 100%; margin: 0 auto; background: var(--line); border-radius: 1px; }
-  #col-split:hover::after, #col-split.moving::after { background: var(--evil); }
+  #col-split::after { content: ""; display: block; width: 2px; height: 100%; margin: 0 auto; background: transparent; border-radius: 1px; }
+  #col-split:hover::after, #col-split.moving::after { background: var(--accent); }
 }
-#tabs { display: flex; gap: 4px; padding: 8px 16px 0; border-bottom: 1px solid var(--line); }
-#tabs button[data-tab] { border-radius: 8px 8px 0 0; border-bottom: none; padding: 8px 18px; background: transparent; border-color: transparent; color: var(--dim); }
-#tabs button[data-tab]:hover { color: var(--text); }
-#tabs button[data-tab].on { background: var(--panel); border-color: var(--line); color: var(--text); }
-#tabs #layout-reset { margin-left: auto; align-self: center; padding: 3px 10px; font-size: 12px; }
-#top-now { font-size: 13px; }
-#top-actions { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
-#top-actions button { padding: 5px 12px; }
 body[data-tab="live"] section[data-tab]:not([data-tab="live"]),
 body[data-tab="evil"] section[data-tab]:not([data-tab="evil"]),
 body[data-tab="setup"] section[data-tab]:not([data-tab="setup"]),
 body[data-tab="debug"] section[data-tab]:not([data-tab="debug"]) { display: none; }
 /* (one column where a tab's sections are all one kind: nothing beside them) */
-body:not([data-tab="live"]) main { grid-template-columns: minmax(0, 1fr); max-width: 1100px; }
+body:not([data-tab="live"]) main { grid-template-columns: minmax(0, 1fr); max-width: 1100px; row-gap: 0; }
 body:not([data-tab="live"]) #col-split { display: none; }
 body:not([data-tab="live"]) .col { min-height: 0; }
-body:not([data-tab="live"]) main { row-gap: 0; }
-body:not([data-tab="live"]) .col:not(:empty) { margin-bottom: 12px; }
-body.popout #tabs { display: none; }
-body.popout section.only { display: block !important; }
+body:not([data-tab="live"]) .col:not(:empty) { margin-bottom: 14px; }
 body.resizing { cursor: col-resize; user-select: none; }
-.col { display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 48px; }
-section h2 { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
-section h2 .chev { width: 1em; color: var(--dim); flex: none; }
-section h2 .grip { margin-left: auto; cursor: grab; color: var(--dim); padding: 0 4px; letter-spacing: -2px; flex: none; }
+.col { display: flex; flex-direction: column; gap: 14px; min-width: 0; min-height: 48px; }
+
+/* --- a section: its title folds it; its grip and pop-out show when it's pointed at ------- */
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px 16px; min-width: 0; }
+section h2 { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; font-size: 14px; font-weight: 650; color: var(--text); margin: 0 0 12px; }
+section h2 .chev { width: 1em; color: var(--faint); flex: none; font-size: 12px; }
+section h2 .grip { cursor: grab; color: var(--dim); padding: 0 4px; letter-spacing: -2px; flex: none; }
 section h2 .grip:hover { color: var(--text); }
+section h2 .pop, section h2 .back { padding: 0 6px; font-size: 12px; line-height: 1.5; flex: none; background: transparent; border-color: transparent; color: var(--dim); }
+section h2 .pop { margin-left: auto; }
+section h2 .pop, section h2 .grip { opacity: 0; transition: opacity .12s; }
+section:hover h2 .pop, section:hover h2 .grip, section h2 .pop:focus-visible { opacity: 1; }
+@media (hover: none) { section h2 .pop, section h2 .grip { opacity: 1; } }
+section h2 .back { display: none; }
+section h2 .help { width: 17px; height: 17px; padding: 0; border-radius: 50%; font-size: 11px; line-height: 15px; color: var(--dim); background: transparent; border-color: var(--line2); flex: none; font-weight: 600; }
+section h2 .help.on { color: var(--text); border-color: var(--dim); }
+.helptext { margin: -6px 0 12px; font-size: 12px; color: var(--dim); }
 section.collapsed > :not(h2) { display: none !important; }
 section.collapsed h2 { margin: 0; }
+section.collapsed { padding-bottom: 14px; }
 section.dragging { opacity: .4; }
-.drop-line { height: 3px; background: var(--evil); border-radius: 2px; flex: none; }
-section h2 .pop, section h2 .back { padding: 0 6px; font-size: 12px; line-height: 1.4; flex: none; }
-section h2 .grip { margin-left: 0; }
-section h2 .pop { margin-left: auto; }
-section h2 .back { display: none; }
+.drop-line { height: 3px; background: var(--accent); border-radius: 2px; flex: none; }
 section.popped > :not(h2) { display: none !important; }
 section.popped h2 { margin: 0; }
-section.popped h2 .back { display: inline-block; }
+section.popped h2 .back { display: inline-block; border-color: var(--line2); color: var(--text); }
 section.popped h2 .pop { display: none; }
-section.popped h2::after { content: "in its own window"; font-size: 11px; color: var(--evil); text-transform: none; letter-spacing: 0; }
-body.popout header { display: none; }
+section.popped h2::after { content: "in its own window"; font-size: 11px; font-weight: 400; color: var(--accent-hi); }
+body.popout header, body.popout #tabs { display: none; }
+body.popout section.only { display: block !important; }
 body.popout main { grid-template-columns: minmax(0, 1fr); padding: 8px; }
 body.popout #col-split { display: none; }
 body.popout .col > section:not(.only), body.popout .col:empty { display: none; }
 body.popout section h2 .grip, body.popout section h2 .pop, body.popout section h2 .chev { display: none; }
 body.popout section h2 { cursor: default; }
-.ev-top { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-bottom: 10px; font-size: 13px; }
-.ev-grid { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
-@media (min-width: 1200px) { .ev-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
-.ev-box { background: #17171e; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; min-width: 0; }
-.ev-box h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin: 0 0 6px; font-weight: 600; }
-.ev-box ul { margin: 0; padding-left: 16px; } .ev-box li { margin: 1px 0; }
-.ev-sets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 6px; }
-.ev-q { border-color: #5a3f7a; } .ev-q .qtext { margin: 0 0 8px; color: var(--evil); }
-.ev-q button.def { border-color: var(--evil); }
-.qbar { height: 4px; background: #2a2a34; border-radius: 2px; margin-top: 6px; overflow: hidden; } .qbar div { height: 100%; background: var(--evil); width: 0; transition: width .4s linear; }
-.feed { height: 30vh; overflow-y: auto; background: #0e0e12; border-radius: 6px; padding: 6px 8px; font: 12px/1.45 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
-.feed .loud { color: var(--text); } .feed .quiet { color: var(--dim); } .feed .t { color: #5d5d68; } .feed .fail { color: var(--bad); } .feed .st { color: var(--info); } .feed .act { color: var(--evil); }
-#ev-reply { white-space: pre-wrap; font: 12px/1.45 ui-monospace, Consolas, monospace; max-height: 22vh; overflow-y: auto; }
-.danger-safe { color: var(--ok); } .danger-dangerous { color: var(--warn); } .danger-deadly { color: var(--bad); }
-.views { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
-.views figure { margin: 0; flex: 1 1 320px; min-width: 0; }
-.views img { width: 100%; height: auto; display: block; background: #000; border-radius: 4px; image-rendering: auto; }
-.views figcaption { font-size: 11px; color: var(--dim); margin-top: 2px; }
-section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; min-width: 0; }
-section h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin: 0 0 10px; }
-.row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
-button { background: #2a2a34; color: var(--text); border: 1px solid #3a3a46; border-radius: 6px; padding: 7px 12px; font: inherit; cursor: pointer; }
-button:hover:not(:disabled) { border-color: #5a5a6a; }
-button:disabled { opacity: .45; cursor: default; }
-button.primary { background: #5a1f1f; border-color: #7a2a2a; }
-button.on { background: #24384f; border-color: #36597c; }
-dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 3px 12px; margin: 0; }
+#tokenbox { display: none; }
+
+/* --- controls -------------------------------------------------------------------------- */
+.row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.row.mid { align-items: center; } .row.end { align-items: flex-end; }
+.row.checks { gap: 8px 18px; }
+.row:last-child { margin-bottom: 0; }
+button { background: var(--raised); color: var(--text); border: 1px solid var(--line2); border-radius: 7px; padding: 7px 13px; font: inherit; cursor: pointer; transition: background .12s, border-color .12s; }
+button:hover:not(:disabled) { border-color: #5a5a6c; background: #2a2a35; }
+button:disabled { opacity: .4; cursor: default; }
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 1px; }
+button.primary, #g-begin.on, .ev-q button.def { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+button.primary:hover:not(:disabled), #g-begin.on:hover:not(:disabled), .ev-q button.def:hover:not(:disabled) { background: var(--accent-hi); border-color: var(--accent-hi); }
+button.danger { background: transparent; border-color: #6b2a2e; color: var(--danger); }
+button.danger:hover:not(:disabled) { background: var(--danger-bg); border-color: var(--danger); }
+button.on { background: var(--accent-bg); border-color: var(--accent); color: #fff; }
+label { display: grid; gap: 4px; font-size: 12px; color: var(--dim); }
+input, select { background: var(--inset); color: var(--text); border: 1px solid var(--line2); border-radius: 6px; padding: 7px 9px; font: inherit; width: 100%; }
+input:hover:not(:disabled), select:hover:not(:disabled) { border-color: #55556a; }
+input:disabled, select:disabled { opacity: .5; }
+.fit { width: auto; } .wide7 { min-width: 7em; } .num { width: 6em; } .grow { flex: 1; min-width: 10em; }
+/* (a tick box is a switch: violet is on) */
+input[type=checkbox] { appearance: none; -webkit-appearance: none; width: 30px; height: 17px; padding: 0; margin: 0; border: none; border-radius: 9px; background: #3a3a48; position: relative; cursor: pointer; flex: none; transition: background .15s; }
+input[type=checkbox]::after { content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: #b9b9c6; transition: transform .15s, background .15s; }
+input[type=checkbox]:checked { background: var(--accent); }
+input[type=checkbox]:checked::after { transform: translateX(13px); background: #fff; }
+input[type=checkbox]:disabled { cursor: default; }
+.check { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 13px; cursor: pointer; }
+/* (a padlock by a setting: shut and gold, it's locked from her) */
+.lock { display: inline-flex; cursor: pointer; }
+.lock input[type=checkbox] { width: 16px; height: 16px; border-radius: 0; background: var(--faint);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 7V4a4 4 0 0 1 8 0h-2a2 2 0 0 0-4 0v3h7v7H3V7z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 7V4a4 4 0 0 1 8 0h-2a2 2 0 0 0-4 0v3h7v7H3V7z'/%3E%3C/svg%3E") center / contain no-repeat; }
+.lock input[type=checkbox]::after { display: none; }
+.lock input[type=checkbox]:hover:not(:disabled) { background: var(--dim); }
+.lock input[type=checkbox]:checked { background: var(--warn);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M4 7V5a4 4 0 0 1 8 0v2h1v7H3V7zm2 0h4V5a2 2 0 0 0-4 0z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M4 7V5a4 4 0 0 1 8 0v2h1v7H3V7zm2 0h4V5a2 2 0 0 0-4 0z'/%3E%3C/svg%3E"); }
+.set { display: grid; gap: 4px; min-width: 0; }
+.set-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 12px; color: var(--dim); }
+.set:has(.lock input:checked) select { border-color: #7a5f24; }
+.set:has(.lock input:checked) .set-head { color: var(--warn); }
+/* (a slider: its name, the slider, its value) */
+input[type=range] { padding: 0; border: none; background: transparent; accent-color: var(--accent); height: 20px; cursor: pointer; }
+.vol { display: grid; grid-template-columns: 6.5em minmax(0, 1fr) 3em; align-items: center; gap: 10px; margin-bottom: 8px; }
+.vol label { font-size: 13px; color: var(--text); }
+.vol output { text-align: right; font-variant-numeric: tabular-nums; color: var(--dim); }
+dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0; }
 dt { color: var(--dim); } dd { margin: 0; overflow-wrap: anywhere; }
 .big { font-size: 20px; font-weight: 600; }
-label { display: grid; gap: 3px; font-size: 12px; color: var(--dim); }
-.form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
-.form .wide { grid-column: 1 / -1; }
-.form .group { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px 10px; margin: 0; min-width: 0; }
-.form .group legend { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); padding: 0 4px; }
-.form [hidden] { display: none !important; }
-.check { display: flex; align-items: center; gap: 6px; color: var(--text); font-size: 13px; }
-input, select { background: #15151b; color: var(--text); border: 1px solid #3a3a46; border-radius: 5px; padding: 6px 8px; font: inherit; width: 100%; }
-input[type=checkbox] { width: auto; }
-input[type=range] { padding: 0; accent-color: var(--accent); }
-.vol { display: grid; grid-template-columns: 4.5em minmax(0, 1fr) 2.5em; align-items: center; gap: 8px; margin-bottom: 6px; }
-.vol output { text-align: right; font-variant-numeric: tabular-nums; }
-#log { height: 45vh; overflow-y: auto; background: #0e0e12; border-radius: 6px; padding: 6px 8px; font: 12px/1.45 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
-@media (min-width: 980px) { #log { height: 40vh; } }
-#log .evil { color: var(--evil); } #log .console { color: var(--info); } #log .err { color: var(--bad); } #log .event { color: var(--warn); } #log .out { color: var(--dim); }
 .msg { min-height: 1.4em; font-size: 13px; color: var(--warn); }
 .dim { color: var(--dim); }
-#tokenbox { display: none; }
-section h2 .help { width: 16px; height: 16px; padding: 0; border-radius: 50%; font-size: 10px; line-height: 14px; color: var(--dim); background: transparent; flex: none; text-transform: none; letter-spacing: 0; }
-section h2 .help.on { color: var(--text); border-color: var(--dim); }
-.helptext { margin: -4px 0 10px; font-size: 12px; color: var(--dim); }
-details.adv { margin: 2px 0 8px; }
-details.adv > summary { cursor: pointer; font-size: 12px; color: var(--dim); user-select: none; }
+.note { margin: 0; font-size: 12px; color: var(--dim); }
+.note.lead { margin-bottom: 10px; } .note.mid { align-self: center; } .note.top { margin-top: 6px; }
+.plain { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.gap-top { margin-top: 12px; }
+details.adv { margin: 4px 0 10px; }
+details.adv > summary { cursor: pointer; font-size: 12px; color: var(--dim); user-select: none; width: fit-content; border-radius: 4px; }
 details.adv > summary:hover, details.adv[open] > summary { color: var(--text); }
-details.adv[open] > summary { margin-bottom: 8px; }
+details.adv[open] > summary { margin-bottom: 10px; }
 .form details.adv { margin: 0; }
-.advbody { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+.advbody { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
 .advbody .wide { grid-column: 1 / -1; }
-#ev-locks label { display: inline-flex; align-items: center; gap: 4px; }
+
+/* --- Setup: the settings form ---------------------------------------------------------- */
+.form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form .wide { grid-column: 1 / -1; }
+.form .group { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; align-items: end; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px 12px; margin: 0; min-width: 0; background: var(--inset); }
+.form .group legend { font-size: 12px; font-weight: 600; color: var(--text); padding: 0 6px; }
+.form .group .check { min-height: 34px; }
+.form [hidden] { display: none !important; }
 #sec-column.off > :not(h2):not(#col-note) { display: none; }
+
+/* --- Live and Evil: her side ------------------------------------------------------------ */
+.ev-top { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin-bottom: 12px; font-size: 13px; }
+.ev-grid { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1200px) { .ev-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.ev-box { background: var(--inset); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px 12px; min-width: 0; }
+.ev-box h3, .feed-title { font-size: 12px; color: var(--dim); margin: 0 0 8px; font-weight: 600; }
+.ev-box ul { margin: 0; padding-left: 18px; } .ev-box li { margin: 2px 0; }
+.ev-sets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; align-items: end; }
+/* (no question open: her calls have the row) */
+.ev-col:has(> #ev-qbox[hidden]) { display: none; }
+.ev-col:has(> #ev-qbox[hidden]) + .ev-col { grid-column: 1 / -1; }
+.ev-q { border-color: var(--accent); background: var(--accent-bg); }
+.ev-q .qtext { margin: 0 0 10px; color: #fff; }
+.qbar { height: 4px; background: #00000055; border-radius: 2px; margin-top: 8px; overflow: hidden; } .qbar div { height: 100%; background: var(--accent-hi); width: 0; transition: width .4s linear; }
+.feed { height: 30vh; overflow-y: auto; background: var(--inset); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: 12px/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.feed .loud { color: var(--text); } .feed .quiet { color: var(--dim); } .feed .t { color: var(--faint); } .feed .fail { color: var(--bad); } .feed .st { color: var(--info); } .feed .act { color: var(--evil); }
+#ev-reply { white-space: pre-wrap; font: 12px/1.45 ui-monospace, Consolas, monospace; max-height: 22vh; overflow-y: auto; }
+.danger-safe { color: var(--ok); } .danger-dangerous { color: var(--warn); } .danger-deadly { color: var(--bad); }
+.views { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
+.views figure { margin: 0; flex: 1 1 320px; min-width: 0; } .views figure.full { flex-basis: 100%; }
+.views img { width: 100%; height: auto; display: block; background: #000; border-radius: 6px; image-rendering: auto; }
+.views figcaption { font-size: 11px; color: var(--dim); margin-top: 3px; }
+/* (Live is read at a glance, mid-stream: larger, and her question largest) */
+body[data-tab="live"] main { font-size: 15px; }
+body[data-tab="live"] #state { font-size: 14px; }
+body[data-tab="live"] .ev-top { font-size: 14px; }
+body[data-tab="live"] .ev-q .qtext { font-size: 18px; line-height: 1.35; font-weight: 600; }
+body[data-tab="live"] .ev-q button { padding: 9px 16px; font-size: 15px; }
+body[data-tab="live"] .ev-box li { font-size: 14px; }
+body[data-tab="live"] .feed { font-size: 13px; }
+body[data-tab="live"] #e-say { font-size: 15px; padding: 9px 11px; }
+
+/* --- Debug: the log -------------------------------------------------------------------- */
+#log { height: 45vh; overflow-y: auto; background: var(--inset); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: 12px/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (min-width: 980px) { #log { height: 40vh; } }
+#log .evil { color: var(--evil); } #log .console { color: var(--info); } #log .err { color: var(--bad); } #log .event { color: var(--warn); } #log .out { color: var(--dim); }
 </style>
 </head>
 <body>
@@ -142,7 +210,7 @@ details.adv[open] > summary { margin-bottom: 8px; }
   <span id="top-now" class="dim"></span>
   <span id="top-actions">
     <button id="c-pause">Pause</button>
-    <button id="c-restart" title="The level again from its start, no life spent">Restart level</button>
+    <button id="c-restart" class="danger" title="The level again from its start, no life spent">Restart level</button>
     <button id="c-mute">Mute</button>
     <button id="c-neuro" title="The link to Neuro dropped and made again (her orders and names kept)">Reconnect Neuro</button>
   </span>
@@ -166,11 +234,11 @@ details.adv[open] > summary { margin-bottom: 8px; }
     <h2>Run</h2>
     <div class="row">
       <button class="primary" id="g-start" title="The game started with the saved settings (changes saved first); running, started again">Start game</button>
-      <button id="g-stop">Stop</button>
-      <button class="primary" id="g-begin" title="At the title card: on through the menu to the first level. Later: the run again from the title card">Begin</button>
+      <button id="g-stop" class="danger">Stop</button>
+      <button id="g-begin" title="At the title card: on through the menu to the first level. Later: the run again from the title card">Begin</button>
     </div>
     <div class="row">
-      <select id="l-map" style="width:auto;min-width:7em"></select>
+      <select class="fit wide7" id="l-map"></select>
       <button id="l-go">Go to level</button>
       <button id="l-next">Next level</button>
       <span class="check"><input type="checkbox" id="l-carry"><label for="l-carry" class="check">carry what she has</label></span>
@@ -194,7 +262,7 @@ details.adv[open] > summary { margin-bottom: 8px; }
     <div class="vol"><label for="v-master">Master</label><input type="range" id="v-master" min="0" max="100" data-k="master"><output id="v-master-n"></output></div>
     <div class="vol"><label for="v-sfx">SFX</label><input type="range" id="v-sfx" min="0" max="15" data-k="sfx"><output id="v-sfx-n"></output></div>
     <div class="vol"><label for="v-music">Music</label><input type="range" id="v-music" min="0" max="15" data-k="music"><output id="v-music-n"></output></div>
-    <p class="dim" id="v-note" style="margin:0;font-size:12px"></p>
+    <p class="note" id="v-note"></p>
   </section>
 
   <section id="sec-picture" data-tab="setup">
@@ -207,33 +275,33 @@ details.adv[open] > summary { margin-bottom: 8px; }
     <div class="vol"><label for="p-flash_gold" title="The gold of a pickup.">Gold flash</label><input type="range" id="p-flash_gold" min="0" max="100" step="10" value="50" data-k="flash_gold"><output id="p-flash_gold-n"></output></div>
     <div class="vol"><label for="p-flash_green" title="The green of the radiation suit.">Green tint</label><input type="range" id="p-flash_green" min="0" max="100" step="10" value="50" data-k="flash_green"><output id="p-flash_green-n"></output></div>
     </details>
-    <p class="dim" id="p-note" style="margin:0;font-size:12px"></p>
+    <p class="note" id="p-note"></p>
   </section>
 
   <section id="sec-column" data-tab="setup">
     <h2>Stream column <button type="button" class="help" title="What the stream window's side column shows. Changes at once, kept for the next game.">?</button></h2>
     <p class="helptext" hidden>What the stream window's side column shows. Changes at once, kept for the next game.</p>
     <div class="row"><label>Side <select id="col-side"><option value="right">on the right</option><option value="left">on the left</option></select></label></div>
-    <div class="row" style="flex-wrap:wrap;gap:4px 14px">
-          <span class="check" style="display:inline-flex" title="The Evil BOOM logo, at the very top of the column."><input type="checkbox" data-col="logo" id="c-logo" checked><label for="c-logo" class="check">Logo (top)</label></span>
-          <span class="check" style="display:inline-flex" title="An empty framed box near the top for OBS to lay the chat over. Its height is set below; where it sits in the picture is shown below once a game's running."><input type="checkbox" data-col="chat" id="c-chat" checked><label for="c-chat" class="check">Chat box (top)</label></span>
-          <span class="check" style="display:inline-flex" title="One line: the map (E1M1), its name, and the time on this level."><input type="checkbox" data-col="level" id="c-level" checked><label for="c-level" class="check">Level</label></span>
-          <span class="check" style="display:inline-flex" title="A map of what she's seen of the level, following her: her route and what she's going for. Its height is set below."><input type="checkbox" data-col="map" id="c-map" checked><label for="c-map" class="check">Map</label></span>
-          <span class="check" style="display:inline-flex" title="What she's doing right now: who she's fighting, or what she's going for."><input type="checkbox" data-col="now" id="c-now" checked><label for="c-now" class="check">Now</label></span>
-          <span class="check" style="display:inline-flex" title="Evil's standing choices: her goal, her stance, a target or gun she's picked for a while, settings she's changed. Only when Neuro, the GPT stand-in or an orders file directs her."><input type="checkbox" data-col="calls" id="c-calls" checked><label for="c-calls" class="check">Evil's calls</label></span>
-          <span class="check" style="display:inline-flex" title="A question the bot has put to Evil (leave with things left? take a costly way?), its choices, the default and the seconds left. Only while one's open."><input type="checkbox" data-col="asked" id="c-asked" checked><label for="c-asked" class="check">Asked</label></span>
-          <span class="check" style="display:inline-flex" title="Evil's last lines. Only the GPT stand-in's: Neuro's own voice doesn't reach the game, so with Neuro it stays empty (and takes no room)."><input type="checkbox" data-col="says" id="c-says" checked><label for="c-says" class="check">Evil says</label></span>
-          <span class="check" style="display:inline-flex" title="Kills, items and secrets on this level, side by side, each with a bar."><input type="checkbox" data-col="tally" id="c-tally" checked><label for="c-tally" class="check">Tally</label></span>
-          <span class="check" style="display:inline-flex" title="The skill, levels done, deaths and the whole run's time."><input type="checkbox" data-col="run" id="c-run" checked><label for="c-run" class="check">Run</label></span>
-          <span class="check" style="display:inline-flex" title="What's happened lately, newest first (kills, pickups, secrets, deaths), filling whatever room is left at the bottom."><input type="checkbox" data-col="lately" id="c-lately" checked><label for="c-lately" class="check">Lately</label></span>
+    <div class="row checks">
+          <span class="check" title="The Evil BOOM logo, at the very top of the column."><input type="checkbox" data-col="logo" id="c-logo" checked><label for="c-logo" class="check">Logo (top)</label></span>
+          <span class="check" title="An empty framed box near the top for OBS to lay the chat over. Its height is set below; where it sits in the picture is shown below once a game's running."><input type="checkbox" data-col="chat" id="c-chat" checked><label for="c-chat" class="check">Chat box (top)</label></span>
+          <span class="check" title="One line: the map (E1M1), its name, and the time on this level."><input type="checkbox" data-col="level" id="c-level" checked><label for="c-level" class="check">Level</label></span>
+          <span class="check" title="A map of what she's seen of the level, following her: her route and what she's going for. Its height is set below."><input type="checkbox" data-col="map" id="c-map" checked><label for="c-map" class="check">Map</label></span>
+          <span class="check" title="What she's doing right now: who she's fighting, or what she's going for."><input type="checkbox" data-col="now" id="c-now" checked><label for="c-now" class="check">Now</label></span>
+          <span class="check" title="Evil's standing choices: her goal, her stance, a target or gun she's picked for a while, settings she's changed. Only when Neuro, the GPT stand-in or an orders file directs her."><input type="checkbox" data-col="calls" id="c-calls" checked><label for="c-calls" class="check">Evil's calls</label></span>
+          <span class="check" title="A question the bot has put to Evil (leave with things left? take a costly way?), its choices, the default and the seconds left. Only while one's open."><input type="checkbox" data-col="asked" id="c-asked" checked><label for="c-asked" class="check">Asked</label></span>
+          <span class="check" title="Evil's last lines. Only the GPT stand-in's: Neuro's own voice doesn't reach the game, so with Neuro it stays empty (and takes no room)."><input type="checkbox" data-col="says" id="c-says" checked><label for="c-says" class="check">Evil says</label></span>
+          <span class="check" title="Kills, items and secrets on this level, side by side, each with a bar."><input type="checkbox" data-col="tally" id="c-tally" checked><label for="c-tally" class="check">Tally</label></span>
+          <span class="check" title="The skill, levels done, deaths and the whole run's time."><input type="checkbox" data-col="run" id="c-run" checked><label for="c-run" class="check">Run</label></span>
+          <span class="check" title="What's happened lately, newest first (kills, pickups, secrets, deaths), filling whatever room is left at the bottom."><input type="checkbox" data-col="lately" id="c-lately" checked><label for="c-lately" class="check">Lately</label></span>
     </div>
     <details class="adv" id="adv-column"><summary>Advanced: sizes</summary>
-    <div class="row"><label title="In the 1920x1080 picture, at the column's top: OBS lays the chat over it">Chat box height <input id="col-chath" type="number" min="60" max="800" step="10" style="width:6em"></label>
-      <label title="Its width is the column's (444); shorter, the same scale, still centred on her">Map height <input id="col-maph" type="number" min="120" max="444" step="10" style="width:6em"></label>
+    <div class="row"><label title="In the 1920x1080 picture, at the column's top: OBS lays the chat over it">Chat box height <input class="num" id="col-chath" type="number" min="60" max="800" step="10"></label>
+      <label title="Its width is the column's (444); shorter, the same scale, still centred on her">Map height <input class="num" id="col-maph" type="number" min="120" max="444" step="10"></label>
 </div>
-    <p class="dim" id="col-chatbox" style="margin:0;font-size:12px"></p>
+    <p class="note" id="col-chatbox"></p>
     </details>
-    <p class="dim" id="col-note" style="margin:0;font-size:12px" hidden>Only in the stream layout (Settings, Window, Layout).</p>
+    <p class="note" id="col-note" hidden>Only in the stream layout (Settings, Window, Layout).</p>
   </section>
 
   <section id="sec-talk" data-tab="live">
@@ -241,14 +309,14 @@ details.adv[open] > summary { margin-bottom: 8px; }
     <p class="helptext" hidden>A line sent to her as context. Only while Neuro or the GPT stand-in directs her.</p>
     <div class="row">
       <input id="e-say" maxlength="300" placeholder="a line to her, sent as context">
-      <button id="e-saysend">Tell her</button>
+      <button id="e-saysend" class="primary">Tell her</button>
     </div>
-    <p class="dim" id="e-note" style="margin:0;font-size:12px"></p>
+    <p class="note" id="e-note"></p>
   </section>
 
   <section id="sec-settings" data-tab="setup">
     <h2>Settings</h2>
-    <p class="dim" style="margin:0 0 6px;font-size:12px">Used when the game starts. Save changes before they will take effect.</p>
+    <p class="note lead">Used when the game starts. Save changes before they will take effect.</p>
     <form class="form" id="settings" onsubmit="return false">
       <fieldset class="group wide"><legend>Game</legend>
         <label>WAD <select name="wad"><option value="doom2">Doom II</option><option value="doom">Doom</option><option value="tnt">TNT: Evilution</option><option value="plutonia">The Plutonia Experiment</option></select></label>
@@ -298,7 +366,7 @@ details.adv[open] > summary { margin-bottom: 8px; }
       </fieldset>
       <div class="row wide">
         <button id="s-save">Save</button>
-        <span id="s-dirty" class="dim" style="font-size:12px" hidden>Changed, not saved yet (Start saves them first)</span>
+        <span id="s-dirty" class="note" hidden>Changed, not saved yet (Start saves them first)</span>
         <button class="primary" id="s-apply">Save and restart game</button>
       </div>
     </form>
@@ -315,11 +383,11 @@ details.adv[open] > summary { margin-bottom: 8px; }
       <button id="vw-game">Game</button>
       <button id="vw-stream">Stream</button>
     </div>
-    <p class="dim" id="vw-none" style="margin:4px 0 0;font-size:12px">None shown: pick Map, Game or Stream to see it here.</p>
+    <p class="note top" id="vw-none">None shown: pick Map, Game or Stream to see it here.</p>
     <div class="views">
       <figure id="fig-map" hidden><img id="img-map" alt="the map as she knows it, her route and objectives"><figcaption>Map as she knows it, route, objectives</figcaption></figure>
       <figure id="fig-game" hidden><img id="img-game" alt="the game's view"><figcaption>Game</figcaption></figure>
-      <figure id="fig-stream" hidden style="flex-basis:100%"><img id="img-stream" alt="the stream's window, as OBS captures it"><figcaption>The stream's window (half size)</figcaption></figure>
+      <figure class="full" id="fig-stream" hidden><img id="img-stream" alt="the stream's window, as OBS captures it"><figcaption>The stream's window (half size)</figcaption></figure>
     </div>
   </section>
 
@@ -340,7 +408,7 @@ details.adv[open] > summary { margin-bottom: 8px; }
           <p class="qtext" id="ev-qtext"></p>
           <div class="row" id="ev-qchoices"></div>
           <div class="qbar"><div id="ev-qbar"></div></div>
-          <div class="dim" id="ev-qleft" style="font-size:12px;margin-top:4px"></div>
+          <div class="note top" id="ev-qleft"></div>
         </div>
       </div>
       <div class="ev-col">
@@ -350,9 +418,9 @@ details.adv[open] > summary { margin-bottom: 8px; }
         </div>
       </div>
     </div>
-    <div class="ev-grid" style="margin-top:12px">
-      <div><h3 class="dim" style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin:0 0 4px">Told her <span style="text-transform:none">(bright: to be heard)</span></h3><div class="feed" id="ev-told"></div></div>
-      <div><h3 class="dim" style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin:0 0 4px">Her actions <span style="text-transform:none">(blue: yours)</span></h3><div class="feed" id="ev-acts"></div></div>
+    <div class="ev-grid gap-top">
+      <div><h3 class="feed-title">Told her <span class="plain">(bright: to be heard)</span></h3><div class="feed" id="ev-told"></div></div>
+      <div><h3 class="feed-title">Her actions <span class="plain">(blue: yours)</span></h3><div class="feed" id="ev-acts"></div></div>
     </div>
   </section>
 
@@ -362,17 +430,17 @@ details.adv[open] > summary { margin-bottom: 8px; }
       <div class="ev-col">
         <div class="ev-box">
           <h3>Goal</h3>
-          <div class="row" style="align-items:center"><b id="ev-goal" style="flex:1">none</b></div>
-          <div class="row">
-            <select id="ev-goalsel" style="width:auto">
+          <div class="row mid"><b class="grow" id="ev-goal">none</b></div>
+          <div class="row end">
+            <div class="set"><div class="set-head"><span>finish</span><label class="lock" title="Locked: it stays as it is, is taken out of her doom_goal, and is refused if she sends it. You can still change it here. Kept for the next game."><input type="checkbox" data-lock="finish" aria-label="lock finish"></label></div><select id="ev-goalsel" class="fit" aria-label="finish">
               <option value="out">out</option><option value="kills">kills</option><option value="secrets">secrets</option>
               <option value="completionist">completionist</option>
-            </select>
-            <select id="ev-goalref" style="width:auto" title="What comes first meanwhile, this level.">
+            </select></div>
+            <div class="set"><div class="set-head"><span>prefer</span><label class="lock" title="Locked: it stays as it is, is taken out of her doom_goal, and is refused if she sends it. You can still change it here. Kept for the next game."><input type="checkbox" data-lock="prefer" aria-label="lock prefer"></label></div><select id="ev-goalref" class="fit" title="What comes first meanwhile, this level." aria-label="prefer">
               <option value="">prefer…</option><option value="health">health</option><option value="ammo">ammo</option>
               <option value="hunt">hunt</option><option value="unexplored">unexplored</option><option value="none">none</option>
-            </select>
-            <button id="ev-goalset">Set</button><button id="ev-goaldrop">Drop</button>
+            </select></div>
+            <button id="ev-goalset" class="primary">Set</button><button id="ev-goaldrop">Drop</button>
           </div>
         </div>
       </div>
@@ -380,34 +448,24 @@ details.adv[open] > summary { margin-bottom: 8px; }
         <div class="ev-box">
           <h3>Her settings</h3>
           <div class="ev-sets">
-            <label>stance<select data-p="stance"><option>careful</option><option>steady</option><option>bold</option><option>avoid</option><option>yolo</option></select></label>
-            <label>explore<select data-p="explore"><option>normal</option><option>methodical</option><option>speedy</option></select></label>
-            <label>risk<select data-p="risk"><option>careful</option><option>normal</option><option>bold</option></select></label>
-            <label>save<select data-p="save"><option>cells</option><option>none</option></select></label>
-            <label>powerups<select data-p="powerups"><option>need</option><option>now</option></select></label>
-            <label>instinct<select data-p="instinct"><option>on</option><option>off</option></select></label>
+            <div class="set"><div class="set-head"><span>stance</span><label class="lock" title="Locked: it stays as it is, is taken out of her doom_policy, and is refused if she sends it. You can still change it here. Kept for the next game."><input type="checkbox" data-lock="stance" aria-label="lock stance"></label></div><select data-p="stance" aria-label="stance"><option>careful</option><option>steady</option><option>bold</option><option>avoid</option><option>yolo</option></select></div>
+            <div class="set"><div class="set-head"><span>explore</span><label class="lock" title="Locked: it stays as it is, is taken out of her doom_policy, and is refused if she sends it. You can still change it here. Kept for the next game."><input type="checkbox" data-lock="explore" aria-label="lock explore"></label></div><select data-p="explore" aria-label="explore"><option>normal</option><option>methodical</option><option>speedy</option></select></div>
+            <div class="set"><div class="set-head"><span>risk</span><label class="lock" title="Locked: it stays as it is, is taken out of her doom_policy, and is refused if she sends it. You can still change it here. Kept for the next game."><input type="checkbox" data-lock="risk" aria-label="lock risk"></label></div><select data-p="risk" aria-label="risk"><option>careful</option><option>normal</option><option>bold</option></select></div>
+            <div class="set"><div class="set-head"><span>save</span><label class="lock" title="Locked: it stays as it is, is taken out of her doom_policy, and is refused if she sends it. You can still change it here. Kept for the next game."><input type="checkbox" data-lock="save" aria-label="lock save"></label></div><select data-p="save" aria-label="save"><option>cells</option><option>none</option></select></div>
+            <div class="set"><div class="set-head"><span>powerups</span><label class="lock" title="Locked: it stays as it is, is taken out of her doom_policy, and is refused if she sends it. You can still change it here. Kept for the next game."><input type="checkbox" data-lock="powerups" aria-label="lock powerups"></label></div><select data-p="powerups" aria-label="powerups"><option>need</option><option>now</option></select></div>
+            <div class="set"><div class="set-head"><span>instinct</span><label class="lock" title="Locked: it stays as it is, is taken out of her doom_policy, and is refused if she sends it. You can still change it here. Kept for the next game."><input type="checkbox" data-lock="instinct" aria-label="lock instinct"></label></div><select data-p="instinct" aria-label="instinct"><option>on</option><option>off</option></select></div>
           </div>
-          <div class="row"><button id="ev-setapply">Apply as hers</button><span class="dim" id="ev-policy" style="font-size:12px;align-self:center"></span></div>
-          <div class="row" id="ev-locks" style="flex-wrap:wrap;gap:4px 12px;font-size:12px" title="A locked setting stays as it is (instinct: on), is taken out of her doom_policy or doom_goal, and is refused if she sends it. You can still change it here. Kept for the next game.">
-            <span class="dim">Locked (not hers to change):</span>
-            <label><input type="checkbox" data-lock="stance"> stance</label>
-            <label><input type="checkbox" data-lock="explore"> explore</label>
-            <label><input type="checkbox" data-lock="risk"> risk</label>
-            <label><input type="checkbox" data-lock="save"> save</label>
-            <label><input type="checkbox" data-lock="powerups"> powerups</label>
-            <label><input type="checkbox" data-lock="instinct"> instinct</label>
-            <label><input type="checkbox" data-lock="finish"> goal: finish</label>
-            <label><input type="checkbox" data-lock="prefer"> goal: prefer</label>
-          </div>
+          <div class="row"><button id="ev-setapply" class="primary">Apply as hers</button><span class="note mid" id="ev-policy"></span></div>
+          <p class="note lead">A padlock shut: locked from her. You can still change it here.</p>
           <details class="adv" id="adv-push"><summary>Advanced: how soon she's pushed</summary>
-          <div class="ev-sets" style="margin-top:8px" title="The stream's, not hers: how soon a decision's pushed on her, in seconds (0: never). Kept for the next game.">
+          <div class="ev-sets gap-top" title="The stream's, not hers: how soon a decision's pushed on her, in seconds (0: never). Kept for the next game.">
             <label>push her, waiting (s)<input type="number" min="0" max="3600" step="0.5" id="ev-fidle"></label>
             <label>push her, a question (s)<input type="number" min="0" max="3600" step="0.5" id="ev-fask"></label>
             <label>ask what next, at most every (s)<input type="number" min="0" max="3600" step="0.5" id="ev-fnext"></label>
             <label title="Before a question's default is taken (0: till she answers).">a question waits (s)<input type="number" min="0" max="3600" step="0.5" id="ev-fwait"></label>
             <label title="On: asked what next, she picks without saying anything aloud about it (it comes often)."><input type="checkbox" id="ev-fquiet"> what next asked quietly</label>
           </div>
-          <div class="row"><button id="ev-forceapply">Apply</button><span class="dim" style="font-size:12px;align-self:center">the stream's: a decision forced after she's waited, or left a question, this long</span></div>
+          <div class="row"><button id="ev-forceapply">Apply</button><span class="note mid">the stream's: a decision forced after she's waited, or left a question, this long</span></div>
           </details>
         </div>
       </div>
@@ -430,18 +488,18 @@ details.adv[open] > summary { margin-bottom: 8px; }
             <button data-q="doom_fight" data-d='{"retreat":true}'>Retreat</button><button data-q="doom_fight" data-d='{"cancel":true}'>Fight by reflex</button>
           </div>
         </div>
-        <div class="ev-box" style="margin-top:10px">
+        <div class="ev-box gap-top">
           <h3>Raw action, as hers</h3>
           <div class="row">
-            <select id="e-action" style="width:auto">
+            <select class="fit" id="e-action">
               <option>doom_go</option><option>doom_exit</option>
               <option>doom_query</option><option>doom_look</option><option>doom_status</option><option>doom_why</option>
               <option>doom_goal</option><option>doom_policy</option><option>doom_fight</option><option>doom_answer</option><option>doom_game</option>
             </select>
-            <input id="e-data" placeholder='{"ref": "door-3"}' style="flex:1;min-width:10em">
+            <input class="grow" id="e-data" placeholder='{"ref": "door-3"}'>
             <button id="e-order">Send</button>
           </div>
-          <p class="dim" style="margin:0;font-size:12px">Any of her actions, its data as JSON (docs/NEURO.md): it goes through her own checks, and she's told it was yours.</p>
+          <p class="note">Any of her actions, its data as JSON (docs/NEURO.md): it goes through her own checks, and she's told it was yours.</p>
         </div>
       </div>
       <div class="ev-col">
@@ -449,7 +507,7 @@ details.adv[open] > summary { margin-bottom: 8px; }
           <h3>Why</h3>
           <ul id="ev-why"></ul>
         </div>
-        <div class="ev-box" style="margin-top:10px">
+        <div class="ev-box gap-top">
           <h3>Answer to the console's last <span id="ev-replyname"></span></h3>
           <div id="ev-reply" class="dim">-</div>
         </div>
@@ -460,7 +518,7 @@ details.adv[open] > summary { margin-bottom: 8px; }
   <section id="logcard" data-tab="debug">
     <h2>Log</h2>
     <div class="row">
-      <select id="logfilter" style="width:auto">
+      <select class="fit" id="logfilter">
         <option value="all">Everything</option>
         <option value="evil">Evil and Neuro</option>
         <option value="console">Console, events, errors</option>
@@ -672,7 +730,7 @@ function renderEvil(e, n) {
   pol.instinct = /instinct/.test(e.idle || "") ? "on" : "off";
   for (const el of document.querySelectorAll("[data-p]")) if (!setsDirty && document.activeElement !== el && pol[el.dataset.p] != null) el.value = pol[el.dataset.p];
   // (how soon she's pushed, as the game has it, unless it's being changed here)
-  if (Date.now() - lockSentAt > 1500) for (const el of $("ev-locks").querySelectorAll("[data-lock]")) el.checked = (e.locked || []).includes(el.dataset.lock);
+  if (Date.now() - lockSentAt > 1500) for (const el of document.querySelectorAll("[data-lock]")) el.checked = (e.locked || []).includes(el.dataset.lock);
   if (!forceDirty) $("ev-fquiet").checked = !!e.next_silent;
   if (!forceDirty && document.activeElement !== $("ev-fwait") && e.answer_wait != null) $("ev-fwait").value = Math.round(e.answer_wait * 10) / 10;
   [["ev-fidle", 0], ["ev-fask", 1], ["ev-fnext", 2]].forEach(([id, i]) => { if (!forceDirty && document.activeElement !== $(id) && e.forcing) $(id).value = Math.round(e.forcing[i] * 10) / 10; });
@@ -889,9 +947,9 @@ $("ev-forceapply").onclick = async () => {
   const n = (id) => { const v = $(id).value.trim(); return v === "" ? null : Math.max(0, Number(v)); };
   if (await cmd({ cmd: "forcing", idle: n("ev-fidle"), ask: n("ev-fask"), next: n("ev-fnext"), answers: n("ev-fwait"), quiet: $("ev-fquiet").checked })) forceDirty = false;
 };
-for (const el of $("ev-locks").querySelectorAll("[data-lock]")) el.addEventListener("change", () => {
+for (const el of document.querySelectorAll("[data-lock]")) el.addEventListener("change", () => {
   lockSentAt = Date.now();
-  cmd({ cmd: "lock", settings: [...$("ev-locks").querySelectorAll("[data-lock]")].filter((x) => x.checked).map((x) => x.dataset.lock) });
+  cmd({ cmd: "lock", settings: [...document.querySelectorAll("[data-lock]")].filter((x) => x.checked).map((x) => x.dataset.lock) });
 });
 $("ev-setapply").onclick = async () => {
   const data = {};
