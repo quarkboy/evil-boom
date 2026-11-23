@@ -94,6 +94,13 @@ what's switched on; a red outline ends or restarts something (Stop, Restart leve
 is a switch. A padlock by one of her settings, shut and gold, is that setting locked from her:
 click it to lock or free it.
 
+The top bar's readout is the game's own bar: the map, the level's time, her health (green,
+amber from 60, red from 25) and armor. Run shows the tally (kills, items, secrets, each with
+its bar, lit when all are had), her ammo and her keys. The logo and the lettering are the
+stream window's, served by the console itself (`evil-boom-logo.png`, `evil-boom-font.ttf`,
+`evil-boom-icon.png`: no token needed, nothing secret in them); nothing is fetched from
+elsewhere.
+
 With no game running, the Evil tab is what she starts the next game with: her goal and settings
 kept there (`evil_goal`, `evil_policy` in the file) are given to a directed game once its first
 level has begun, as orders of yours, and she's told so. "Forget what's kept" leaves her the

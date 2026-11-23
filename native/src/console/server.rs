@@ -1079,6 +1079,16 @@ fn handle(hub: &Hub, mut req: Request) {
     // (behind someone's proxy or tunnel it may be under a path of theirs, /doom/: what's from
     // /api/ on is the call, and the page asks by paths relative to itself)
     let Some(path) = path.find("/api/").map(|i| &path[i..]) else {
+        // (the page's own pictures and lettering: the stream's, nothing secret in them)
+        let asset = path.rsplit('/').next().and_then(asset);
+        if let Some((bytes, kind)) = asset.filter(|_| method == Method::Get) {
+            let _ = req.respond(with_header(
+                with_header(Response::from_data(bytes), "Content-Type", kind),
+                "Cache-Control",
+                "max-age=3600",
+            ));
+            return;
+        }
         let file = path
             .rsplit('/')
             .next()
@@ -1430,6 +1440,20 @@ fn poll(hub: &Hub, since: u64, views: &str) -> Value {
         "state": s.state,
         "log": log,
         "seq": seq,
+    })
+}
+
+/// A file the page asks for by name: the logo and the lettering the stream's window has, and
+/// the program's icon.
+fn asset(name: &str) -> Option<(&'static [u8], &'static str)> {
+    Some(match name {
+        "evil-boom-logo.png" => (include_bytes!("../../assets/logo.png"), "image/png"),
+        "evil-boom-icon.png" => (include_bytes!("../../assets/icon.png"), "image/png"),
+        "evil-boom-font.ttf" => (
+            include_bytes!("../../assets/fonts/BarlowCondensed-SemiBold.ttf"),
+            "font/ttf",
+        ),
+        _ => return None,
     })
 }
 

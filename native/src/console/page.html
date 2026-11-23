@@ -6,6 +6,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Evil BOOM console</title>
+<link rel="icon" href="evil-boom-icon.png">
 <style>
 /* Colours by what they mean: the accent for the one main action of a place and for what's
    switched on; red for what ends or restarts something; her own violet-pink for what's hers. */
@@ -23,12 +24,9 @@ body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 sys
 
 /* --- the top bar and the tabs ---------------------------------------------------------- */
 header { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 20px; background: var(--bg); border-bottom: 1px solid var(--line); }
-header h1 { font-size: 17px; margin: 0 6px 0 0; letter-spacing: .01em; font-weight: 700; }
-header h1 b { color: var(--brand); }
 .badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12px; background: var(--raised); color: var(--dim); white-space: nowrap; }
 .badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .8; }
 .badge.ok { background: #16301f; color: var(--ok); } .badge.warn { background: #3a2e15; color: var(--warn); } .badge.bad { background: #3d1c1c; color: var(--bad); }
-#top-now { font-size: 14px; color: var(--text); font-variant-numeric: tabular-nums; margin-left: 6px; }
 #top-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
 #tabs { display: flex; gap: 2px; padding: 0 20px; border-bottom: 1px solid var(--line); }
 #tabs button[data-tab] { border: none; border-radius: 0; background: transparent; color: var(--dim); padding: 11px 18px 10px; font-size: 14px; font-weight: 600; border-bottom: 2px solid transparent; }
@@ -183,15 +181,92 @@ body[data-tab="live"] #e-say { font-size: 15px; padding: 9px 11px; }
 #log { height: 45vh; overflow-y: auto; background: var(--inset); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: 12px/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (min-width: 980px) { #log { height: 40vh; } }
 #log .evil { color: var(--evil); } #log .console { color: var(--info); } #log .err { color: var(--bad); } #log .event { color: var(--warn); } #log .out { color: var(--dim); }
+/* --- the look: the stream's own lettering and logo, the game's bar for where she is, a
+   glow on what matters now. (All above still holds with this block taken out.) ------------ */
+@font-face { font-family: "Barlow Condensed"; src: url("evil-boom-font.ttf") format("truetype"); font-weight: 600; font-display: swap; }
+:root { --display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif; }
+body { background: radial-gradient(900px 420px at 10% -8%, #4a0f1638, transparent 70%), radial-gradient(1000px 520px at 90% -12%, #2b1c5c44, transparent 70%), var(--bg); background-attachment: fixed; }
+::selection { background: #8f6bf266; }
+* { scrollbar-width: thin; scrollbar-color: #3a3a48 transparent; }
+.label, .hud-cell i, .tl i, .keys i { font: 600 11px/1 var(--display); letter-spacing: .16em; text-transform: uppercase; color: var(--dim); font-style: normal; }
+header { background: linear-gradient(180deg, #050507, #0c0c10f2); border-bottom: none; padding: 6px 20px; }
+header::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; background: linear-gradient(90deg, var(--brand), var(--accent) 45%, transparent 92%); opacity: .8; }
+header h1 { display: flex; align-items: center; gap: 12px; margin: 0 8px 0 0; font: 600 19px/1 var(--display); letter-spacing: .22em; text-transform: uppercase; color: var(--dim); }
+#logo { height: 46px; display: block; mix-blend-mode: screen; filter: drop-shadow(0 0 14px #e0484850); font-size: 15px; color: var(--brand); }
+.badge { font: 600 13px/1.5 var(--display); letter-spacing: .08em; text-transform: uppercase; }
+.badge.ok::before { animation: ping 2.2s ease-out infinite; }
+@keyframes ping { 0% { box-shadow: 0 0 0 0 #4fbf7299; } 100% { box-shadow: 0 0 0 7px #4fbf7200; } }
+.hud { display: flex; align-items: stretch; margin-left: 6px; border: 1px solid var(--line); border-radius: 8px; background: #08080b; overflow: hidden; box-shadow: inset 0 1px 0 #ffffff0a; }
+.hud[hidden] { display: none; }
+.hud-cell { position: relative; display: grid; gap: 3px; padding: 5px 14px 7px; min-width: 64px; border-right: 1px solid var(--line); }
+.hud-cell b { font: 600 23px/1 var(--display); letter-spacing: .02em; font-variant-numeric: tabular-nums; }
+.bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #ffffff10; }
+.bar > span { display: block; height: 100%; width: 0; background: currentColor; transition: width .35s ease-out; }
+.hud .hp { color: var(--ok); } .hud .hp.mid { color: var(--warn); } .hud .hp.low { color: var(--bad); }
+.hud .hp.low b { animation: throb .7s ease-in-out infinite alternate; }
+@keyframes throb { to { text-shadow: 0 0 14px currentColor; opacity: .75; } }
+.hud .ar { color: var(--info); }
+.hud-flag { align-self: center; padding: 0 14px; font: 600 16px/1 var(--display); letter-spacing: .16em; text-transform: uppercase; color: var(--warn); }
+.hud-flag:empty { display: none; } .hud-flag.dead { color: var(--bad); }
+#tabs button[data-tab] { font: 600 17px/1 var(--display); letter-spacing: .12em; text-transform: uppercase; padding: 14px 20px 12px; }
+#tabs button[data-tab].on { background: linear-gradient(180deg, transparent 45%, #8f6bf224); box-shadow: 0 10px 18px -12px var(--accent); text-shadow: 0 0 16px #a98bff99; }
+section { position: relative; background: linear-gradient(180deg, #1b1b24, #141419); box-shadow: inset 0 1px 0 #ffffff0d, 0 14px 34px -22px #000; }
+section::before { content: ""; position: absolute; left: -1px; top: 15px; width: 3px; height: 17px; border-radius: 0 2px 2px 0; background: linear-gradient(var(--accent-hi), var(--accent)); box-shadow: 0 0 10px var(--accent); }
+section.evil-part::before { background: var(--evil); box-shadow: 0 0 10px var(--evil); }
+section[data-tab] { animation: rise .2s ease-out both; }
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+section h2 { font: 600 18px/1.1 var(--display); letter-spacing: .1em; text-transform: uppercase; }
+section h2 .help { font-family: system-ui, sans-serif; letter-spacing: 0; }
+.ev-box h3, .feed-title, .form .group legend { font: 600 13px/1.2 var(--display); letter-spacing: .12em; text-transform: uppercase; }
+.feed-title .plain { font: 400 12px/1.2 system-ui, sans-serif; }
+button { transition: background .12s, border-color .12s, box-shadow .15s, transform .06s, filter .12s; }
+button:active:not(:disabled) { transform: translateY(1px) scale(.985); }
+button.primary, #g-begin.on, .ev-q button.def { background: linear-gradient(135deg, #7657ee, #b659dc); border-color: #b9a2ff66; box-shadow: 0 8px 22px -10px #9a63ee, inset 0 1px 0 #ffffff38; font: 600 16px/1.2 var(--display); letter-spacing: .1em; text-transform: uppercase; }
+button.primary:hover:not(:disabled), #g-begin.on:hover:not(:disabled), .ev-q button.def:hover:not(:disabled) { background: linear-gradient(135deg, #7657ee, #b659dc); border-color: #d3c4ff; filter: brightness(1.14); }
+button.primary:disabled { box-shadow: none; filter: saturate(.55); }
+button.danger:hover:not(:disabled) { box-shadow: 0 0 18px -6px var(--danger); }
+button.on { box-shadow: 0 0 16px -6px var(--accent); }
+input[type=checkbox]:checked:not([data-lock]) { box-shadow: 0 0 10px -2px var(--accent); }
+.lock input[type=checkbox]:checked { filter: drop-shadow(0 0 5px #e0a83a99); }
+#stats { display: grid; gap: 8px; margin: 2px 0 12px; }
+#stats[hidden] { display: none; }
+.tally, .ammo { display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ammo { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.tl { position: relative; display: grid; gap: 4px; overflow: hidden; background: var(--inset); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px 10px; }
+.tl b { font: 600 22px/1 var(--display); font-variant-numeric: tabular-nums; color: var(--text); }
+.tl b small { font-size: 14px; color: var(--faint); }
+.tl.kills { color: var(--brand); } .tl.items { color: var(--warn); } .tl.secrets { color: var(--accent-hi); }
+.tl.done { border-color: currentColor; } .tl.done b { text-shadow: 0 0 12px currentColor; }
+.ammo .tl { padding-bottom: 7px; } .ammo .tl b { font-size: 19px; } .ammo .tl.none b { color: var(--faint); }
+.keys { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--faint); min-height: 20px; }
+.key { width: 12px; height: 18px; border-radius: 2px; background: var(--dim); box-shadow: 0 0 8px -1px currentColor, inset 0 1px 0 #ffffff55; }
+.key.skull { border-radius: 6px 6px 3px 3px; }
+.key.blue { background: #3f72f5; color: #3f72f5; } .key.red { background: #e04848; color: #e04848; } .key.yellow { background: #ecc63a; color: #ecc63a; }
+.ev-q { animation: ask 1.6s ease-in-out infinite alternate; background: linear-gradient(160deg, #33265c, #241b3f); }
+@keyframes ask { from { box-shadow: 0 0 0 0 #8f6bf200; } to { box-shadow: 0 0 26px -6px #8f6bf2; } }
+.qbar div { background: linear-gradient(90deg, var(--accent), var(--evil)); }
+.danger-dangerous, .danger-deadly { text-shadow: 0 0 12px currentColor; }
+.danger-deadly { animation: throb .6s ease-in-out infinite alternate; }
+.feed > div, #log > div { padding-left: 8px; border-left: 2px solid transparent; }
+.feed .loud { border-left-color: #ffffff30; } .feed .act { border-left-color: var(--evil); } .feed .st { border-left-color: var(--info); } .feed .fail { border-left-color: var(--bad); }
+#log .err { border-left-color: var(--bad); } #log .evil { border-left-color: var(--evil); }
+.views img { box-shadow: 0 0 0 1px var(--line), 0 16px 36px -20px #000; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 </style>
 </head>
 <body>
 <header>
-  <h1><b>Evil</b> BOOM console</h1>
+  <h1><img id="logo" src="evil-boom-logo.png" alt="Evil BOOM"><span>console</span></h1>
   <span id="b-console" class="badge">console ?</span>
   <span id="b-game" class="badge">game ?</span>
   <span id="b-neuro" class="badge">neuro -</span>
-  <span id="top-now" class="dim"></span>
+  <span id="top-now" class="hud" hidden>
+    <span class="hud-cell"><i>Map</i><b id="hud-map"></b></span>
+    <span class="hud-cell"><i>Time</i><b id="hud-time"></b></span>
+    <span class="hud-cell hp" id="hud-hpcell"><i>Health</i><b id="hud-hp"></b><span class="bar"><span id="hud-hpbar"></span></span></span>
+    <span class="hud-cell ar"><i>Armor</i><b id="hud-ar"></b><span class="bar"><span id="hud-arbar"></span></span></span>
+    <span class="hud-flag" id="hud-flag"></span>
+  </span>
   <span id="top-actions">
     <button id="c-pause">Pause</button>
     <button id="c-restart" class="danger" title="The level again from its start, no life spent">Restart level</button>
@@ -228,6 +303,18 @@ body[data-tab="live"] #e-say { font-size: 15px; padding: 9px 11px; }
       <span class="check"><input type="checkbox" id="l-carry"><label for="l-carry" class="check">carry what she has</label></span>
     </div>
     <div class="msg" id="msg"></div>
+    <div id="stats" hidden>
+      <div class="tally">
+        <div class="tl kills"><i>Kills</i><b id="t-kills"></b><span class="bar"><span></span></span></div>
+        <div class="tl items"><i>Items</i><b id="t-items"></b><span class="bar"><span></span></span></div>
+        <div class="tl secrets"><i>Secrets</i><b id="t-secrets"></b><span class="bar"><span></span></span></div>
+      </div>
+      <div class="ammo">
+        <div class="tl"><i>Bullets</i><b id="a-0"></b></div><div class="tl"><i>Shells</i><b id="a-1"></b></div>
+        <div class="tl"><i>Rockets</i><b id="a-2"></b></div><div class="tl"><i>Cells</i><b id="a-3"></b></div>
+      </div>
+      <div class="keys" id="keys"></div>
+    </div>
     <dl id="state"></dl>
   </section>
 
@@ -581,6 +668,36 @@ function showChatBox(st) {
   $("col-chatbox").textContent = b ? `Chat box: x ${b[0]}, y ${b[1]}, ${b[2]}x${b[3]} of the 1920x1080 picture (scaled with the window).` : "";
 }
 
+// Where she is and how, as the game's own bar would have it: the top bar's readout (whatever
+// tab's open) and Run's tally, ammo and keys.
+function hud(st) {
+  $("top-now").hidden = !st; $("stats").hidden = !st;
+  if (!st) return;
+  $("hud-map").textContent = st.map; $("hud-time").textContent = fmtTime(st.seconds);
+  $("hud-hp").textContent = st.health; $("hud-ar").textContent = st.armor;
+  $("hud-hpcell").className = "hud-cell hp" + (st.dead || st.health <= 25 ? " low" : st.health <= 60 ? " mid" : "");
+  $("hud-hpbar").style.width = Math.max(0, Math.min(100, st.health)) + "%";
+  $("hud-arbar").style.width = Math.max(0, Math.min(100, st.armor)) + "%";
+  const flag = $("hud-flag");
+  flag.textContent = st.dead ? "Dead" : st.exited ? "Exited" : st.paused ? "Paused" : "";
+  flag.className = "hud-flag" + (st.dead ? " dead" : "");
+  for (const k of ["kills", "items", "secrets"]) {
+    const [got, of] = st[k], el = $("t-" + k), small = document.createElement("small");
+    small.textContent = " / " + of; el.replaceChildren(String(got), small);
+    el.parentElement.classList.toggle("done", of > 0 && got >= of);
+    el.parentElement.querySelector(".bar span").style.width = (of > 0 ? Math.min(100, 100 * got / of) : 0) + "%";
+  }
+  st.ammo.forEach((a, i) => { $("a-" + i).textContent = a; $("a-" + i).parentElement.classList.toggle("none", a === 0); });
+  const keys = st.keys.join("|");
+  if ($("keys").dataset.shown !== keys) {
+    $("keys").dataset.shown = keys;
+    const label = document.createElement("i"); label.textContent = "Keys";
+    $("keys").replaceChildren(label, ...(st.keys.length ? st.keys.map((k) => {
+      const e = document.createElement("span"), c = ["blue", "red", "yellow"].find((x) => k.toLowerCase().includes(x)) || "";
+      e.className = "key " + c + (/skull/i.test(k) ? " skull" : ""); e.title = k; return e;
+    }) : ["none"]));
+  }
+}
 function badge(el, text, cls) { el.textContent = text; el.className = "badge " + (cls || ""); }
 
 function render(p) {
@@ -619,16 +736,11 @@ function render(p) {
   for (const id of ["l-map", "l-go", "l-next", "l-carry"]) $(id).disabled = !p.connected || !maps.length;
   for (const b of $("speeds").children) { b.disabled = !p.connected; b.classList.toggle("on", !!st && Math.abs(st.speed - Number(b.dataset.x)) < 1e-9); }
   // (the top bar: where she is and how, whatever tab's open)
-  $("top-now").textContent = st
-    ? st.map + " \u00b7 " + fmtTime(st.seconds) + " \u00b7 health " + st.health + ", armor " + st.armor + (st.dead ? " \u00b7 dead" : st.paused ? " \u00b7 paused" : "")
-    : "";
+  hud(st);
   const rows = [];
   if (st) {
-    const t = (a) => a[0] + "/" + a[1];
     const fate = st.exited ? "exited" : st.dead ? "dead" : st.paused ? "paused" : "playing";
-    rows.push(["Screen", st.screen || "-"], ["Map", st.map + " · " + fate], ["Time", fmtTime(st.seconds)],
-      ["Health", st.health + "  armor " + st.armor], ["Ammo", "bul " + st.ammo[0] + " · sh " + st.ammo[1] + " · rkt " + st.ammo[2] + " · cell " + st.ammo[3]],
-      ["Keys", st.keys.length ? st.keys.join(", ") : "-"], ["Tally", "K " + t(st.kills) + " · I " + t(st.items) + " · S " + t(st.secrets)],
+    rows.push(["Screen", st.screen || "-"], ["Map", st.map + " · " + fate],
       ["God mode", st.god ? "on" : "off"], ["Directed", st.mode], ["Doing", st.doing || "-"]);
     if (n) rows.push(["Neuro", n.url]);
   }
