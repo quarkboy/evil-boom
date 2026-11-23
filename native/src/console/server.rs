@@ -137,6 +137,16 @@ pub struct Settings {
     /// the MIDI played with this SoundFont, by its name in soundfonts/; "opl": by the OPL synth;
     /// "": the default (soundfonts/SC-55.sf2 if it's there, else OPL)
     pub soundfont: String,
+    /// the ultra instinct (`--ultra-after`): hers on a level once she's died `ultra_after`
+    /// times there (0: from its start); a death then is undone `ultra_back` seconds and the
+    /// fight searched for her, the game at `ultra_speed` of its pace meanwhile, by
+    /// `ultra_workers` worker processes (0: the game's own, which stops the picture for each
+    /// look). Off: no such thing.
+    pub ultra: bool,
+    pub ultra_after: i32,
+    pub ultra_back: f64,
+    pub ultra_speed: f64,
+    pub ultra_workers: usize,
     /// frames shown at the screen's refresh
     pub vsync: bool,
     /// the window the whole screen (the desktop's resolution, borderless)
@@ -197,6 +207,11 @@ impl Default for Settings {
             render_size: String::new(),
             music: String::new(),
             soundfont: String::new(),
+            ultra: true,
+            ultra_after: 3,
+            ultra_back: crate::run::ULTRA_BACK as f64 / 35.0,
+            ultra_speed: crate::run::ULTRA_SPEED,
+            ultra_workers: 8,
             vsync: true,
             fullscreen: false,
             evil_starts: true,
@@ -298,6 +313,19 @@ impl Settings {
         if !(120..=444).contains(&self.map_height) {
             return Err("map_height: 120 to 444".into());
         }
+        // (as `watch` takes them: what it would refuse, refused here, not a game that won't start)
+        if !(0..=99).contains(&self.ultra_after) {
+            return Err("ultra_after: deaths on a level, 0 to 99".into());
+        }
+        if !(1.0..=20.0).contains(&self.ultra_back) {
+            return Err("ultra_back: seconds, 1 to 20".into());
+        }
+        if !(self.ultra_speed > 0.0 && self.ultra_speed <= 1.0) {
+            return Err("ultra_speed: over 0, up to 1".into());
+        }
+        if self.ultra_workers > 32 {
+            return Err("ultra_workers: 0 to 32".into());
+        }
         let name = self.console_name.trim();
         if name.is_empty() || name.chars().count() > 32 || name.chars().any(char::is_control) {
             return Err("console_name: a name, at most 32 characters".into());
@@ -347,6 +375,19 @@ impl Settings {
         }
         if !self.soundfont.is_empty() {
             a.extend(["--soundfont".into(), self.soundfont.clone()]);
+        }
+        // (hers by dying, so only where she can die)
+        if self.ultra && self.mortal && self.skill > 0 {
+            a.extend([
+                "--ultra-after".into(),
+                self.ultra_after.to_string(),
+                "--ultra-back".into(),
+                self.ultra_back.to_string(),
+                "--ultra-speed".into(),
+                self.ultra_speed.to_string(),
+                "--workers".into(),
+                self.ultra_workers.to_string(),
+            ]);
         }
         if !self.vsync {
             a.push("--no-vsync".into());
@@ -1516,6 +1557,46 @@ fn same(a: &str, b: &str) -> bool {
 #[cfg(test)]
 mod tests {
 
+    /// The ultra instinct: passed to a game she can die in, as set; off, or where she can't,
+    /// not at all; what `watch` would refuse, refused.
+    #[test]
+    fn ultra_settings() {
+        let after = |s: &super::Settings| {
+            let a = s.args("x");
+            let i = a.iter().position(|x| x == "--ultra-after")?;
+            Some(a[i + 1..i + 8].join(" "))
+        };
+        let mut s = super::Settings {
+            mortal: true,
+            skill: 3,
+            ..Default::default()
+        };
+        assert!(s.check().is_ok());
+        assert_eq!(
+            after(&s).as_deref(),
+            Some("3 --ultra-back 5 --ultra-speed 0.5 --workers 8")
+        );
+        s.ultra_after = 0;
+        s.ultra_speed = 0.75;
+        assert!(s.check().is_ok());
+        assert_eq!(
+            after(&s).as_deref(),
+            Some("0 --ultra-back 5 --ultra-speed 0.75 --workers 8")
+        );
+        s.ultra = false;
+        assert_eq!(after(&s), None);
+        s.ultra = true;
+        s.mortal = false;
+        assert_eq!(after(&s), None);
+        for bad in [0.0, 1.5, -1.0] {
+            s.ultra_speed = bad;
+            assert!(s.check().is_err(), "{bad}");
+        }
+        s.ultra_speed = 0.5;
+        s.ultra_back = 30.0;
+        assert!(s.check().is_err());
+    }
+
     /// The window's size, vsync and full screen: checked, and passed to the game.
     #[test]
     fn window_settings() {
@@ -1657,7 +1738,7 @@ mod tests {
         })
         .args("127.0.0.1:1");
         let line = a.join(" ");
-        assert!(line.starts_with("watch doom2 MAP01 --fight 4 --mortal --lives unlimited --seed 7 --episode --title --stream right --neuro ws://127.0.0.1:8000"), "{line}");
+        assert!(line.starts_with("watch doom2 MAP01 --fight 4 --mortal --lives unlimited --seed 7 --episode --title --stream right --ultra-after 3 --ultra-back 5 --ultra-speed 0.5 --workers 8 --neuro ws://127.0.0.1:8000"), "{line}");
         assert!(line.ends_with("--control 127.0.0.1:1"), "{line}");
         let none = (Settings {
             skill: 0,

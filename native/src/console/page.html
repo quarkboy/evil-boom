@@ -451,6 +451,17 @@ header { gap: 8px 10px; } header h1 { font-size: 16px; letter-spacing: .18em; ga
         <span class="check wide" data-when="directed"><input type="checkbox" name="evil_next" id="s-evil-next"><label for="s-evil-next" class="check">She goes on to the next level herself, from the tally (else it goes on after 30 s)</label></span>
         <span class="check wide" data-when="directed"><input type="checkbox" name="evil_restart" id="s-evil-restart"><label for="s-evil-restart" class="check">She may restart a level (after 90 s with nothing new)</label></span>
       </fieldset>
+      <fieldset class="group wide"><legend>Ultra instinct</legend>
+        <span class="check wide" title="When a level has killed her often enough, a death is undone a few seconds back and the fight is searched for her in the game itself: she fights as well as the game allows, for up to 30 s (60 after as many deaths again), got back as she plays. Only where she can die."><input type="checkbox" name="ultra" id="s-ultra"><label for="s-ultra" class="check">A death undone and the fight searched for her, once a level has killed her often enough</label></span>
+        <label data-when="ultra" title="Her deaths on a level before it's hers there. 0: hers from the level's start (30 s of it, no more for dying).">Deaths on a level before it's hers <input type="number" name="ultra_after" min="0" max="99" step="1"></label>
+        <details class="adv wide" id="adv-ultra" data-when="ultra"><summary>Advanced</summary><div class="advbody">
+        <label title="How far back a death is undone to, in seconds (1 to 20).">Seconds a death is undone <input type="number" name="ultra_back" min="1" max="20" step="0.5"></label>
+        <label title="How fast the game goes while the search has her, of its usual pace (0.5: half; 0.75 looks better on a fast machine; 1: full).">Game speed while it searches <input type="number" name="ultra_speed" min="0.1" max="1" step="0.05"></label>
+        <label title="Worker processes that do the searching, each a copy of the game (8 is plenty). 0: the game does it itself, and the picture stops for each look.">Worker processes <input type="number" name="ultra_workers" min="0" max="32" step="1"></label>
+        </div></details>
+        <p class="note wide" data-when="ultra-off">Off: a death stands, and she plays the level again as she is.</p>
+        <p class="note wide" data-when="ultra-immortal">It needs "She can die" on and a skill with monsters: as set, this game won't use it.</p>
+      </fieldset>
       <fieldset class="group wide"><legend>Window</legend>
         <label>Layout <select name="layout"><option value="stream">for the stream (16:9)</option><option value="watcher">the watcher (map and log)</option></select></label>
         <label>Window resolution <select name="window_size"><option value="">its own (stream: 1920x1080)</option><option>1280x720</option><option>1366x768</option><option>1600x900</option><option>1920x1080</option><option>2560x1440</option><option>3840x2160</option></select></label>
@@ -1019,6 +1030,9 @@ function applyWhen() {
     directed,
     evilchooses: directed && f.present.checked && tc.value === "evil",
     stream: f.layout.value === "stream",
+    ultra: f.ultra.checked,
+    "ultra-off": !f.ultra.checked,
+    "ultra-immortal": f.ultra.checked && !(f.mortal.checked && Number(f.skill.value) > 0),
   };
   for (const el of document.querySelectorAll("#settings [data-when]")) el.hidden = !on[el.dataset.when];
 }
@@ -1051,7 +1065,7 @@ function readForm() {
   for (const el of f.elements) {
     if (!el.name) continue;
     if (el.type === "checkbox") s[el.name] = el.checked;
-    else if (el.name === "skill") s[el.name] = Number(el.value);
+    else if (el.name === "skill" || el.type === "number") s[el.name] = Number(el.value);
     else if (el.name === "seed") s.seed = el.value.trim() === "" ? null : Number(el.value);
     else s[el.name] = el.value.trim();
   }

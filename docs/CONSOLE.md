@@ -25,7 +25,7 @@ browser(s)  --HTTP, polled, token-->  evil-boom console            (the supervis
 ```
 
 Settings that need a new game process (the WAD, skill, seed, who directs her, the Neuro URL, the
-window's size, the game's rendering size, vsync, full screen)
+window's size, the game's rendering size, vsync, full screen, the ultra instinct)
 apply when the game is next started. Everything else (pause, speed, volume, restart the level,
 another map) goes to the running game at once. A game that crashes or hangs can be restarted
 automatically, at the level she was on.
@@ -33,7 +33,7 @@ automatically, at the level she was on.
 ## Settings
 
 Kept in `config/console.local.json` (git-ignored; made on first start), edited from the page's
-Settings section, in five groups. A change is used when the game's next started (Start saves the
+Settings section, in six groups. A change is used when the game's next started (Start saves the
 form's changes first).
 
 | on the page | in the file | |
@@ -49,6 +49,8 @@ form's changes first).
 | Your name, as she's told it | `console_name` | who she's told says or does what comes from the page ("Vedal: ...", "Vedal did doom_go ..."); Vedal by default |
 | Levels, Skills, Play she may choose | `evil_maps`, `evil_skills`, `evil_play` | what Evil's offered when she chooses the game (skills 1-4: never Nightmare) |
 | She goes on to the next level herself; She may restart a level | `evil_next`, `evil_restart` | hers while she directs: from the tally (else it goes on after 30 s); after 90 s with nothing new |
+| **Ultra instinct:** on or off, Deaths on a level before it's hers | `ultra`, `ultra_after` | once a level has killed her that often (3 unless set; 0: from its start), a death is undone and the fight searched for her in the game itself, for up to 30 s (60 after as many deaths again), got back as she plays. On unless turned off; only where she can die |
+| Seconds a death is undone, Game speed while it searches, Worker processes | `ultra_back`, `ultra_speed`, `ultra_workers` | how far back (5; 1 to 20), the game's pace meanwhile (0.5; up to 1), and the processes that search (8; 0: the game itself, the picture stopping for each look) |
 | **Window:** Layout | `layout` | `stream` (16:9, the game and a viewers' column) or `watcher` (the game, the map and her log) |
 | Window resolution, Vsync, Full screen | `window_size`, `vsync`, `fullscreen` | the window's size (empty: the picture's own, 1920x1080 for the stream, scaled to fit), frames at the screen's refresh, the whole screen (borderless) |
 | Game rendering resolution | `render_size` | the size the game itself is drawn at (empty: 640x480; 320x200 as in 1994, stretched to 4:3 as its screens were); the stream's game is 1440x1080 of its picture |
