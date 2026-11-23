@@ -495,6 +495,53 @@ impl Knowledge {
         h.ceiling <= h.floor && self.narrowness[b] <= DOOR_THICKNESS && self.odd(li).0
     }
 
+    /// Is the line just this side of a door: a use line across the way with, a press's reach
+    /// past it, a thin sector shut too low to walk through (a gate of bars, a door set back
+    /// from its frame)? A player presses the gate; the game takes the press at the first use
+    /// line the reach crosses, which is this one. (Memento Mori MAP02: the grate between the
+    /// start and the rest of the level is opened by a line a few units in front of its bars,
+    /// faced like the bricks round it. Never pressed, she saw a quarter of the level and
+    /// started again 37 times in an hour.)
+    pub fn before_a_door(&self, li: usize) -> bool {
+        let m = &self.nav.map;
+        let (Some(_), Some(mut here)) = m.sides(li) else {
+            return false;
+        };
+        let (a, b) = m.line_seg(li);
+        let (mid, long) = (((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0), dist(a, b));
+        if long <= 0.0 {
+            return false;
+        }
+        // (a line's back is on the left of its direction)
+        let back = (-(b.1 - a.1) / long, (b.0 - a.0) / long);
+        let far = (
+            mid.0 + back.0 * super::USE_RANGE,
+            mid.1 + back.1 * super::USE_RANGE,
+        );
+        for (_, o) in self.lines_along(mid, far) {
+            if o == li {
+                continue;
+            }
+            let (Some(f), Some(k)) = m.sides(o) else {
+                return false;
+            };
+            if !self.mapped.contains(&o) {
+                return false;
+            }
+            let next = if f == here { k } else { f };
+            let h = self
+                .seen_heights
+                .get(&next)
+                .copied()
+                .unwrap_or(self.nav.movers.initial[next]);
+            if h.ceiling - h.floor < crate::geom::PLAYER_HEIGHT {
+                return self.narrowness[next] <= DOOR_THICKNESS;
+            }
+            here = next;
+        }
+        false
+    }
+
     /// Does the wall stand out from those round it (`odd`): a mark, as a player reads it?
     pub fn marked(&self, li: usize) -> bool {
         self.odd(li).0

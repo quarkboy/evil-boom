@@ -592,6 +592,7 @@ impl Knowledge {
                             || self.looks_interactive(li)
                             || (self.seen_front.contains(&li) && self.lift_face(li))
                             || self.door_shaped(li)
+                            || (i.trigger.used() && self.before_a_door(li))
                             || self.in_the_way.contains(&li)
                             || self.locked.contains(&li)
                             || (i.trigger.shot() && self.odd(li).0))
