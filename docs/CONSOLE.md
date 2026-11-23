@@ -83,6 +83,12 @@ mid-stream (Pause, Restart level, Mute, Reconnect Neuro). The tabs, by what you'
 `?tab=setup` in the address opens a tab. Within a tab the sections fold, move and open in a
 window of their own as before (Reset layout puts them back).
 
+What's seldom changed is under an **Advanced** fold in its section, shut until you open it (the
+flash strengths, the chat box and map heights, the seed, the rendering resolution, the MIDI
+synth, how soon she's pushed); a fold stays as you left it. A **?** beside a heading says what
+the section is: hover, or click to keep it shown. The stream column's controls show only when
+the window's layout is the stream's.
+
 Evil's card. Evil's card shows her goal, her settings, an open question with
 its choices and countdown, `doom_why`, the last lines told her and her last actions. It can act
 for her: answer the question, set a goal, change a setting, look, ask why, take over the fight.

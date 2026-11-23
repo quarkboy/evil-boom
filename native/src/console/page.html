@@ -119,6 +119,18 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
 .msg { min-height: 1.4em; font-size: 13px; color: var(--warn); }
 .dim { color: var(--dim); }
 #tokenbox { display: none; }
+section h2 .help { width: 16px; height: 16px; padding: 0; border-radius: 50%; font-size: 10px; line-height: 14px; color: var(--dim); background: transparent; flex: none; text-transform: none; letter-spacing: 0; }
+section h2 .help.on { color: var(--text); border-color: var(--dim); }
+.helptext { margin: -4px 0 10px; font-size: 12px; color: var(--dim); }
+details.adv { margin: 2px 0 8px; }
+details.adv > summary { cursor: pointer; font-size: 12px; color: var(--dim); user-select: none; }
+details.adv > summary:hover, details.adv[open] > summary { color: var(--text); }
+details.adv[open] > summary { margin-bottom: 8px; }
+.form details.adv { margin: 0; }
+.advbody { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+.advbody .wide { grid-column: 1 / -1; }
+#ev-locks label { display: inline-flex; align-items: center; gap: 4px; }
+#sec-column.off > :not(h2):not(#col-note) { display: none; }
 </style>
 </head>
 <body>
@@ -177,7 +189,8 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
     </div>
   </section>
   <section id="sec-sound" data-tab="setup">
-    <h2>Sound <span class="dim" style="text-transform:none;letter-spacing:0">(the game's own volumes; kept for the next game)</span></h2>
+    <h2>Sound <button type="button" class="help" title="The game's own volumes. They change at once and are kept for the next game.">?</button></h2>
+    <p class="helptext" hidden>The game's own volumes. They change at once and are kept for the next game.</p>
     <div class="vol"><label for="v-master">Master</label><input type="range" id="v-master" min="0" max="100" data-k="master"><output id="v-master-n"></output></div>
     <div class="vol"><label for="v-sfx">SFX</label><input type="range" id="v-sfx" min="0" max="15" data-k="sfx"><output id="v-sfx-n"></output></div>
     <div class="vol"><label for="v-music">Music</label><input type="range" id="v-music" min="0" max="15" data-k="music"><output id="v-music-n"></output></div>
@@ -185,17 +198,21 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
   </section>
 
   <section id="sec-picture" data-tab="setup">
-    <h2>Picture <span class="dim" style="text-transform:none;letter-spacing:0">(kept for the next game)</span></h2>
+    <h2>Picture <button type="button" class="help" title="Brightness, field of view and how strong the screen's flashes are. They change at once and are kept for the next game.">?</button></h2>
+    <p class="helptext" hidden>Brightness, field of view and how strong the screen's flashes are. They change at once and are kept for the next game.</p>
     <div class="vol"><label for="p-brightness">Brightness</label><input type="range" id="p-brightness" min="0" max="10" value="0" data-k="brightness"><output id="p-brightness-n"></output></div>
     <div class="vol"><label for="p-fov">View (FOV)</label><input type="range" id="p-fov" min="60" max="120" step="5" value="90" data-k="fov"><output id="p-fov-n"></output></div>
+    <details class="adv" id="adv-picture"><summary>Advanced: screen flashes</summary>
     <div class="vol"><label for="p-flash_red" title="The red of being hurt and of the berserk pack. 100 is Doom's own; 0 none.">Red flash</label><input type="range" id="p-flash_red" min="0" max="100" step="10" value="50" data-k="flash_red"><output id="p-flash_red-n"></output></div>
     <div class="vol"><label for="p-flash_gold" title="The gold of a pickup.">Gold flash</label><input type="range" id="p-flash_gold" min="0" max="100" step="10" value="50" data-k="flash_gold"><output id="p-flash_gold-n"></output></div>
     <div class="vol"><label for="p-flash_green" title="The green of the radiation suit.">Green tint</label><input type="range" id="p-flash_green" min="0" max="100" step="10" value="50" data-k="flash_green"><output id="p-flash_green-n"></output></div>
+    </details>
     <p class="dim" id="p-note" style="margin:0;font-size:12px"></p>
   </section>
 
   <section id="sec-column" data-tab="setup">
-    <h2>Stream column <span class="dim" style="text-transform:none;letter-spacing:0">(the stream window's: changes at once, kept for the next game)</span></h2>
+    <h2>Stream column <button type="button" class="help" title="What the stream window's side column shows. Changes at once, kept for the next game.">?</button></h2>
+    <p class="helptext" hidden>What the stream window's side column shows. Changes at once, kept for the next game.</p>
     <div class="row"><label>Side <select id="col-side"><option value="right">on the right</option><option value="left">on the left</option></select></label></div>
     <div class="row" style="flex-wrap:wrap;gap:4px 14px">
           <span class="check" style="display:inline-flex" title="The Evil BOOM logo, at the very top of the column."><input type="checkbox" data-col="logo" id="c-logo" checked><label for="c-logo" class="check">Logo (top)</label></span>
@@ -210,15 +227,18 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
           <span class="check" style="display:inline-flex" title="The skill, levels done, deaths and the whole run's time."><input type="checkbox" data-col="run" id="c-run" checked><label for="c-run" class="check">Run</label></span>
           <span class="check" style="display:inline-flex" title="What's happened lately, newest first (kills, pickups, secrets, deaths), filling whatever room is left at the bottom."><input type="checkbox" data-col="lately" id="c-lately" checked><label for="c-lately" class="check">Lately</label></span>
     </div>
+    <details class="adv" id="adv-column"><summary>Advanced: sizes</summary>
     <div class="row"><label title="In the 1920x1080 picture, at the column's top: OBS lays the chat over it">Chat box height <input id="col-chath" type="number" min="60" max="800" step="10" style="width:6em"></label>
       <label title="Its width is the column's (444); shorter, the same scale, still centred on her">Map height <input id="col-maph" type="number" min="120" max="444" step="10" style="width:6em"></label>
 </div>
     <p class="dim" id="col-chatbox" style="margin:0;font-size:12px"></p>
-    <p class="dim" id="col-note" style="margin:0;font-size:12px" hidden>Only in the stream layout (Settings, Window).</p>
+    </details>
+    <p class="dim" id="col-note" style="margin:0;font-size:12px" hidden>Only in the stream layout (Settings, Window, Layout).</p>
   </section>
 
   <section id="sec-talk" data-tab="live">
-    <h2>Talk to Evil <span class="dim" style="text-transform:none;letter-spacing:0">(directed by Neuro or the GPT stand-in)</span></h2>
+    <h2>Talk to Evil <button type="button" class="help" title="A line sent to her as context. Only while Neuro or the GPT stand-in directs her.">?</button></h2>
+    <p class="helptext" hidden>A line sent to her as context. Only while Neuro or the GPT stand-in directs her.</p>
     <div class="row">
       <input id="e-say" maxlength="300" placeholder="a line to her, sent as context">
       <button id="e-saysend">Tell her</button>
@@ -227,8 +247,8 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
   </section>
 
   <section id="sec-settings" data-tab="setup">
-    <h2>Settings <span class="dim" style="text-transform:none;letter-spacing:0">(used when the game starts)</span></h2>
-    <p class="dim" style="margin:0 0 6px;font-size:12px">You must save changes before they will take effect.</p>
+    <h2>Settings</h2>
+    <p class="dim" style="margin:0 0 6px;font-size:12px">Used when the game starts. Save changes before they will take effect.</p>
     <form class="form" id="settings" onsubmit="return false">
       <fieldset class="group wide"><legend>Game</legend>
         <label>WAD <select name="wad"><option value="doom2">Doom II</option><option value="doom">Doom</option><option value="tnt">TNT: Evilution</option><option value="plutonia">The Plutonia Experiment</option></select></label>
@@ -236,10 +256,12 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
         <label>Skill <select name="skill">
           <option value="0">No monsters</option><option value="1">I'm too young to die</option><option value="2">Hey, not too rough</option>
           <option value="3">Hurt me plenty</option><option value="4">Ultra-Violence</option><option value="5">Nightmare!</option></select></label>
-        <label title="For testing: a run on the same seed plays out the same. Empty: a new one each start, as real play has it">Seed (testing) <input name="seed" placeholder="empty: random"></label>
         <span class="check" title="Off: nothing hurts her from the start (god mode). God mode (the Debug tab) switches it while she plays"><input type="checkbox" name="mortal" id="s-mortal"><label for="s-mortal" class="check">She can die</label></span>
         <span class="check" title="Out by an exit, on to the next level with what she has; off, the game's over at the exit"><input type="checkbox" name="episode" id="s-episode"><label for="s-episode" class="check">Go on through the episode</label></span>
+        <details class="adv wide" id="adv-game"><summary>Advanced</summary><div class="advbody">
+        <label title="For testing: a run on the same seed plays out the same. Empty: a new one each start, as real play has it">Seed (testing) <input name="seed" placeholder="empty: random"></label>
         <span class="check wide"><input type="checkbox" name="auto_restart" id="s-auto"><label for="s-auto" class="check">Restart the game if it crashes or hangs (at the level she was on)</label></span>
+        </div></details>
       </fieldset>
       <fieldset class="group wide"><legend>Title card</legend>
         <span class="check wide"><input type="checkbox" name="present" id="s-present"><label for="s-present" class="check">Doom's own screens: the title card, the menu, the melt, the tally between levels, the finales</label></span>
@@ -261,14 +283,18 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
       <fieldset class="group wide"><legend>Window</legend>
         <label>Layout <select name="layout"><option value="stream">for the stream (16:9)</option><option value="watcher">the watcher (map and log)</option></select></label>
         <label>Window resolution <select name="window_size"><option value="">its own (stream: 1920x1080)</option><option>1280x720</option><option>1366x768</option><option>1600x900</option><option>1920x1080</option><option>2560x1440</option><option>3840x2160</option></select></label>
+        <span class="check"><input type="checkbox" name="fullscreen" id="s-fullscreen"><label for="s-fullscreen" class="check" title="The whole screen, at the desktop's resolution, borderless">Full screen</label></span>
+        <details class="adv wide" id="adv-window"><summary>Advanced</summary><div class="advbody">
         <label title="The size the game itself is drawn at, 4:3. The stream's game fills 1440x1080 of its picture, the watcher's 800x600: bigger is scaled down again">Game rendering resolution <select name="render_size"><option value="320x200">320x200 (1994)</option><option>320x240</option><option>400x300</option><option>512x384</option><option value="">640x480 (its own)</option><option>800x600</option><option>960x720</option><option>1280x960</option><option>1440x1080</option></select></label>
         <span class="check"><input type="checkbox" name="vsync" id="s-vsync"><label for="s-vsync" class="check" title="Frames shown at the screen's refresh: steady; off, as soon as they're ready">Vsync</label></span>
-        <span class="check"><input type="checkbox" name="fullscreen" id="s-fullscreen"><label for="s-fullscreen" class="check" title="The whole screen, at the desktop's resolution, borderless">Full screen</label></span>
+        </div></details>
       </fieldset>
       <fieldset class="group wide"><legend>Sound</legend>
         <label title="The songs as recorded, from your own Steam copy of the DOOM + DOOM II re-release (rerelease/extras.wad); the songs it hasn't recorded play through the MIDI synth">Music <select name="music"><option value="">MIDI</option><option value="sc55">Roland SC-55 recordings (Steam re-release)</option><option value="idkfa">IDKFA, Andrew Hulshult (Steam re-release)</option></select></label>
-        <label title="The MIDI: the OPL synth as a Sound Blaster played it, or sampled instruments from a SoundFont in soundfonts/">MIDI synth <select name="soundfont"><option value="">Default (SC-55.sf2 if it's in soundfonts/, else OPL)</option><option value="opl">OPL synth (Sound Blaster FM)</option></select></label>
         <span class="check wide"><input type="checkbox" name="muted" id="s-muted"><label for="s-muted" class="check">Start muted</label></span>
+        <details class="adv wide" id="adv-sound"><summary>Advanced</summary><div class="advbody">
+        <label title="The MIDI: the OPL synth as a Sound Blaster played it, or sampled instruments from a SoundFont in soundfonts/">MIDI synth <select name="soundfont"><option value="">Default (SC-55.sf2 if it's in soundfonts/, else OPL)</option><option value="opl">OPL synth (Sound Blaster FM)</option></select></label>
+        </div></details>
       </fieldset>
       <div class="row wide">
         <button id="s-save">Save</button>
@@ -282,7 +308,8 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
  <div id="col-split" title="Drag to widen or narrow the columns"></div>
  <div class="col" id="col-b">
   <section id="viewcard" data-tab="live">
-    <h2>View <span class="dim" style="text-transform:none;letter-spacing:0">(twice a second, made only while shown here; the watcher's own drawing)</span></h2>
+    <h2>View <button type="button" class="help" title="The watcher's own drawing, twice a second, made only while it's shown here.">?</button></h2>
+    <p class="helptext" hidden>The watcher's own drawing, twice a second, made only while it's shown here.</p>
     <div class="row">
       <button id="vw-map">Map</button>
       <button id="vw-game">Game</button>
@@ -297,7 +324,8 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
   </section>
 
   <section id="evilcard" data-tab="live" class="evil-part">
-    <h2>Evil <span class="dim" style="text-transform:none;letter-spacing:0">(her side: what she's set, asked, told and done; acting here goes in as hers, said to be yours, by your name in Settings)</span></h2>
+    <h2>Evil <button type="button" class="help" title="Her side: what she's set, asked, told and done. Acting here goes in as hers, said to be yours, by your name in Settings.">?</button></h2>
+    <p class="helptext" hidden>Her side: what she's set, asked, told and done. Acting here goes in as hers, said to be yours, by your name in Settings.</p>
     <div class="ev-top">
       <span id="ev-link" class="badge">not directing</span>
       <span>danger: <b id="ev-danger">-</b></span>
@@ -371,6 +399,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
             <label><input type="checkbox" data-lock="finish"> goal: finish</label>
             <label><input type="checkbox" data-lock="prefer"> goal: prefer</label>
           </div>
+          <details class="adv" id="adv-push"><summary>Advanced: how soon she's pushed</summary>
           <div class="ev-sets" style="margin-top:8px" title="The stream's, not hers: how soon a decision's pushed on her, in seconds (0: never). Kept for the next game.">
             <label>push her, waiting (s)<input type="number" min="0" max="3600" step="0.5" id="ev-fidle"></label>
             <label>push her, a question (s)<input type="number" min="0" max="3600" step="0.5" id="ev-fask"></label>
@@ -379,6 +408,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
             <label title="On: asked what next, she picks without saying anything aloud about it (it comes often)."><input type="checkbox" id="ev-fquiet"> what next asked quietly</label>
           </div>
           <div class="row"><button id="ev-forceapply">Apply</button><span class="dim" style="font-size:12px;align-self:center">the stream's: a decision forced after she's waited, or left a question, this long</span></div>
+          </details>
         </div>
       </div>
     </div>
@@ -498,7 +528,7 @@ function fillColumn(s) {
   if ($("sec-column").contains(document.activeElement)) return; // (being changed here)
   $("col-side").value = s.panel_side || "right";
   for (const c of document.querySelectorAll("[data-col]")) c.checked = !(s.column_hide || []).includes(c.dataset.col);
-  $("col-note").hidden = s.layout === "stream";
+  $("col-note").hidden = s.layout === "stream"; $("sec-column").classList.toggle("off", s.layout !== "stream");
   $("col-chath").value = s.chat_height || 400;
   $("col-maph").value = s.map_height || 444;
 }
@@ -1026,7 +1056,21 @@ $("col-split").addEventListener("mousedown", (e) => {
   window.addEventListener("mousemove", move); window.addEventListener("mouseup", up);
 });
 $("col-split").addEventListener("dblclick", () => { setLeft(360); try { localStorage.removeItem(SPLIT_KEY); } catch (e) { /* (none) */ } });
-$("layout-reset").onclick = () => { try { localStorage.removeItem(LAYOUT_KEY); localStorage.removeItem(SPLIT_KEY); } catch (e) { /* (none) */ } location.reload(); };
+// A heading's "?": what the section is, said under it or put away again.
+for (const b of document.querySelectorAll("section h2 .help")) {
+  b.onclick = (e) => { e.stopPropagation(); const t = b.closest("h2").nextElementSibling; t.hidden = !t.hidden; b.classList.toggle("on", !t.hidden); };
+}
+// The "Advanced" folds: shut at first, each kept as it was left.
+const ADV_KEY = "evil-console-advanced";
+{
+  let open = {};
+  try { open = JSON.parse(localStorage.getItem(ADV_KEY) || "{}") || {}; } catch (e) { /* (none) */ }
+  for (const d of document.querySelectorAll("details.adv")) {
+    d.open = !!open[d.id];
+    d.addEventListener("toggle", () => { open[d.id] = d.open; try { localStorage.setItem(ADV_KEY, JSON.stringify(open)); } catch (e) { /* (not kept) */ } });
+  }
+}
+$("layout-reset").onclick = () => { try { localStorage.removeItem(ADV_KEY); localStorage.removeItem(LAYOUT_KEY); localStorage.removeItem(SPLIT_KEY); } catch (e) { /* (none) */ } location.reload(); };
 if (only && $(only)) {
   // (the one section, unfolded; the window titled by it; the layout's the main page's to keep)
   document.body.classList.add("popout");
