@@ -412,6 +412,63 @@ impl Director {
             .collect()
     }
 
+    /// Why she can't pick this up now, as the game has it (None: she can): health, armor or
+    /// ammo she's full of, a gun she has with its ammo full. Walking to one ends in "couldn't
+    /// pick it up".
+    pub(super) fn cant_take(name: &str, obs: &Observation) -> Option<String> {
+        use crate::bestiary::{ammo_item, ammo_max, armor_item, weapon_item};
+        let packed = if obs.backpack == Some(true) { 2.0 } else { 1.0 };
+        let pool_full = |slot: i32| {
+            let slot = if slot == 4 {
+                2
+            } else if slot == 7 {
+                6
+            } else {
+                slot
+            };
+            let have = obs
+                .ammo
+                .iter()
+                .flatten()
+                .find(|(s, _)| *s == slot)
+                .map_or(0, |(_, n)| *n);
+            (f64::from(have) >= ammo_max(slot) * packed).then_some(have)
+        };
+        match name {
+            "Stimpack" | "Medikit" => {
+                (obs.health.unwrap_or(0.0) >= 100.0).then(|| "health's full".to_string())
+            }
+            "GreenArmor" | "BlueArmor" => {
+                let (_, cap) = armor_item(name)?;
+                let armor = obs.armor.unwrap_or(0.0);
+                (armor >= f64::from(cap)).then(|| format!("armor's {armor:.0} already"))
+            }
+            "Backpack" => None,
+            _ => {
+                if let Some((slots, _)) = ammo_item(name) {
+                    return pool_full(slots[0]).map(|n| format!("full ({n})"));
+                }
+                let slot = weapon_item(name)?;
+                let number = match name {
+                    "Chainsaw" => 7,
+                    "Shotgun" => 2,
+                    "SuperShotgun" => 8,
+                    "Chaingun" => 3,
+                    "RocketLauncher" => 4,
+                    "PlasmaRifle" => 5,
+                    _ => 6,
+                };
+                if !obs.owned.as_ref().is_some_and(|o| o.contains(&number)) {
+                    return None;
+                }
+                if name == "Chainsaw" {
+                    return Some("you have one".into());
+                }
+                pool_full(slot).map(|_| "you have one, and its ammo's full".to_string())
+            }
+        }
+    }
+
     /// Is a pickup worth stocking up on? Health or ammo is if she'd use enough of it
     /// (`directed.stock_share`: a box of bullets with room for two isn't); the rest always.
     pub(super) fn worth_stocking(&self, name: &str, obs: &Observation) -> bool {
@@ -465,5 +522,23 @@ mod tests {
         assert!(d.worth_stocking("GreenArmor", &obs));
         obs.ammo = Some(vec![(2, 370)]);
         assert!(d.worth_stocking("ClipBox", &obs)); // (room for 30 of 50)
+    }
+
+    /// What the game won't give her as she is: said before she walks to it.
+    #[test]
+    fn full_of_it_cant_take() {
+        let obs = Observation {
+            health: Some(100.0),
+            armor: Some(120.0),
+            ammo: Some(vec![(2, 150), (3, 100)]),
+            backpack: Some(true),
+            owned: Some(vec![1, 2]),
+            ..Default::default()
+        };
+        let no = |n: &str| Director::cant_take(n, &obs).is_some();
+        assert!(no("ShellBox") && no("Shell") && no("Shotgun")); // (shells 100 of 100)
+        assert!(no("Medikit") && no("GreenArmor"));
+        assert!(!no("ClipBox") && !no("BlueArmor") && !no("Chaingun") && !no("SuperShotgun"));
+        assert!(!no("HealthBonus") && !no("Soulsphere") && !no("Backpack") && !no("Berserk"));
     }
 }

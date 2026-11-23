@@ -115,6 +115,9 @@ impl Director {
                         ),
                         what: if crate::knowledge::completion::Completionist::counted(t.name, obs) {
                             format!("{}{COUNTS}", called(t.name))
+                        } else if Self::cant_take(t.name, obs).is_some() {
+                            // (there, and not hers to take as she is)
+                            format!("{}, can't take now", called(t.name))
                         } else {
                             called(t.name).to_string()
                         },

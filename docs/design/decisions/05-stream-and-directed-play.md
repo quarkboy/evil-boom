@@ -4103,3 +4103,12 @@ Every suggestion now names the way out once she knows one, after its pick: "Sugg
 area-70: nearest unexplored (S 145); exit known: exit-l326 (SW 174)". It's in `pick_line`,
 so in an order's "nothing to do there", her look, her lists, the nudge and what a force
 shows her. The pick itself is unchanged.
+
+### A pickup she can't take is said, not walked to (2026-11-22)
+
+End to end (episode 2, skill 3): a dozen of the model's `doom_go`s were to a box of shells
+with shells full, a shotgun she had with shells full, or green armor with armor over 100,
+each walked to and ended "couldn't pick it up". Her lists gave no sign. `cant_take` has the
+game's own rules (health, armor or ammo she's full of; a gun she has with its ammo full):
+such an order is refused at once ("item-t149 (green armor): you can't pick it up now:
+armor's 103 already."), and her item list marks it ("green armor, can't take now").

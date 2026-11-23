@@ -409,6 +409,16 @@ impl Director {
         let mut obj = self.objective_for(agent, obs, &id)?;
         obj.risky = risky;
         let what = self.tag(&id, obs);
+        // (a pickup the game won't give her now: said, not walked to. End to end, a dozen
+        // trips to shells, shotguns and green armor, each ending "couldn't pick it up")
+        if let Some(why) = id
+            .strip_prefix("item-t")
+            .and_then(|n| n.parse::<i32>().ok())
+            .and_then(|n| obs.things.iter().flatten().find(|t| t.id == n))
+            .and_then(|t| Self::cant_take(t.name, obs))
+        {
+            return Err(format!("{what}: you can't pick it up now: {why}."));
+        }
         if agent.x_mut().route_to(&obj, obs).is_some() {
             return Ok(what);
         }
