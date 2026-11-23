@@ -753,6 +753,10 @@ pub struct Errands {
     pub mega_gain: f64,
     /// a soulsphere when it adds this much health (200 less this: under 150)
     pub soul_gain: f64,
+    /// health or ammo is stocked up on, going on to another level, only if she'd use this share
+    /// of the pickup at least (a box of shells with room for two isn't; the director's
+    /// `directed.stock_share` is the same rule for what she's asked and told)
+    pub stock_use: f64,
     /// armor within `heal_near` that adds this much to how much she can take is gone for at
     /// once, outmatched by what's in sight
     pub armor_outmatched: f64,
@@ -802,6 +806,7 @@ impl Default for Errands {
             gun_worth: 10.0,
             mega_gain: 100.0,
             soul_gain: 50.0,
+            stock_use: 0.5,
             armor_outmatched: 50.0,
             spare_ammo: 0.5,
             key_unarmed: 4.0,

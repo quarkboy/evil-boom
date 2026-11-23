@@ -21,7 +21,13 @@ impl Fight {
         if matches!(name, "HealthBonus" | "ArmorBonus") {
             return 0.0;
         }
+        // (not what would mostly go to waste: end to end, E2M4 to E2M7, she went back for
+        // boxes of shells holding 94 to 99 of 100)
+        let use_of = self.tune.errands.stock_use;
         if let Some((amount, cap)) = health_item(name) {
+            if f64::from(cap) - health < use_of * f64::from(amount) {
+                return 0.0;
+            }
             return (f64::from(amount).min(f64::from(cap) - health) / 100.0).max(0.0);
         }
         if armor_item(name).is_some() {
@@ -42,7 +48,12 @@ impl Fight {
                     .map_or(0, |(_, n)| *n),
             )
         };
-        let gain = |s: i32, amount: f64| (amount.min(most(s) - have(s)) / most(s)).max(0.0);
+        let gain = |s: i32, amount: f64| {
+            if most(s) - have(s) < use_of * amount {
+                return 0.0;
+            }
+            (amount.min(most(s) - have(s)) / most(s)).max(0.0)
+        };
         if let Some((slots, n)) = ammo_item(name) {
             return slots
                 .iter()
