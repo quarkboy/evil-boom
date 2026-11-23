@@ -342,6 +342,15 @@ pub fn load_map(wad: &Wad, map_name: &str, texture_wads: &[&Wad]) -> Result<MapD
     for w in texture_wads.iter().copied().chain(std::iter::once(wad)) {
         texture_heights.extend(w.texture_heights());
     }
+    // (a side of a sector that isn't there is of the first one: what the engine makes of it,
+    // `P_LoadSideDefs`, and maps that play have them. Memento Mori MAP16 and MAP17 each have
+    // one, sector 65535, and were refused as broken)
+    let (mut sidedefs, sectors): (Vec<Sidedef>, Vec<Sector>) = (sidedefs, sectors);
+    for s in &mut sidedefs {
+        if s.sector >= sectors.len() && !sectors.is_empty() {
+            s.sector = 0;
+        }
+    }
     let map = MapData {
         name: map_name.to_uppercase(),
         things,
@@ -513,9 +522,14 @@ mod tests {
             e.contains("line 0 ends at a vertex that isn't there"),
             "{e}"
         );
+    }
+
+    /// A side of a sector that isn't there is of the first, as the engine has it.
+    #[test]
+    fn a_side_of_no_sector_is_of_the_first() {
         let w = opened(wad_bytes(&square(1, 5))).expect("a WAD");
-        let e = load_map(&w, "MAP01", &[]).err().unwrap_or_default();
-        assert!(e.contains("of sector 5, which isn't there"), "{e}");
+        let m = load_map(&w, "MAP01", &[]).expect("a map");
+        assert!(m.sidedefs.iter().all(|s| s.sector == 0));
     }
 
     #[test]
