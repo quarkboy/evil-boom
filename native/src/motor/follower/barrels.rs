@@ -71,6 +71,8 @@ const POST_CANDIDATE_FACTOR: usize = 3;
 /// the way, or another that sets it off), the way there and the way off after.
 struct Post {
     length: f64,
+    /// on a floor that hurts (taken only for want of one off it that's out of every blast)
+    hurt: bool,
     q: Point,
     aim: Point,
     way: Vec<Point>,
@@ -395,7 +397,7 @@ impl RouteFollower {
                 self.shot.post = None;
                 self.shot.way.clear();
                 self.shot.best = None;
-                return self.fail(obs, Trouble::BarrelNoGun);
+                return self.fail(obs, Trouble::BarrelNoGun(at));
             }
             /// (the fist's reach is 64 from her middle to its; a little inside it)
             const PUNCH_FROM: f64 = 56.0;
@@ -445,18 +447,18 @@ impl RouteFollower {
                     .into_iter()
                     .map(|(b, _)| b)
                     .collect();
-                // (not where she's had no shot from already; nor on a floor that hurts: she stays
-                // where she shoots from till the chain's done)
+                // (not where she's had no shot from already. One on a floor that hurts is
+                // the fallback, below: she stays where she shoots from till the chain's done)
                 let failed = &self.shot.failed_posts;
                 cands.retain(|&q| failed.iter().all(|&f| dist(f, q) > FAILED_POST_NEAR));
                 let nav = &self.view.nav;
-                cands.retain(|&q| {
-                    nav.poly_at(q).is_none_or(|p| {
+                let hurts = |q: Point| {
+                    nav.poly_at(q).is_some_and(|p| {
                         nav.damage
                             .get(nav.sector_of_poly(p))
-                            .is_none_or(|&d| d == 0)
+                            .is_some_and(|&d| d != 0)
                     })
-                });
+                };
                 // (and from where a shot would get to it, heights and all: a ledge, a step, a low
                 // ceiling between take the shot as surely as a wall, into the floor or a lip)
                 let mut seen: Vec<(Point, Point)> = cands
@@ -473,9 +475,32 @@ impl RouteFollower {
                     })
                     .collect();
                 seen.sort_by(|a, b| dist(a.0, pos).total_cmp(&dist(b.0, pos)));
+                let (seen, on_hurt): (Vec<_>, Vec<_>) =
+                    seen.into_iter().partition(|&(q, _)| !hurts(q));
+                // (nowhere else to shoot it from but beside it, to run from after, or nowhere at
+                // all: from the floor that hurts, with the shotgun to do it in one shot from
+                // out of every blast, and the health to stand there the moment it takes.
+                // E2M4's megaarmor: three barrels in its alcove, seen only from the nukage before
+                // it or from beside them; she went there eight times, and the ninth shot one
+                // from 33 away and ran: 40 off her)
+                let hurt_ok = super::barrel_means(obs)[1..] == [true, true];
                 let mut best: Option<Post> = None;
                 let crushers = self.crushers();
-                for (q, aim) in seen.into_iter().take(BARREL_POSTS * POST_CANDIDATE_FACTOR) {
+                let tries = BARREL_POSTS * POST_CANDIDATE_FACTOR;
+                let posts = seen
+                    .into_iter()
+                    .take(tries)
+                    .map(|c| (c, false))
+                    .chain(on_hurt.into_iter().take(tries).map(|c| (c, true)));
+                for ((q, aim), hurt) in posts {
+                    // (...not with somewhere off it that's out of every blast too)
+                    if hurt
+                        && (!hurt_ok
+                            || best.as_ref().is_some_and(|b| !b.hurt && b.stay)
+                            || dist(q, aim) >= super::BARREL_SHOTGUN_RANGE)
+                    {
+                        continue;
+                    }
                     let way: Vec<Point> = if dist(q, pos) < 8.0 {
                         vec![pos]
                     } else {
@@ -509,14 +534,22 @@ impl RouteFollower {
                     };
                     // (a monster about that shoots: from out of every blast or not at all; shot
                     // from beside the barrel to run after, its shot can set it off first)
-                    if self.shooters_about && !stay {
+                    if (self.shooters_about || hurt) && !stay {
                         continue;
                     }
                     // (out of every blast where she shoots from: she stays there; the way back she
                     // came may go back by the barrel as it goes off)
                     let flee = if stay { Vec::new() } else { flee };
                     let length: f64 = way.windows(2).map(|w| dist(w[0], w[1])).sum();
-                    if best.as_ref().is_none_or(|b| length < b.length) {
+                    // (the nearest by the way there; one on the floor that hurts over one to
+                    // run from, whichever's nearer)
+                    if best.as_ref().is_none_or(|b| {
+                        if hurt == b.hurt {
+                            length < b.length
+                        } else {
+                            hurt
+                        }
+                    }) {
                         best = Some(Post {
                             length,
                             q,
@@ -524,6 +557,7 @@ impl RouteFollower {
                             way,
                             flee,
                             stay,
+                            hurt,
                         });
                     }
                 }
@@ -533,10 +567,13 @@ impl RouteFollower {
                     way,
                     flee,
                     stay,
+                    hurt,
                     ..
                 }) = best
                 {
-                    let then = if stay {
+                    let then = if hurt {
+                        "on the floor that hurts (nowhere else out of the blasts), out of every blast"
+                    } else if stay {
                         "staying there, out of every blast"
                     } else {
                         "then off back the way she came"
@@ -564,7 +601,7 @@ impl RouteFollower {
             }
             let Some(post) = self.shot.post else {
                 self.shot.target = None;
-                return self.fail(obs, Trouble::BarrelNoPost);
+                return self.fail(obs, Trouble::BarrelNoPost(at));
             };
             if dist(pos, post) > 8.0 {
                 // (getting no nearer for a while: give it up)

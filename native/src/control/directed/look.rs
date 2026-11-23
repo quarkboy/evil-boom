@@ -106,7 +106,10 @@ impl Director {
                     .is_none_or(|t| !spares.contains(&t) || things.contains(&t))
             })
             .take(PICK_TRIES)
-            .find(|o| agent.x_mut().route_to(o, obs).is_some());
+            // (nor what a barrel stopped her getting to, the barrel still there)
+            .find(|o| {
+                !agent.x().barrel_blocked(o, obs) && agent.x_mut().route_to(o, obs).is_some()
+            });
         // (another look somewhere is the least of what's left: a way out she knows comes first)
         let exit = open.iter().find(|o| o.kind == Kind::Exit);
         match choice {

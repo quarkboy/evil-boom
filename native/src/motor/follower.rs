@@ -83,6 +83,22 @@ const BARREL_SHELLS: i32 = 12;
 /// What to shoot something with: the pistol (the shotgun if there's nothing for it), whatever's
 /// in hand: not the BFG with fewer cells than the 40 it needs, nor a missile, which sets off no
 /// gun line.
+/// a barrel is shot from a floor that hurts (nowhere else to shoot it from, the shotgun in hand
+/// for it) only with this much health or more
+const HURT_POST_HEALTH: f64 = 50.0;
+
+/// What she has to clear a barrel with, as the choice of where to shoot it from goes by it:
+/// something to shoot it with at all; the shotgun and the shells for it; the health to shoot
+/// from a floor that hurts. An errand a barrel stopped is worth another go when one of these
+/// has come true since (`Explorer::barrel_blocked`).
+pub fn barrel_means(obs: &Observation) -> [bool; 3] {
+    [
+        [2, 3, 4].into_iter().any(|slot| tap_rounds(obs, slot) > 0),
+        barrel_gun(obs, 0.0) == 3,
+        obs.health.is_some_and(|h| h >= HURT_POST_HEALTH),
+    ]
+}
+
 pub fn tap_gun(obs: &Observation) -> i32 {
     TAP_GUNS
         .into_iter()
@@ -556,6 +572,7 @@ impl RouteFollower {
             moving_wait: None,
             crusher: Crushers {
                 wait: None,
+                tops: (0, false),
                 cross: None,
                 kick: None,
                 ceiling_pace: BTreeMap::new(),

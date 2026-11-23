@@ -65,6 +65,8 @@ pub struct Weave {
 pub struct Crushers {
     /// (mortal) waiting at the edge of a crusher for it to come up, logged
     pub(super) wait: Option<usize>,
+    /// ...how often it's turned at the top since, and whether it was last seen rising
+    pub(super) tops: (u32, bool),
     /// (mortal) a crusher's crossing timed and begun: its sector, and since when
     pub(super) cross: Option<(usize, i64)>,
     /// (mortal) setting off a stopped crusher from its edge, to cross it when it comes up: its

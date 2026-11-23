@@ -38,6 +38,10 @@ fn run_tics(v0: f64, d: f64) -> f64 {
     crate::domain::run_tics(v0, d, CROSS_PACE)
 }
 
+/// (mortal) a crusher waited at that's come up and gone down again this many times with no
+/// time to go: the way's given up
+const CRUSH_TOPS: u32 = 2;
+
 /// (mortal) a crusher ahead still this long, too low to get under, has stopped: no waiting for it
 const CRUSH_STOPPED: i64 = 3 * 35;
 
@@ -563,6 +567,23 @@ impl RouteFollower {
                 format!("waiting for the crusher (sector {s}) to come up"),
             );
             self.crusher.wait = Some(s);
+            self.crusher.tops = (0, false);
+        }
+        // (up and down again twice as she stood there, and no time she could have gone: it
+        // leaves no time to get through from where she waits. A fast one over 96 units is open
+        // some 16 tics, and from a standstill that's not enough. Not waited at for good: E2M2's
+        // hallway of them, set going fast by a line on her way in, had her stood half a minute
+        // till what she was going for timed out, twice in two runs)
+        {
+            let rising = now.ceiling > before.ceiling + 0.01;
+            let falling = now.ceiling < before.ceiling - 0.01;
+            let (tops, was_rising) = self.crusher.tops;
+            let tops = tops + u32::from(was_rising && falling);
+            self.crusher.tops = (tops, rising || (was_rising && !falling));
+            if tops >= CRUSH_TOPS {
+                self.crusher.wait = None;
+                return Some(self.fail(obs, Trouble::CrusherNoWindow(s)));
+            }
         }
         // (one that's stopped, too low to be under, isn't coming up: a crusher turns at each end at
         // once, so still for a while is stopped (a crusher-stop line). The way's no way while it's

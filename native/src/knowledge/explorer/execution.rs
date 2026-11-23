@@ -786,6 +786,9 @@ impl Explorer {
         if let Some(w) = obj.wall {
             *self.wall_drops.entry(w).or_insert(0) += 1;
         }
+        if let Why::Route(_, Trouble::BarrelNoPost(b) | Trouble::BarrelNoGun(b)) = &why {
+            self.note_barrel(obj, obs, *b);
+        }
         self.log
             .push(format!("tic {}: dropped '{}' ({why})", obs.tic, obj.label));
         self.end_why = Some((false, why));

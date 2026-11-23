@@ -420,6 +420,12 @@ impl Director {
         {
             return Err(format!("{what}: you can't pick it up now: {why}."));
         }
+        // (a barrel stopped her on the way there, and nothing's changed: said, not walked again)
+        if agent.x().barrel_blocked(&obj, obs) {
+            return Err(format!(
+                "{what}: a barrel's in the way and there's nowhere safe to shoot it from; nothing's changed since you tried."
+            ));
+        }
         if agent.x_mut().route_to(&obj, obs).is_some() {
             return Ok(what);
         }

@@ -5,6 +5,7 @@
 //! whoever traces a run) and the same in a few plain words for whoever's playing, with no
 //! sectors, lines or coordinates in it.
 
+use crate::geom::Point;
 use std::fmt;
 
 #[derive(Clone, Debug)]
@@ -18,12 +19,14 @@ pub enum Trouble {
     CrusherLow(usize, f64),
     /// ...too low to get through or to set off from its edge
     CrusherStuck(usize),
+    /// waited at, up and down again, with never the time to get through (sector)
+    CrusherNoWindow(usize),
     /// set off from its edge, and it didn't start
     CrusherNoStart(usize),
-    /// a barrel in the way and nothing to shoot it with
-    BarrelNoGun,
+    /// a barrel in the way (where) and nothing to shoot it with
+    BarrelNoGun(Point),
     /// ...nowhere to shoot it from and get out of the blasts
-    BarrelNoPost,
+    BarrelNoPost(Point),
     /// ...and no getting to the place to shoot it from
     BarrelNoReach,
     /// a door or lift closed on the way that didn't open again (sector)
@@ -57,11 +60,15 @@ impl fmt::Display for Trouble {
                 f,
                 "the crusher (sector {s}) has stopped too low to get through or set off from its edge"
             ),
+            Trouble::CrusherNoWindow(s) => write!(
+                f,
+                "the crusher (sector {s}) leaves no time to get through from where she waits"
+            ),
             Trouble::CrusherNoStart(s) => {
                 write!(f, "the crusher (sector {s}) didn't start from its edge")
             }
-            Trouble::BarrelNoGun => write!(f, "a barrel in the way, and nothing to shoot it with"),
-            Trouble::BarrelNoPost => write!(
+            Trouble::BarrelNoGun(_) => write!(f, "a barrel in the way, and nothing to shoot it with"),
+            Trouble::BarrelNoPost(_) => write!(
                 f,
                 "a barrel in the way, nowhere to shoot it from and run off out of the blasts"
             ),
@@ -98,9 +105,10 @@ impl Trouble {
             Trouble::CrusherLow(..) | Trouble::CrusherStuck(_) => {
                 "a crusher stopped too low to get past"
             }
+            Trouble::CrusherNoWindow(_) => "a crusher too quick to get under",
             Trouble::CrusherNoStart(_) => "a crusher that wouldn't start",
-            Trouble::BarrelNoGun => "a barrel in the way, and nothing to shoot it with",
-            Trouble::BarrelNoPost | Trouble::BarrelNoReach => {
+            Trouble::BarrelNoGun(_) => "a barrel in the way, and nothing to shoot it with",
+            Trouble::BarrelNoPost(_) | Trouble::BarrelNoReach => {
                 "a barrel in the way, and nowhere safe to shoot it from"
             }
             Trouble::NoReopen(_) => "a door or lift on the way didn't open again",

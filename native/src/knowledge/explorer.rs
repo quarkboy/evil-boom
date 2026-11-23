@@ -529,6 +529,97 @@ pub enum Focus {
     Unexplored,
 }
 
+/// An errand a barrel stopped: what it was for, the barrel, and what she had to clear it with
+/// then (`motor::follower::barrel_means`).
+#[derive(Clone, Debug)]
+struct BarrelBlock {
+    kind: Kind,
+    thing: Option<i32>,
+    goal: Point,
+    barrel: Point,
+    means: [bool; 3],
+}
+
+impl BarrelBlock {
+    /// Still so: the barrel there, and nothing she has to clear it with that she hadn't.
+    fn stands(&self, obs: &Observation) -> bool {
+        let now = crate::motor::follower::barrel_means(obs);
+        obs.barrels
+            .iter()
+            .flatten()
+            .any(|&p| dist(p, self.barrel) < 1.0)
+            && !(0..3).any(|i| now[i] && !self.means[i])
+    }
+}
+
+#[cfg(test)]
+mod barrel_block_tests {
+    use super::*;
+
+    /// An errand a barrel stopped stays stopped till the barrel's gone or she's better able
+    /// to clear it (here: the health to shoot it from a floor that hurts).
+    #[test]
+    fn a_barrel_block_stands_till_something_changes() {
+        let mut obs = Observation {
+            health: Some(30.0),
+            weapons: Some(vec![2, 3]),
+            ammo: Some(vec![(2, 50), (3, 20)]),
+            barrels: Some(vec![(1408.0, -448.0), (0.0, 0.0)]),
+            ..Default::default()
+        };
+        let b = BarrelBlock {
+            kind: Kind::Item,
+            thing: Some(119),
+            goal: (1312.0, -464.0),
+            barrel: (1408.0, -448.0),
+            means: crate::motor::follower::barrel_means(&obs),
+        };
+        assert_eq!(b.means, [true, true, false]);
+        assert!(b.stands(&obs));
+        // (fewer shells: no better able)
+        obs.ammo = Some(vec![(2, 50), (3, 4)]);
+        assert!(b.stands(&obs));
+        // (health enough now: worth another go)
+        obs.health = Some(80.0);
+        assert!(!b.stands(&obs));
+        // (or the barrel gone)
+        obs.health = Some(30.0);
+        obs.barrels = Some(vec![(0.0, 0.0)]);
+        assert!(!b.stands(&obs));
+    }
+}
+
+impl Explorer {
+    /// Was this stopped by a barrel that's still there, with her no better able to clear it
+    /// than she was? For whoever directs her: an order for it is answered at once, and it isn't
+    /// suggested. Her own choice doesn't go by it: where a barrel can be shot from depends on
+    /// where she comes at it from, and held to it on instinct she did worse (three-lives:
+    /// 292 exits to 289, 8 more deaths, in the 14 runs it touched).
+    /// (E2M4's megaarmor, end to end: eight trips into the nukage before it, each "nowhere to
+    /// shoot it from".)
+    pub fn barrel_blocked(&self, o: &Objective, obs: &Observation) -> bool {
+        if self.barrel_blocks.is_empty() {
+            return false;
+        }
+        self.barrel_blocks.iter().any(|b| {
+            b.kind == o.kind && b.thing == o.thing && dist(b.goal, o.goal) < 1.0 && b.stands(obs)
+        })
+    }
+
+    /// A route failed at a barrel: remembered.
+    pub(super) fn note_barrel(&mut self, o: &Objective, obs: &Observation, barrel: Point) {
+        self.barrel_blocks
+            .retain(|b| !(b.kind == o.kind && b.thing == o.thing && dist(b.goal, o.goal) < 1.0));
+        self.barrel_blocks.push(BarrelBlock {
+            kind: o.kind,
+            thing: o.thing,
+            goal: o.goal,
+            barrel,
+            means: crate::motor::follower::barrel_means(obs),
+        });
+    }
+}
+
 impl Focus {
     /// Is o what's wanted first? (`things`: the pickups meant, for `Things`.)
     pub fn wants(self, o: &Objective, things: &BTreeSet<i32>) -> bool {
@@ -622,6 +713,10 @@ pub struct Explorer {
     dropped: BTreeMap<Ident, i64>,
     /// ...and how often (each time it waits twice as long to be offered again)
     drop_count: BTreeMap<Ident, i32>,
+    /// errands a barrel stopped, with nowhere to shoot it from or nothing to shoot it with: not
+    /// gone for again while the barrel's there and she's no better able to clear it
+    /// (`barrel_blocked`)
+    barrel_blocks: Vec<BarrelBlock>,
     /// walls given up on, by line, how often: the walls share one wait (that keeps the wall
     /// tier paced), but which goes next counts each one's own failures
     wall_drops: BTreeMap<usize, i32>,
@@ -891,6 +986,7 @@ impl Explorer {
             maxed_tic: i64::MIN / 2,
             dropped: BTreeMap::new(),
             drop_count: BTreeMap::new(),
+            barrel_blocks: Vec::new(),
             wall_drops: BTreeMap::new(),
             since: 0,
             exits_seen: 0,
@@ -1027,6 +1123,7 @@ impl Explorer {
         self.health_refused.clear();
         self.anything_none = None;
         self.drop_count.clear();
+        self.barrel_blocks.clear();
         self.secrets_had.clear();
         self.look_until = None;
         self.glance_until = None;
