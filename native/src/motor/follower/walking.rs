@@ -1196,10 +1196,13 @@ impl RouteFollower {
             };
             // (or one the plan is waiting to see move, caught on its way: a lift pressed to be got
             // onto, sinking under her as she stands by its switch)
+            // (or one in her way she pressed for herself a moment ago)
             let on_its_way = |s: usize| {
-                self.watches
-                    .iter()
-                    .any(|w| w.expect.sector == s && w.reached.is_none())
+                self.pressed_for.contains(&s)
+                    || self
+                        .watches
+                        .iter()
+                        .any(|w| w.expect.sector == s && w.reached.is_none())
             };
             let foreseen = (allowed(cs, a) || on_its_way(cs)) && (allowed(ns, b) || on_its_way(ns));
             if !self.replan(obs, &why, true) {

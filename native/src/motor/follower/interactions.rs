@@ -499,6 +499,9 @@ impl RouteFollower {
         controls.use_ = use_;
         if use_ {
             self.last_use = obs.tic;
+            if !opener {
+                self.pressed_for.insert(sector);
+            }
             let from = nav.sector_of_poly(cur);
             self.log.add(obs.tic, format!("pressing for sector {sector} after {:.1}s (it's at {}, she's on sector {from} at {})", waited as f64 / TICRATE, fmt_live(Some(live[sector])), fmt_live(Some(live[from]))));
         }

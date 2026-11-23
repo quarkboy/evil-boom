@@ -341,6 +341,9 @@ pub struct RouteFollower {
     /// floors she's stood waiting at and found not where the plan has them (for the explorer:
     /// what she's up against she knows the height of, whichever way she's turned)
     pub felt: BTreeSet<usize>,
+    /// movers in her way that she pressed a switch for herself (`check_blocked`): where one
+    /// goes then is hers to have counted on, a drop onto it no surprise
+    pressed_for: BTreeSet<usize>,
     /// ...and those that didn't come off with her hit on the way: not the jump's doing (for the
     /// explorer)
     pub knocked: Vec<Jump>,
@@ -475,6 +478,7 @@ impl RouteFollower {
             missed: Vec::new(),
             uncrossed: Vec::new(),
             felt: BTreeSet::new(),
+            pressed_for: BTreeSet::new(),
             knocked: Vec::new(),
             jumps: Vec::new(),
             failed_presses: Vec::new(),
@@ -1269,11 +1273,23 @@ impl RouteFollower {
         let Some(goal) = step.path.as_ref().and_then(last_point) else {
             return false;
         };
-        let states = if live_only {
+        let mut states = if live_only {
             Self::live_states(obs)
         } else {
             self.world_states(obs)
         };
+        // (a lift of hers that's down on its timer comes back up by itself: got onto as it
+        // is, got off as it rests. By the heights as they are alone there's no way on from
+        // one: Memento Mori MAP04, a lift called from inside a keep and got to across a yard
+        // by way of the keep's own lift, whose pit she drops into on the way)
+        for w in &self.watches {
+            let s = w.expect.sector;
+            let rest = view.nav.movers.initial[s];
+            if w.expect.hold.is_some() && !w.over && s < states.len() && !states[s].contains(&rest)
+            {
+                states[s].push(rest);
+            }
+        }
         let doors = view.local_doors(self.keys);
         if let Some(path) = view.find_path(pos, goal, &states, Some(&doors)) {
             self.steps[self.step_i as usize].path = Some(path);
