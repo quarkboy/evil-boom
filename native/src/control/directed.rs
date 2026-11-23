@@ -752,6 +752,7 @@ impl Director {
     /// are the attempt before's; the fight, her health's marks and what's killed start afresh.
     fn new_life(&mut self) {
         self.overtaken("the level begun again");
+        self.moments.new_life();
         // (a gun before any key: told once a level, not each life of it)
         self.plans_told
             .retain(|p| *p == crate::tactical::player::Plan::GunBeforeKey);

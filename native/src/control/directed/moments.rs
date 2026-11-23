@@ -62,6 +62,15 @@ pub(super) struct Moments {
     told_done: bool,
 }
 
+impl Moments {
+    /// The level begun again (a death, a restart): she's back at its start, which is no
+    /// teleport. ("Teleported right into 2 imps, 1 shotgun guy!", told her on a respawn.)
+    pub(super) fn new_life(&mut self) {
+        self.was_at = None;
+        self.teleported = None;
+    }
+}
+
 impl Director {
     /// What the game's screen says, between levels (a finale's story, an episode's end, a
     /// sentence or a few at a time as it's typed out): told as it is, its lines run together.
