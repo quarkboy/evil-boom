@@ -450,10 +450,14 @@ impl Explorer {
         let mut out: Vec<Objective> = Vec::new();
         if self.exits_offered {
             for li in k.exits() {
-                if let Some(t) = by_line
-                    .get(&li)
-                    .filter(|t| !t.activators.is_disjoint(reach) && t.info.lock.satisfied(keys))
-                {
+                // (not a line she's found she can't get over from this ground: `note_misses`)
+                let barred = self.uncrossable.get(&li);
+                if let Some(t) = by_line.get(&li).filter(|t| {
+                    t.info.lock.satisfied(keys)
+                        && t.activators
+                            .iter()
+                            .any(|p| reach.contains(p) && barred.is_none_or(|g| !g.contains(p)))
+                }) {
                     let mut o = Objective::new(
                         Kind::Exit,
                         nav.activation_point(t, pos, reach),
