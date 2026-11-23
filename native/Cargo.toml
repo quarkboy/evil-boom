@@ -1,6 +1,6 @@
 [package]
 name = "evilboom"
-version = "0.8.5"
+version = "0.9.0"
 edition = "2024"
 license = "GPL-3.0-or-later"
 description = "Evil: a Doom bot that explores and finishes levels, playing DSDA-Doom in-process"
@@ -13,7 +13,7 @@ publish = false
 # The release's fourth number (0.8.5.1): Cargo's own version takes three, so it's kept here
 # and build.rs puts the two together (0: none, the version as above).
 [package.metadata.evil]
-fix = 2
+fix = 0
 
 [lib]
 name = "evilboom"
