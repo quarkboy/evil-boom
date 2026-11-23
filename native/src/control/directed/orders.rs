@@ -175,6 +175,7 @@ impl Director {
         } else {
             obs.angle
         };
+        self.fresh_ranking();
         let _ = self.open_objectives(agent, obs); // (what she can get to, up to date)
         let x = agent.x();
         let mut spots: Vec<(f64, Point)> = x

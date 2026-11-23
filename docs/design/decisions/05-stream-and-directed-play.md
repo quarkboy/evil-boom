@@ -4128,3 +4128,34 @@ The flashes are shown at half strength unless set (the maintainer's call, after 
 found the old game hard on the eyes): the plain palette tinted halfway to the game's one.
 DSDA's own settings only turn each kind on or off, so the strength is ours: three of them
 in the console's Picture section (`flash_red`, `flash_gold`, `flash_green`, 0 to 100).
+
+### The window stuttered in directed play: the director's reckoning, kept a while (2026-11-22)
+
+The maintainer, watching episode 2 through Gary: poor frame rates on E2M2, E2M5 and E2M7,
+with the CPU all but idle. The game alone in a window on E2M2 was fine (59.6 frames a
+second, 1% late). With the model's 251 actions on that level replayed at their own pace,
+from the fifth minute about a hundred frames a minute came late, the game's step taking 40
+to 180 ms; painting and presenting were never slow. `EVIL_DEBUG_SLOW` (new) names what's
+slow in a tic. Nine minutes of the replay, tics with a part over 8 ms: 793, most of them the
+director's news looking for new exits, switches and doors twice a second, each a whole
+ranking by the explorer (16 ms as a rule on that level, up to 60); the rest the same
+ranking asked for by a look, a list and a suggestion, each for itself and twice (safe ways
+and risky).
+
+Two things, both the director's only:
+
+- The news lists only when she knows more than at its last listing (`Knowledge::amount`),
+  or holds another key, or ten seconds have gone.
+- The explorer's ranking is kept for what she's told (`open::ranked`): a second at most
+  while she knows nothing new, a third of a second at least when she does; dropped when an
+  order of hers begins and on a new level. A list or a suggestion may be a second old; the
+  maintainer's call ("it doesn't matter that much if the information is slightly out of
+  date"). Distances in what she's told are worked out fresh. What the bot itself chooses to
+  do is never from the kept one.
+
+The same nine minutes: 793 slow tics, then 560 with the first, 479 with both; tics over
+25 ms 178, then 96; the time in them 13.8 s, then 6.5 s; answering her actions 2.3 s, then
+0.8 s. What's left is the ranking itself, about once in two seconds at 15 ms, and the bot's
+own planning (127 tics at 20 ms). A thread for the director was weighed: the explorer's
+knowledge isn't made to be shared, so it would want a copy of it each time; left till this
+proves not enough.

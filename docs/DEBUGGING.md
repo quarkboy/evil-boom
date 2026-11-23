@@ -109,6 +109,9 @@ over. `Player::force_target` does the same for a target, from code.
   shuts: whether it has vsync, each frame's gap, the tics it played, the time stepping, painting
   and presenting took, and how many frames between tics moved; out/watch/frames.tsv, and the
   last picture in out/watch/frames.png.
+- `EVIL_DEBUG_SLOW=MS` (watch): the parts of a tic that took MS milliseconds or more, to
+  stderr ("slow tic 18725: director.ranked 41.2, director.events 41.5, neuro.tic 43.0"): which
+  of her thinking held the frame. The parts are named where they're timed (`debug::timed`).
 - What her shots hit is in every run's STATS, by the game's own count (the engine patch):
   `shots, by the game's count`, `shots with no pellet on anything`, `pellets fired`, on a
   monster, on a barrel, after the kill in the same shot, on nothing, and fired with the

@@ -89,6 +89,23 @@ impl Director {
             NEWS_RISKY_AT => Some(true),
             _ => None,
         };
+        // (...and only when she knows more than at the last, or holds another key, or it's been
+        // a while: an exit, a switch or a door comes into view as a line newly mapped. On a
+        // level well known, where the reckoning costs most, there's seldom anything new. End
+        // to end, E2M2 in a window: the two a second were most of the frames that came late,
+        // 16 ms each as a rule and up to 60)
+        let listed = listed.filter(|&risky| {
+            let now = (
+                agent.x().knowledge.amount(),
+                obs.keys.unwrap_or_default().iter().count(),
+            );
+            let last = &mut self.news_listed[usize::from(risky)];
+            let due = last.0 != now || obs.tic - last.1 >= NEWS_ANYWAY;
+            if due {
+                *last = (now, obs.tic);
+            }
+            due
+        });
         let open = listed.map_or_else(Vec::new, |risky| self.open_half(agent, obs, risky));
         for e in entries_of(&open, &[Kind::Exit, Kind::Switch, Kind::Door]) {
             if !self.told_exits.insert(e.id.clone()) {

@@ -81,3 +81,44 @@ pub fn on() -> &'static Switches {
         }
     })
 }
+
+/// `EVIL_DEBUG_SLOW=MS`: the parts of a tic that took MS milliseconds or more, to stderr
+/// ("slow tic 18725: director.questions 41.2, neuro.tic 43.0"). For a window that stutters:
+/// which of her thinking is holding the frame.
+fn slow_over() -> Option<f64> {
+    static OVER: OnceLock<Option<f64>> = OnceLock::new();
+    *OVER.get_or_init(|| std::env::var("EVIL_DEBUG_SLOW").ok()?.parse().ok())
+}
+
+thread_local! {
+    static SLOW: std::cell::RefCell<Vec<(&'static str, f64)>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// `f` run, and how long it took kept under `label` if `EVIL_DEBUG_SLOW` asks.
+pub fn timed<T>(label: &'static str, f: impl FnOnce() -> T) -> T {
+    let Some(over) = slow_over() else {
+        return f();
+    };
+    let began = std::time::Instant::now();
+    let out = f();
+    let ms = began.elapsed().as_secs_f64() * 1000.0;
+    if ms >= over {
+        SLOW.with(|s| s.borrow_mut().push((label, ms)));
+    }
+    out
+}
+
+/// A tic's over: what of it was slow, said.
+pub fn slow_report(tic: i64) {
+    if slow_over().is_none() {
+        return;
+    }
+    SLOW.with(|s| {
+        let mut s = s.borrow_mut();
+        if !s.is_empty() {
+            let parts: Vec<String> = s.iter().map(|(l, ms)| format!("{l} {ms:.1}")).collect();
+            eprintln!("slow tic {tic}: {}", parts.join(", "));
+            s.clear();
+        }
+    });
+}

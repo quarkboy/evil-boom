@@ -693,15 +693,16 @@ impl Session {
         }
         self.off_since = None;
         let mut log = Vec::new();
-        self.receive(agent, obs, &mut log);
+        crate::debug::timed("neuro.receive", || self.receive(agent, obs, &mut log));
         if self.connected
             && (obs.tic - self.briefed_at >= BRIEF_EVERY || self.told_chars >= BRIEF_CHARS)
         {
             self.brief(obs.tic);
         }
-        self.director.tick(agent, obs);
+        crate::debug::timed("director.tick", || self.director.tick(agent, obs));
         if obs.tic % 35 == 0 {
-            self.last_status = self.director.status(agent, obs);
+            self.last_status =
+                crate::debug::timed("director.status", || self.director.status(agent, obs));
         }
         if self.forced.expire(obs.tic) {
             log.push("neuro: the force went unanswered: taken as dropped".into());

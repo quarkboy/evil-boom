@@ -904,6 +904,17 @@ impl Knowledge {
         out
     }
 
+    /// How much she knows, as counts (lines mapped, sectors, lines fired, effects learned): the
+    /// same again, nothing new has come into view or been found out.
+    pub fn amount(&self) -> [usize; 4] {
+        [
+            self.mapped.len(),
+            self.sectors.len(),
+            self.fired.len(),
+            self.learned.values().map(BTreeSet::len).sum::<usize>(),
+        ]
+    }
+
     /// What she knows that a route could turn on: the summary but for the lines fired (a wall
     /// pressed that did nothing is no news to the planner)
     pub fn known_summary(&self) -> String {

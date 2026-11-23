@@ -80,6 +80,8 @@ const LOCK_AGAIN: i64 = 10 * 35;
 /// often (tics): the safe ones on the second, the risky at `NEWS_RISKY_AT` into it (both
 /// multiples of the five tics `events` looks at all)
 const NEWS_EVERY: i64 = 35;
+/// ...and with nothing new known, this often all the same (a door open now that wasn't)
+const NEWS_ANYWAY: i64 = 10 * 35;
 const NEWS_RISKY_AT: i64 = 15;
 /// an item listed that counts for the level's items tally (the rest are just pickups)
 const COUNTS: &str = " (tally)";
@@ -468,6 +470,10 @@ pub struct Director {
     /// what's been told already: exits, switches and doors, items, monsters (ids), the health
     /// mark passed, keys and weapons held, dead
     told_exits: std::collections::BTreeSet<String>,
+    /// the explorer's rankings asked for this tic (`open::ranked`)
+    open_kept: std::cell::RefCell<Vec<open::OpenKept>>,
+    /// what she knew, and when, as the news last listed what's open (safe, risky)
+    news_listed: [(([usize; 4], usize), i64); 2],
     /// her own plans told her this life (`plans.rs`)
     plans_told: Vec<crate::tactical::player::Plan>,
     told_items: std::collections::BTreeSet<i32>,
@@ -720,6 +726,8 @@ impl Director {
         self.names.clear();
         self.places = None;
         self.told_exits.clear();
+        self.fresh_ranking();
+        self.news_listed = [(([0; 4], 0), 0); 2];
         self.told_complete = false;
         self.told_items.clear();
         self.out_of_reach.clear();
@@ -916,7 +924,8 @@ impl Director {
     pub fn tick(&mut self, agent: &mut Agent, obs: &Observation) {
         let hits = self.hits.clone();
         self.remember_hits(obs.tic, &hits);
-        self.take_stock(agent, obs);
+        use crate::debug::timed;
+        timed("director.take_stock", || self.take_stock(agent, obs));
         // (her exploring style, for when she's on instinct; and whether there's a secret left
         // to press walls for)
         agent.x_mut().going_back = self.policy.going_back();
@@ -925,7 +934,9 @@ impl Director {
             self.goal,
             Some(goal::Goal::Completionist | goal::Goal::Secrets)
         ) && !self.secrets_done();
-        self.check_complete(agent, obs);
+        timed("director.check_complete", || {
+            self.check_complete(agent, obs)
+        });
         // (her policy on her numbers: on a change, and on each new level's player)
         if self.policy_due
             && let Some(p) = agent.player_mut()
@@ -939,21 +950,24 @@ impl Director {
                 );
             }
         }
-        self.events(agent, obs);
-        self.kills(agent, obs);
-        self.more_moments(agent, obs);
-        self.watch_progress(agent, obs);
+
+        timed("director.events", || self.events(agent, obs));
+        timed("director.kills", || self.kills(agent, obs));
+        timed("director.more_moments", || self.more_moments(agent, obs));
+        timed("director.watch_progress", || {
+            self.watch_progress(agent, obs)
+        });
         self.powers(obs);
-        self.plans(agent, obs);
+        timed("director.plans", || self.plans(agent, obs));
         self.held_fire_news(agent, obs);
-        self.questions(agent, obs);
+        timed("director.questions", || self.questions(agent, obs));
         // (a jump that costs is asked about, and she waits at its line-up while it is)
         let x = agent.x_mut();
         x.jump_asked = true;
         x.jump_held = self
             .question()
             .is_some_and(|q| matches!(q.about, About::Jump(_)));
-        self.apply_tactics(agent, obs);
+        timed("director.apply_tactics", || self.apply_tactics(agent, obs));
         // (...once she's seen a way out this life: till then a sphere or a berserk she's no
         // need of is left for when she might, as without the goal. One known only from a life
         // before isn't yet: she has the level to get through again)
@@ -1009,7 +1023,8 @@ impl Director {
                 Order::Go(r, _) => Some(self.resolve(r)),
                 _ => None,
             };
-            self.start(agent, obs, o);
+            self.fresh_ranking();
+            timed("director.start", || self.start(agent, obs, o));
             if let Some(id) = went
                 && self.doing.is_none()
                 && self.sweep_queued_for(&id)
@@ -1020,14 +1035,16 @@ impl Director {
             agent.x_mut().press_on = rush && matches!(self.doing, Some(Doing::Once(..)));
             return;
         }
-        if self.explore_paused(agent, obs) {
+        if timed("director.explore_paused", || {
+            self.explore_paused(agent, obs)
+        }) {
             return;
         }
-        if self.goal_tick(agent, obs) {
+        if timed("director.goal_tick", || self.goal_tick(agent, obs)) {
             return;
         }
         if matches!(self.doing, Some(Doing::Auto)) {
-            self.auto(agent, obs);
+            timed("director.auto", || self.auto(agent, obs));
             return;
         }
         let ended = agent.x_mut().ended.take();
@@ -1070,7 +1087,7 @@ impl Director {
             }
         }
         if let Some(since) = self.idle_since {
-            self.nudge(agent, obs, obs.tic - since);
+            timed("director.nudge", || self.nudge(agent, obs, obs.tic - since));
         }
         if self.doing.is_none() || matches!(self.doing, Some(Doing::Off | Doing::Pickup)) {
             agent.x_mut().press_on = false; // (her own doing: no order's rush)

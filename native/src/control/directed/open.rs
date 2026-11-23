@@ -6,12 +6,63 @@
 
 use super::*;
 
+/// the explorer's ranking is kept this long at the most (tics), and with more known since, this
+/// long at the least
+const OPEN_KEPT_MOST: i64 = 35;
+const OPEN_KEPT_LEAST: i64 = 12;
+
+/// A ranking kept (`Director::ranked`): for which (risky, exits held back), when, what she knew.
+#[derive(Clone, Debug)]
+pub(super) struct OpenKept {
+    key: (bool, bool),
+    tic: i64,
+    knows: ([usize; 4], usize),
+    open: Vec<Objective>,
+}
+
 impl Director {
+    /// The explorer's ranking of what she can do (the safe objectives, or the risky), kept a
+    /// while: its whole reckoning, tens of milliseconds on a big level well known, with the
+    /// game's picture waiting on it; and a look, a list and a suggestion each ask for it, twice
+    /// over. What she's told from it may be a second old (the maintainer's call: a list a
+    /// moment out of date matters less than a frame held): kept while she knows no more than
+    /// she did, a second at the most; with more known, a third of a second at the least. Kept
+    /// apart by whether the exits are held back from it, and dropped when an order of hers
+    /// begins (`fresh_ranking`).
+    fn ranked(&self, agent: &mut Agent, obs: &Observation, risky: bool) -> Vec<Objective> {
+        let key = (risky, agent.x().exit_held_back);
+        let knows = (
+            agent.x().knowledge.amount(),
+            obs.keys.unwrap_or_default().iter().count(),
+        );
+        if let Some(k) = self.open_kept.borrow().iter().find(|k| k.key == key) {
+            let age = obs.tic - k.tic;
+            if (0..OPEN_KEPT_MOST).contains(&age) && (k.knows == knows || age < OPEN_KEPT_LEAST) {
+                return k.open.clone();
+            }
+        }
+        let open = crate::debug::timed("director.ranked", || agent.ranked(obs, risky));
+        let mut kept = self.open_kept.borrow_mut();
+        kept.retain(|k| k.key != key);
+        kept.push(OpenKept {
+            key,
+            tic: obs.tic,
+            knows,
+            open: open.clone(),
+        });
+        open
+    }
+
+    /// What's kept of the explorer's ranking dropped: the next asked for is worked out anew.
+    pub(super) fn fresh_ranking(&self) {
+        self.open_kept.borrow_mut().clear();
+    }
+
     /// The explorer's open objectives (best first, risky ones after).
     pub(super) fn open_objectives(&self, agent: &mut Agent, obs: &Observation) -> Vec<Objective> {
         let mut out: Vec<Objective> = Vec::new();
         for risky in [false, true] {
-            for o in agent.ranked(obs, risky) {
+            for o in self.ranked(agent, obs, risky) {
                 if !out.iter().any(|p| id_of(p) == id_of(&o)) {
                     out.push(o);
                 }
@@ -47,7 +98,7 @@ impl Director {
         if held {
             agent.x_mut().hold_exits(false);
         }
-        let open = agent.ranked(obs, risky);
+        let open = self.ranked(agent, obs, risky);
         if held {
             agent.x_mut().hold_exits(true);
         }

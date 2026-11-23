@@ -1670,7 +1670,8 @@ impl Watch {
             neuro.director.ultra = ultra;
             neuro.director.gibbed = gibbed;
             neuro.director.hits = hits;
-            for l in neuro.tic(&mut self.agent, &obs) {
+            let said = crate::debug::timed("neuro.tic", || neuro.tic(&mut self.agent, &obs));
+            for l in said {
                 self.agent.x_mut().log.push(l);
             }
             // (and what the GPT stand-in said, if it's in this program)
@@ -1681,7 +1682,9 @@ impl Watch {
                     .push(format!("evil says: {}", s.replace('\n', " ")));
             }
         }
-        let mut c = self.agent.act(&obs, self.controls.as_ref());
+        let mut c =
+            crate::debug::timed("agent.act", || self.agent.act(&obs, self.controls.as_ref()));
+        crate::debug::slow_report(obs.tic);
         if self.no_use {
             c.use_ = false;
         }
