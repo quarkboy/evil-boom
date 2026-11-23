@@ -346,6 +346,8 @@ pub struct Dodge {
     pub within_tics: i64,
     /// ...if it would pass nearer than the two radii and this
     pub margin: f64,
+    /// of those, the soonest this many are weighed in a dodge (a crowd's fire is hundreds)
+    pub most: usize,
     /// a dodge along a missile's way (straight from it or at it) counts this much less than across it
     pub along: f64,
     /// a clear dodge's worth for going the way she's going (an errand), all the way: as much as
@@ -362,6 +364,7 @@ impl Default for Dodge {
         Dodge {
             within_tics: 35,
             margin: 12.0,
+            most: 25,
             along: 24.0,
             toward: 24.0,
             strafe_tics: (18, 40),

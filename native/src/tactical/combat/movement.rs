@@ -23,6 +23,7 @@ impl Combat {
     /// The missiles that'd hit her, soonest first: any that would if she went on as she's going,
     /// and any she's getting out of the way of that haven't gone by yet.
     pub(super) fn incoming(&mut self, obs: &Observation) -> Vec<Thing> {
+        let _timed = crate::debug::Timed::new("fight.incoming");
         let pos = obs.pos();
         let z = self.z(obs);
         let vel = self.velocity;
@@ -113,6 +114,12 @@ impl Combat {
             self.dodge.way = None;
         }
         out.sort_by(|a, b| a.0.total_cmp(&b.0));
+        // (the soonest few only: every one is weighed against every way she might step, and a
+        // crowd of arachnotrons' plasma, hundreds in the air at once, was 190 ms a tic of it
+        // (NUTS.WAD: the window a frame every second and a half for fifty seconds). What's due
+        // after the first couple of dozen is no part of this step's choice: it's weighed when
+        // it's among the soonest. The maintainer's rule and number)
+        out.truncate(self.tune.dodge.most);
         out.into_iter().map(|(_, t)| t).collect()
     }
 
