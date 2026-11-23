@@ -123,6 +123,27 @@ tics more here. Counted (`MoverModel::timing_from`). Stuck (9 restarts) -> out i
    offered from that ground now. She tries each of the eight lines three times before
    looking elsewhere and finding the switch that opens the pit: clumsy, and out in 1,989 s.
 
+**MAP06: open; looked at.** The warehouse of crates. What the reach lacks is the second
+hall (sector 188) and the nukage hall past it (202 on), from which a lift (228) goes up to
+the room with the switches (236) that lower the big crates (line 1183) and raise the blue
+card's floor (1159). Two things the model doesn't have:
+- *Crates as stairs.* A crate 16 square and 16 high (sector 197) beside one 32 square and 32
+  high (198): the game lets her up, her box over the small one lifting her feet while her
+  middle is still on the floor beside it, then onto the bigger. The mesh goes by where her
+  middle is: no floor there she can stand her middle on (a crate at 128 is in her box from
+  any spot on the small one), so no way up. Steps shallower than her box, each within a
+  step of the last, are what's missing, and it will come up in other WADs.
+- How the second hall is entered at all isn't traced yet (over the 64-high crates, or by
+  the big crates coming down).
+
+**MAP22: a cave with no way out, by the model.** Twice in the hour she took a teleporter into
+a water cave (sectors 315, 316, 327, 328, 333, 339, 341, 548, 549) and was stranded there:
+the reach from the pad is those nine and no trigger. The way on is past a pit 128 across
+and 32 deep that the cave's floor runs round in strips too thin for her; out of the pit on
+the far side is a rise of 32. A run across it would just clear (32 of fall is eight tics;
+128 units in eight tics wants full pace), if there's the run-up. Needs the level's
+walkthrough before anything is called broken.
+
 **MAP31: not begun.** By the model 30 of 508 sectors can be reached; she sees 122. To trace.
 
 ## Still to look at
