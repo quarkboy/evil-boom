@@ -482,7 +482,7 @@ impl<'a> Analysis<'a> {
             }
             let ranges: Vec<(f64, f64)> = points
                 .iter()
-                .filter_map(|&p| self.shot_floors_at(c, p, li))
+                .filter_map(|&p| self.shot_floors_at(c, p, li, &BTreeSet::new()))
                 .collect();
             if let Some(best) =
                 ranges
@@ -492,6 +492,46 @@ impl<'a> Analysis<'a> {
             {
                 out.insert(pi);
                 self.shot_floors.insert((li, pi), best);
+            }
+        }
+        // And from behind what's shut as the map starts and may open: shot from there once it
+        // has (the press's `use_gates`, for a shot). Memento Mori MAP09: two switches high on a
+        // hall's wall, shot from the ledge across the hall, which a wall that a line lowers
+        // stands in front of till then.
+        let far: Vec<(usize, Point)> = self
+            .mesh
+            .live_polys()
+            .filter(|(pi, _)| !out.contains(pi))
+            .map(|(pi, p)| (pi, p.center))
+            .collect();
+        for (pi, c) in far {
+            let span = (((a.1 - c.1).atan2(a.0 - c.0).to_degrees()
+                - (b.1 - c.1).atan2(b.0 - c.0).to_degrees())
+                + 180.0)
+                .rem_euclid(360.0)
+                - 180.0;
+            if span.abs() < MIN_SHOT_SPAN {
+                continue;
+            }
+            let best = points
+                .iter()
+                .filter(|&&p| dist(c, p) <= 2048.0)
+                .filter_map(|&p| {
+                    let gates = self.sight_gates(c, p, li)?;
+                    let range = self.shot_floors_at(c, p, li, &gates)?;
+                    Some((range, gates))
+                })
+                .reduce(|x, y| {
+                    if y.0 .1 - y.0 .0 > x.0 .1 - x.0 .0 {
+                        y
+                    } else {
+                        x
+                    }
+                });
+            if let Some((range, gates)) = best {
+                out.insert(pi);
+                self.shot_floors.insert((li, pi), range);
+                self.use_gates.insert((li, pi), gates);
             }
         }
         out
@@ -1079,6 +1119,40 @@ impl<'a> Analysis<'a> {
         seen
     }
 
+    /// The sectors shut as the map starts, that may move, in the way of a view from a to b
+    /// (on line `target`): None if the view's clear (nothing to wait for), or a line that
+    /// never opens is in the way.
+    fn sight_gates(&self, a: Point, b: Point, target: usize) -> Option<BTreeSet<usize>> {
+        let init = &self.movers.initial;
+        let mut gates = BTreeSet::new();
+        let mut seen: Vec<usize> = Vec::new();
+        for cell in cells(a.0, a.1, b.0, b.1) {
+            for &(p, q, li) in self.sight.get(&cell).into_iter().flatten() {
+                if seen.contains(&li) {
+                    continue;
+                }
+                seen.push(li);
+                if li == target || !segments_cross(a, b, p, q) {
+                    continue;
+                }
+                let (Some(f), Some(bk)) = self.m.sides(li) else {
+                    return None;
+                };
+                let shut: Vec<usize> = [f, bk]
+                    .into_iter()
+                    .filter(|&s| {
+                        self.may_move.contains(&s) && init[s].ceiling - init[s].floor <= 0.0
+                    })
+                    .collect();
+                if shut.is_empty() {
+                    return None;
+                }
+                gates.extend(shut);
+            }
+        }
+        (!gates.is_empty()).then_some(gates)
+    }
+
     fn clear_sight(&self, a: Point, b: Point, ignore: Option<usize>) -> bool {
         let mut seen: Vec<usize> = Vec::new();
         for cell in cells(a.0, a.1, b.0, b.1) {
@@ -1098,7 +1172,15 @@ impl<'a> Analysis<'a> {
     /// Floors to stand on at p so a level shot hits line `target` at q: bullets leave at
     /// SHOT_HEIGHT above the feet and go straight, so every two-sided line on the way must be
     /// open at that height, and the target hit where it's solid. (The map's starting heights.)
-    fn shot_floors_at(&self, p: Point, q: Point, target: usize) -> Option<(f64, f64)> {
+    ///
+    /// `gates`: sectors shut now that may open, left out: the shot's from there once they have.
+    fn shot_floors_at(
+        &self,
+        p: Point,
+        q: Point,
+        target: usize,
+        gates: &BTreeSet<usize>,
+    ) -> Option<(f64, f64)> {
         let (m, init) = (self.m, &self.movers.initial);
         let (mut lo, mut hi) = (f64::NEG_INFINITY, f64::INFINITY);
         let mut seen: Vec<usize> = Vec::new();
@@ -1115,8 +1197,12 @@ impl<'a> Analysis<'a> {
                 let (Some(f), Some(b)) = m.sides(li) else {
                     return None;
                 };
-                lo = lo.max(init[f].floor).max(init[b].floor);
-                hi = hi.min(init[f].ceiling).min(init[b].ceiling);
+                for s in [f, b] {
+                    if !gates.contains(&s) {
+                        lo = lo.max(init[s].floor);
+                        hi = hi.min(init[s].ceiling);
+                    }
+                }
             }
         }
         let (f, b) = m.sides(target);
