@@ -9,6 +9,7 @@
 
 use std::sync::Arc;
 
+use crate::geom::PLAYER_HEIGHT;
 use crate::map::{MapData, ML_TWOSIDED};
 use crate::nav::{can_cross, Heights};
 
@@ -112,7 +113,8 @@ const DOOR_WAIT: f64 = 150.0;
 const PLAT_WAIT: f64 = 3.0 * TICRATE;
 
 /// How a mover gets to its target: `travel` tics (from the initial heights), then it stays
-/// `hold` tics before going back (None: for good).
+/// `hold` tics before going back (None: for good; a door's includes the part of its shutting
+/// she still fits under).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Timing {
     pub travel: f64,
@@ -343,7 +345,12 @@ impl MoverModel {
             let hold = if is(DOOR_CLOSE_30) {
                 Some(30.0 * TICRATE)
             } else if description.contains("wait") {
-                Some(DOOR_WAIT)
+                // (and on its way shut she still gets under it, till the gap's less than her
+                // height. Memento Mori MAP14: the way on is a door opened from a line 900
+                // units off, a run that ends under it as it comes down)
+                let speed = if fast { DOOR_BLAZE } else { DOOR_SPEED };
+                let gap = target.ceiling - target.floor - PLAYER_HEIGHT;
+                Some(DOOR_WAIT + (gap / speed).floor().max(0.0))
             } else {
                 None
             };
