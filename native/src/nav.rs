@@ -71,6 +71,22 @@ impl SwitchFace {
 /// Heights by value, for hash sets and maps.
 pub type HeightsKey = (u64, u64);
 
+/// Do the heights `new`, from a move that stays put, take a sector's ceiling up from `old` and
+/// leave its floor? Then they're instead of the old ones, not beside them: a door opened to
+/// stay isn't shut any more, and what next moves its floor moves it under the open door.
+/// (Memento Mori MAP06's way out: a slab a line opens long before a switch lowers its sill,
+/// and with the slab still down as one of its states the sill came down under 40 of room.)
+pub fn opened_for_good(old: &[Heights], new: &[Heights]) -> bool {
+    let top = old
+        .iter()
+        .map(|h| h.ceiling)
+        .fold(f64::NEG_INFINITY, f64::max);
+    !new.is_empty()
+        && new
+            .iter()
+            .all(|h| h.ceiling > top && old.iter().all(|o| o.floor == h.floor))
+}
+
 impl Heights {
     pub fn key(self) -> HeightsKey {
         ((self.floor + 0.0).to_bits(), (self.ceiling + 0.0).to_bits())

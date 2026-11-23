@@ -58,7 +58,7 @@ fn push_new(hs: &mut Vec<Heights>, new: &[Heights]) {
 }
 
 /// The world after a trigger with these effects: the heights added, or for one whose moves
-/// stay put and that only takes a sector down, instead of the old ones.
+/// stay put and that only takes a sector down, or only its ceiling up, instead of the old ones.
 pub fn apply_effects(states: &World, permanent: bool, effects: &Effects) -> World {
     let mut out: Vec<Rc<Vec<Heights>>> = (**states).clone();
     for (s, hs) in effects {
@@ -67,11 +67,12 @@ pub fn apply_effects(states: &World, permanent: bool, effects: &Effects) -> Worl
             .map(|h| h.floor)
             .fold(f64::INFINITY, f64::min);
         let hs_max = hs.iter().map(|h| h.floor).fold(f64::NEG_INFINITY, f64::max);
-        let mut new = if permanent && hs_max < cur_min {
-            Vec::new()
-        } else {
-            (*out[*s]).clone()
-        };
+        let mut new =
+            if permanent && (hs_max < cur_min || crate::nav::opened_for_good(&out[*s], hs)) {
+                Vec::new()
+            } else {
+                (*out[*s]).clone()
+            };
         push_new(&mut new, hs);
         out[*s] = Rc::new(new);
     }

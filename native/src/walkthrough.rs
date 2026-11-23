@@ -439,6 +439,9 @@ impl View {
                     fired.insert(t.line);
                     fired_now.push(t.id);
                     for (s, hs) in nav.effects_now(t, &states) {
+                        if t.permanent() && crate::nav::opened_for_good(&states[s], &hs) {
+                            states[s].clear();
+                        }
                         for h in hs {
                             add_height(&mut states[s], h);
                         }

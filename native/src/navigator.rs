@@ -678,7 +678,8 @@ impl Navigator {
         for (s, hs) in self.effects_now(t, states) {
             let new_max = hs.iter().map(|h| h.floor).fold(f64::NEG_INFINITY, f64::max);
             let old_min = out[s].iter().map(|h| h.floor).fold(f64::INFINITY, f64::min);
-            if t.permanent() && new_max < old_min {
+            let opened = crate::nav::opened_for_good(&out[s], &hs);
+            if t.permanent() && (new_max < old_min || opened) {
                 out[s] = hs;
             } else {
                 for h in hs {
