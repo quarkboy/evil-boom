@@ -80,8 +80,8 @@ mid-stream (Pause, Restart level, Mute, Reconnect Neuro). The tabs, by what you'
 - **Debug**: speed, god mode and the exits; looking and acting as her, a raw action, why; the
   log.
 
-`?tab=setup` in the address opens a tab. Within a tab the sections fold, move and open in a
-window of their own as before (Reset layout puts them back).
+`?tab=setup` in the address opens a tab. Within a tab a section folds by its title and moves by
+the grip at its right (Reset layout puts them back).
 
 What's seldom changed is under an **Advanced** fold in its section, shut until you open it (the
 flash strengths, the chat box and map heights, the seed, the rendering resolution, the MIDI

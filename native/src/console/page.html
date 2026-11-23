@@ -58,18 +58,14 @@ body:not([data-tab="live"]) .col:not(:empty) { margin-bottom: 14px; }
 body.resizing { cursor: col-resize; user-select: none; }
 .col { display: flex; flex-direction: column; gap: 14px; min-width: 0; min-height: 48px; }
 
-/* --- a section: its title folds it; its grip and pop-out show when it's pointed at ------- */
+/* --- a section: its title folds it; its grip shows when it's pointed at ----------------- */
 section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px 16px; min-width: 0; }
 section h2 { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; font-size: 14px; font-weight: 650; color: var(--text); margin: 0 0 12px; }
 section h2 .chev { width: 1em; color: var(--faint); flex: none; font-size: 12px; }
-section h2 .grip { cursor: grab; color: var(--dim); padding: 0 4px; letter-spacing: -2px; flex: none; }
+section h2 .grip { margin-left: auto; opacity: 0; transition: opacity .12s; cursor: grab; color: var(--dim); padding: 0 4px; letter-spacing: -2px; flex: none; }
 section h2 .grip:hover { color: var(--text); }
-section h2 .pop, section h2 .back { padding: 0 6px; font-size: 12px; line-height: 1.5; flex: none; background: transparent; border-color: transparent; color: var(--dim); }
-section h2 .pop { margin-left: auto; }
-section h2 .pop, section h2 .grip { opacity: 0; transition: opacity .12s; }
-section:hover h2 .pop, section:hover h2 .grip, section h2 .pop:focus-visible { opacity: 1; }
-@media (hover: none) { section h2 .pop, section h2 .grip { opacity: 1; } }
-section h2 .back { display: none; }
+section:hover h2 .grip { opacity: 1; }
+@media (hover: none) { section h2 .grip { opacity: 1; } }
 section h2 .help { width: 17px; height: 17px; padding: 0; border-radius: 50%; font-size: 11px; line-height: 15px; color: var(--dim); background: transparent; border-color: var(--line2); flex: none; font-weight: 600; }
 section h2 .help.on { color: var(--text); border-color: var(--dim); }
 .helptext { margin: -6px 0 12px; font-size: 12px; color: var(--dim); }
@@ -78,18 +74,6 @@ section.collapsed h2 { margin: 0; }
 section.collapsed { padding-bottom: 14px; }
 section.dragging { opacity: .4; }
 .drop-line { height: 3px; background: var(--accent); border-radius: 2px; flex: none; }
-section.popped > :not(h2) { display: none !important; }
-section.popped h2 { margin: 0; }
-section.popped h2 .back { display: inline-block; border-color: var(--line2); color: var(--text); }
-section.popped h2 .pop { display: none; }
-section.popped h2::after { content: "in its own window"; font-size: 11px; font-weight: 400; color: var(--accent-hi); }
-body.popout header, body.popout #tabs { display: none; }
-body.popout section.only { display: block !important; }
-body.popout main { grid-template-columns: minmax(0, 1fr); padding: 8px; }
-body.popout #col-split { display: none; }
-body.popout .col > section:not(.only), body.popout .col:empty { display: none; }
-body.popout section h2 .grip, body.popout section h2 .pop, body.popout section h2 .chev { display: none; }
-body.popout section h2 { cursor: default; }
 #tokenbox { display: none; }
 
 /* --- controls -------------------------------------------------------------------------- */
@@ -1074,7 +1058,6 @@ for (const b of document.querySelectorAll("#tabs button[data-tab]")) b.onclick =
   showTab(["live", "evil", "setup", "debug"].includes(t) ? t : "live"); }
 const movable = () => [...document.querySelectorAll("main .col > section")].filter((s) => s.id !== "tokenbox");
 function saveLayout() {
-  if (only) return;
   const l = { cols: {}, collapsed: movable().filter((s) => s.classList.contains("collapsed")).map((s) => s.id) };
   for (const c of document.querySelectorAll("main .col")) l.cols[c.id] = [...c.children].filter((e) => e.tagName === "SECTION").map((e) => e.id);
   try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(l)); } catch (e) { /* (not kept) */ }
@@ -1092,31 +1075,12 @@ function loadLayout() {
 function chevron(sec) { sec.querySelector("h2 .chev").textContent = sec.classList.contains("collapsed") ? "\u25b8" : "\u25be"; }
 let dropLine = null;
 function clearDrop() { if (dropLine) { dropLine.remove(); dropLine = null; } }
-// A section in its own window: this page with only it shown (`only`), live as the main one is;
-// in the main page it folds to its title, back when that window's closed.
-const only = new URLSearchParams(location.search).get("only");
-const popped = {};
-function popOut(sec) {
-  const url = location.pathname + "?t=" + encodeURIComponent(token) + "&only=" + encodeURIComponent(sec.id);
-  const r = sec.getBoundingClientRect();
-  const w = window.open(url, "evil-" + sec.id, "popup,width=" + Math.max(420, Math.round(r.width) + 40) + ",height=" + Math.max(360, Math.min(1000, Math.round(r.height) + 60)));
-  if (!w) { say("The browser blocked the window: allow pop-ups for the console."); return; }
-  popped[sec.id] = w; sec.classList.add("popped");
-}
-setInterval(() => {
-  for (const [id, w] of Object.entries(popped)) if (w.closed) { delete popped[id]; const sec = $(id); if (sec) sec.classList.remove("popped"); }
-}, 700);
 for (const sec of movable()) {
   const h = sec.querySelector("h2");
   const chev = document.createElement("span"); chev.className = "chev";
   const grip = document.createElement("span"); grip.className = "grip"; grip.textContent = "\u22ee\u22ee"; grip.title = "Drag to move";
-  const pop = document.createElement("button"); pop.className = "pop"; pop.textContent = "\u29c9"; pop.title = "In its own window";
-  const back = document.createElement("button"); back.className = "back"; back.textContent = "Bring back";
-  pop.onclick = (e) => { e.stopPropagation(); popOut(sec); };
-  back.onclick = (e) => { e.stopPropagation(); const w = popped[sec.id]; if (w) w.close(); delete popped[sec.id]; sec.classList.remove("popped"); };
-  h.prepend(chev); h.append(pop, back, grip);
+  h.prepend(chev); h.append(grip);
   h.addEventListener("click", (e) => {
-    if (only || sec.classList.contains("popped")) return;
     if (e.target === grip || e.target.closest("button, input, select, a")) return;
     sec.classList.toggle("collapsed"); chevron(sec); saveLayout();
   });
@@ -1173,13 +1137,7 @@ const ADV_KEY = "evil-console-advanced";
   }
 }
 $("layout-reset").onclick = () => { try { localStorage.removeItem(ADV_KEY); localStorage.removeItem(LAYOUT_KEY); localStorage.removeItem(SPLIT_KEY); } catch (e) { /* (none) */ } location.reload(); };
-if (only && $(only)) {
-  // (the one section, unfolded; the window titled by it; the layout's the main page's to keep)
-  document.body.classList.add("popout");
-  const sec = $(only); sec.classList.add("only"); sec.classList.remove("collapsed");
-  const t = [...sec.querySelector("h2").childNodes].find((n) => n.nodeType === 3 && n.textContent.trim());
-  if (t) document.title = t.textContent.trim() + " \u00b7 Evil BOOM";
-} else loadLayout();
+loadLayout();
 for (const sec of movable()) chevron(sec);
 poll();
 </script>
