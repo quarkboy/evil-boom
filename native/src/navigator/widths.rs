@@ -423,13 +423,14 @@ impl Navigator {
             let steps = ((length / 8.0).floor() as usize).max(2);
             (1..steps).any(|i| {
                 let t = i as f64 / steps as f64;
-                [clear, clear + 4.0, clear + 8.0, clear + 16.0, clear + 32.0]
-                    .into_iter()
-                    .any(|d| {
-                        let p: Point = (a.0 + dx * t + nx * d, a.1 + dy * t + ny * d);
-                        let (fits, _floor, ceil) = self.jump_lab.fits_at_heights(p, heights);
-                        fits && ceil - top >= PLAYER_HEIGHT
-                    })
+                let mut open = true;
+                LANDING_PAST.into_iter().any(|e| {
+                    let d = clear + e;
+                    let p: Point = (a.0 + dx * t + nx * d, a.1 + dy * t + ny * d);
+                    let (fits, _floor, ceil) = self.jump_lab.fits_at_heights(p, heights);
+                    open = open && ceil - top >= PLAYER_HEIGHT;
+                    fits && open
+                })
             })
         }
     }
@@ -496,20 +497,35 @@ pub(super) fn landable(
     let steps = ((length / 8.0).floor() as usize).max(2);
     for i in 1..steps {
         let t = i as f64 / steps as f64;
-        for d in [clear, clear + 4.0, clear + 8.0, clear + 16.0, clear + 32.0] {
+        // (the nearest spot past the ledge first, and no further than where a ceiling comes
+        // down to her: she's still at the ledge's height as her box clears it, and a lintel
+        // just past the edge with open floor beyond it is a wall up there. Memento Mori MAP09:
+        // the top of a lift in a shaft whose opening on one side is only as high as the lift
+        // is: "a drop" off the top through the wall above the opening, waited at for 41
+        // minutes. By the map and by the opened ceilings each on its own)
+        let (mut map_open, mut opened_open) = (true, true);
+        for d in LANDING_PAST.map(|e| clear + e) {
             let p: Point = (a.0 + dx * t + nx * d, a.1 + dy * t + ny * d);
             let (fits, _floor, ceil) = lab.fits_at(p);
-            if fits && ceil - top >= PLAYER_HEIGHT {
+            map_open = map_open && ceil - top >= PLAYER_HEIGHT;
+            if fits && map_open {
                 return true;
             }
             let (fits, _floor, ceil) = lab.fits_at_heights(p, opened);
-            if fits && ceil - top >= PLAYER_HEIGHT {
+            opened_open = opened_open && ceil - top >= PLAYER_HEIGHT;
+            if fits && opened_open {
                 return true;
+            }
+            if !map_open && !opened_open {
+                break;
             }
         }
     }
     false
 }
+
+/// How far past a ledge (beyond her box clearing it) a landing is looked for.
+const LANDING_PAST: [f64; 5] = [0.0, 4.0, 8.0, 16.0, 32.0];
 
 /// Every sector at its starting floor, its ceiling as high as any trigger takes it.
 pub(super) fn opened_heights(movers: &MoverModel, triggers: &[TriggerLine]) -> Vec<(f64, f64)> {
