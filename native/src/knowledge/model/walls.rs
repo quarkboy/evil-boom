@@ -542,6 +542,33 @@ impl Knowledge {
         false
     }
 
+    /// Is the line the face of a ledge with a key on it: a two-sided use line, the floor past
+    /// it more than a step up, and on that floor a key she has seen? Whoever put a use line
+    /// under a key meant it for getting the key (a pedestal that comes down, a floor that
+    /// rises to it), whatever the face looks like. (Memento Mori MAP20: the red card on a
+    /// ledge over a nukage pit, the ledge's face a fall of slime that raises the pit's floor
+    /// to it. Seen, never pressed: the hour went on walls.)
+    pub fn under_a_key(&self, li: usize) -> bool {
+        let nav = &self.nav;
+        let (Some(front), Some(back)) = nav.map.sides(li) else {
+            return false;
+        };
+        let at = |s: usize| {
+            self.seen_heights
+                .get(&s)
+                .copied()
+                .unwrap_or(nav.movers.initial[s])
+        };
+        at(back).floor - at(front).floor > MAX_STEP
+            && self.known_things().iter().any(|t| {
+                crate::specials::Key::from_thing(t.kind).is_some()
+                    && nav
+                        .mesh
+                        .poly_at((t.x, t.y))
+                        .is_some_and(|p| nav.sector_of_poly(p) == back)
+            })
+    }
+
     /// Does the wall stand out from those round it (`odd`): a mark, as a player reads it?
     pub fn marked(&self, li: usize) -> bool {
         self.odd(li).0

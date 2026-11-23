@@ -749,9 +749,17 @@ impl Explorer {
         // knows. That's no risk taken but the end, short of a secret found in ten seconds; a
         // jump over the same floor, which the risky pass does take, is a way on if it's made.
         // Left for when there's nothing else at all (`with_harm_allowed`).
+        // (nor for the face of a ledge with a key on it, pressed from down there: that's the
+        // way off as she takes it, `under_a_key`)
+        let key_face = obj.kind == Kind::Switch
+            && obj
+                .trigger
+                .as_ref()
+                .is_some_and(|t| t.line >= 0 && self.knowledge.under_a_key(t.line as usize));
         if self.knowledge.mortal
             && obj.kind != Kind::Exit
             && obj.risky
+            && !key_face
             && !self.harm_allowed
             && !self.on_hurting_floor(obs)
             && !self.knowledge.protected(obs.tic)

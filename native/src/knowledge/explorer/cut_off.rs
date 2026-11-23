@@ -355,6 +355,11 @@ impl Explorer {
             o.kind == Kind::Switch
                 && !*shut_in
                 && !self.wade_switches
+                // (the face of a ledge with a key on it is as good as the key: gone for as
+                // a key is, floor that hurts or not)
+                && !o.trigger.as_ref().is_some_and(|t| {
+                    t.line >= 0 && self.knowledge.under_a_key(t.line as usize)
+                })
                 && nav
                     .poly_at(o.goal)
                     .is_some_and(|p| self.knowledge.damaging(nav.sector_of_poly(p)))
@@ -414,11 +419,15 @@ impl Explorer {
             }
             // A block that looks like a lift, to try from a pit: it's the way out of the pit,
             // as she takes it, so going down to it cuts her off from nothing. (MAP14's pool
-            // again: its lift left untried for the pool's having no way out.)
+            // again: its lift left untried for the pool's having no way out.) The same for
+            // the face of a ledge with a key on it (`under_a_key`): put there to be pressed
+            // from below, by someone who meant her to get out with the key.
             if o.kind == Kind::Switch
-                && o.trigger
-                    .as_ref()
-                    .is_some_and(|t| t.line >= 0 && self.knowledge.lift_face(t.line as usize))
+                && o.trigger.as_ref().is_some_and(|t| {
+                    t.line >= 0
+                        && (self.knowledge.lift_face(t.line as usize)
+                            || self.knowledge.under_a_key(t.line as usize))
+                })
             {
                 lost.push(BTreeSet::new());
                 kept.push(o);
