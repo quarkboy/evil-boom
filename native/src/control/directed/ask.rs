@@ -667,16 +667,24 @@ impl Director {
         // or only another look somewhere. She's asked to leave: she leaves, unasked. What's
         // left of the tally is out of her reach, and a list of it only kept her: end-to-end,
         // E2M4, four times "stay" to it in ninety seconds with the exit already suggested)
-        let pick = self
-            .pick(agent, obs)
-            .filter(|p| !p.id.starts_with("exit-"))?;
+        let pick = self.pick(agent, obs);
+        // (...but no suggestion because the looking was cut short (`advised_way`) isn't
+        // nothing left: asked, without a thing named)
+        let cut = pick.is_none() && agent.x().search_maxed(obs.tic);
+        let pick = pick.filter(|p| !p.id.starts_with("exit-"));
+        if pick.is_none() && !cut {
+            return None;
+        }
         // (something still in reach: that named, not the count of all she's seen; and leaving
         // the answer if she gives none, as leaving's what she asked for)
-        let next = self.describe_pick(&pick, obs);
-        let text = format!(
-            "Still in reach: {next}. {}. Leave anyway?",
-            self.tally.line()
-        );
+        let text = match &pick {
+            Some(p) => format!(
+                "Still in reach: {}. {}. Leave anyway?",
+                self.describe_pick(p, obs),
+                self.tally.line()
+            ),
+            None => format!("{}. Leave anyway?", self.tally.line()),
+        };
         Some(
             self.ask(
                 obs,

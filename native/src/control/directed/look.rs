@@ -107,9 +107,11 @@ impl Director {
             })
             .take(PICK_TRIES)
             // (nor what a barrel stopped her getting to, the barrel still there)
-            .find(|o| {
-                !agent.x().barrel_blocked(o, obs) && agent.x_mut().route_to(o, obs).is_some()
-            });
+            .find(|o| !agent.x().barrel_blocked(o, obs) && self.advised_way(agent, obs, o));
+        // (cut short: no saying there's nothing else in reach on a search not made)
+        if choice.is_none() && agent.x().search_maxed(obs.tic) {
+            return None;
+        }
         // (another look somewhere is the least of what's left: a way out she knows comes first)
         let exit = open.iter().find(|o| o.kind == Kind::Exit);
         match choice {
@@ -165,6 +167,17 @@ impl Director {
     }
 
     /// The pick in a line ("door-l40: door not tried (N 210)").
+    /// Is there a way to o, for advice only (a suggestion, a spot to start an area from)? Not
+    /// looked for once a search this tic has used up its whole budget: one that finds nothing
+    /// goes through 20,000 steps of the plan, and six candidates one after another, each with
+    /// none, held the game two seconds (Doom II MAP15, the first order after a restart: the
+    /// map known from the life before, its doors shut on her again, nothing yet remembered as
+    /// having no way). The next asking, a tic on, takes up where this left off: what had no
+    /// way is remembered then.
+    pub(super) fn advised_way(&self, agent: &mut Agent, obs: &Observation, o: &Objective) -> bool {
+        !agent.x().search_maxed(obs.tic) && agent.x_mut().route_to(o, obs).is_some()
+    }
+
     /// ...and, the pick something else, the way out she knows of after it ("; exit known:
     /// exit-l907 (N 144)"): said every time, so that going on is a choice she's making. (End
     /// to end, E2M4 and E2M5: the exit found, and minutes more of what little was left.)

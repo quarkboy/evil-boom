@@ -286,7 +286,7 @@ impl Director {
             return Ok(spots
                 .into_iter()
                 .map(|at| Objective::new(Kind::Visit, at, what.clone()))
-                .find(|o| agent.x_mut().route_to(o, obs).is_some())
+                .find(|o| self.advised_way(agent, obs, o))
                 .unwrap_or(first));
         }
         if let Some(t) = id

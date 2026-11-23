@@ -4233,3 +4233,28 @@ times a step at most, then given up as before. At that spot, to two goals: faile
 before, there in 5 s and 3 s after one backing out. Three lives: one run in 544 touched,
 nothing moved (exits 297). The corner is still a way to the planner: she can walk into it
 again, and is a second getting out.
+
+### The route search's cost; and one exhausted search a tic for advice (2026-11-22)
+
+Doom II MAP15 in a window, the model directing: the frame rate held (59.0 a second, 0.8%
+late), with two things worse than on E2M2. The bot's own choosing was heavier (38 ms a
+time, runs of 125 to 140 ms): nearly half of it route lookups, and most of that the list of
+run-jumps left out, made afresh at every lookup with a string a jump (`banned_jumps`).
+Made cheaply, the same set: her planning over the level 16.7 s, then 9.7 s; the worst tic
+146 ms, then 77.
+
+And one tic of two seconds, at the first order after a restart of the level (a sweep of an
+area with nothing in it). A search that finds no way goes through its whole budget, 20,000
+steps; what keeps that from repeating (a goal remembered as having no way, the budget
+halved after a search that used it up) goes by how she stands, and after a restart she
+stands at the start without her keys, the map known from the life before and its doors
+shut on her again. The director tries six candidates for a suggestion, one after another:
+full budget, half, a quarter. (The maintainer's reading; the minutes after were lighter
+than those before, so it's a burst from nothing remembered, not a restart being slow.)
+
+`advised_way`: a way asked for only to advise (a suggestion's candidates, the spot to
+start an area from) isn't looked for once a search this tic has used up its budget
+(`Explorer::search_maxed`); the next asking takes up where it left off, the first now
+remembered as having no way. A suggestion cut short is none, not "nothing else in reach",
+and `doom_exit` then asks without naming a thing. Her own orders' ways and the bot's
+choices are searched in full as before. Not reproduced: the freeze was seen once.
