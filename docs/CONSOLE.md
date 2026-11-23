@@ -62,7 +62,9 @@ Settings that apply only under others are shown only then: the Neuro URL for Neu
 Neuro or GPT, the title card's choice with Doom's own screens, the column for the stream.
 
 `neuro_urls` (in the same file, edited only there) lists the Neuro servers the page may choose
-from: the page can never point the game at an arbitrary host.
+from: the page can never point the game at an arbitrary host. It's read when the console starts,
+and the console writes the file back when settings are saved, so stop the console before
+editing it (the page says so under the Neuro URL).
 
 ## The page
 

@@ -442,7 +442,8 @@ header { gap: 8px 10px; } header h1 { font-size: 16px; letter-spacing: .18em; ga
       </fieldset>
       <fieldset class="group wide"><legend>Who directs her</legend>
         <label>Directed by <select name="mode"><option value="bot">the bot alone</option><option value="neuro">Neuro</option><option value="gpt">the GPT stand-in</option></select></label>
-        <label data-when="neuro">Neuro URL <select name="neuro_url"></select></label>
+        <label data-when="neuro" title="The Neuro servers the console may point the game at, from neuro_urls in config/console.local.json. The page can't add one: that keeps it from sending the game to any address.">Neuro URL <select name="neuro_url"></select></label>
+        <p class="note wide" data-when="neuro">To add a server to this list: stop the console, add its address to <code>"neuro_urls"</code> in <code>config/console.local.json</code> (for example <code>"neuro_urls": ["ws://127.0.0.1:8000", "ws://192.168.1.20:8000"]</code>), then start the console again. Edited while the console runs, the file is written over on the next save.</p>
         <label data-when="directed">Your name, as she's told it <input name="console_name" placeholder="Vedal" maxlength="32"></label>
         <label data-when="evilchooses">Levels she may start <input name="evil_maps" placeholder="the level above; all; E1M1, E2M1"></label>
         <label data-when="evilchooses">Skills she may choose <input name="evil_skills" placeholder="the skill above; 3, 4"></label>
