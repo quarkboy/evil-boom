@@ -1446,7 +1446,7 @@ fn open_library(lib: &Path, dll_dirs: &[&Path]) -> Result<Library, libloading::E
     /// ...and the library's own folder.
     const LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR: u32 = 0x0000_0100;
     #[link(name = "kernel32")]
-    extern "system" {
+    unsafe extern "system" {
         fn AddDllDirectory(new_directory: *const u16) -> *mut std::ffi::c_void;
     }
     for dir in dll_dirs {
