@@ -506,7 +506,10 @@ struct Watch {
     agent: Agent,
     /// the game's colors as shown (`brightened`), and as the WAD has them
     palette: Vec<u32>,
-    base_palette: Vec<u32>,
+    /// PLAYPAL's palettes as the WAD has them, and which of them `palette` is (the game's
+    /// own choice a frame: the red of a hit, a pickup's gold, the radiation suit's green)
+    palettes: Vec<Vec<u32>>,
+    palette_now: usize,
     frame: Option<(usize, usize, Vec<u8>)>,
     /// the frame drawn as each tic's played (a window draws its own, between tics, instead)
     frame_per_tic: bool,
@@ -1200,6 +1203,7 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
         };
         if watch.engine.tic != tic0 || !watch.paused || watch.frame.is_none() {
             watch.frame = watch.engine.frame_at(between);
+            watch.sync_palette();
         }
         let stepped = Instant::now();
         paint(&mut watch, &mut canvas, &mut aside);
@@ -1300,6 +1304,7 @@ pub fn snapshot_to(
     let mut watch = Watch::new(w, m, map_name, engine, agent, focus, 0);
     let obs = watch.engine.observe();
     watch.frame = watch.engine.frame();
+    watch.sync_palette();
     watch.options = watch.agent.objectives();
     watch.options_tic = obs.tic;
     watch.obs = Some(obs);
@@ -1349,18 +1354,46 @@ fn brightened(base: &[u32]) -> Vec<u32> {
         .collect()
 }
 
-/// PLAYPAL's first palette, as 0RGB.
-fn palette(w: &Wad) -> Vec<u32> {
+/// PLAYPAL's palettes (14 in Doom's: the plain one, the reds, the golds, the green), each as
+/// 0RGB; a grey one alone without the lump.
+fn palettes(w: &Wad) -> Vec<Vec<u32>> {
     let Some(lump) = w.lumps.iter().find(|l| l.name == "PLAYPAL") else {
-        return (0..256).map(|i| i * 0x0001_0101).collect();
+        return vec![(0..256).map(|i| i * 0x0001_0101).collect()];
     };
-    w.read(lump)
+    let all: Vec<u32> = w
+        .read(lump)
         .as_chunks::<3>()
         .0
         .iter()
-        .take(256)
         .map(|c| (u32::from(c[0]) << 16) | (u32::from(c[1]) << 8) | u32::from(c[2]))
+        .collect();
+    all.as_chunks::<256>()
+        .0
+        .iter()
+        .map(|p| p.to_vec())
         .collect()
+}
+
+impl Watch {
+    /// The palette the game shows its last frame in, made ours to colour it with (as bright
+    /// as's set): after each frame taken.
+    fn sync_palette(&mut self) {
+        let now = self
+            .engine
+            .palette()
+            .min(self.palettes.len().saturating_sub(1));
+        if now != self.palette_now {
+            self.palette_now = now;
+            self.set_palette();
+        }
+    }
+
+    /// `palette` made again from the game's one in use (the brightness changed, or which).
+    fn set_palette(&mut self) {
+        if let Some(p) = self.palettes.get(self.palette_now) {
+            self.palette = brightened(p);
+        }
+    }
 }
 
 fn save_png(path: &Path, px: &[u32]) -> Result<(), String> {
@@ -1438,8 +1471,9 @@ impl Watch {
             map_name: map_name.to_string(),
             engine,
             agent,
-            palette: brightened(&palette(w)),
-            base_palette: palette(w),
+            palette: brightened(&palettes(w)[0]),
+            palettes: palettes(w),
+            palette_now: 0,
             frame: None,
             frame_per_tic: true,
             obs: None,
@@ -1562,6 +1596,7 @@ impl Watch {
             crate::run::secret_found(&self.engine, &mut self.agent, &obs, self.secrets_seen);
         if self.frame_per_tic {
             self.frame = self.engine.frame();
+            self.sync_palette();
         }
         let tally = crate::control::directed::Tally::of(self.engine.tally());
         let gibbed = self.engine.gibbed();

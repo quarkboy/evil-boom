@@ -4112,3 +4112,14 @@ each walked to and ended "couldn't pick it up". Her lists gave no sign. `cant_ta
 game's own rules (health, armor or ammo she's full of; a gun she has with its ammo full):
 such an order is refused at once ("item-t149 (green armor): you can't pick it up now:
 armor's 103 already."), and her item list marks it ("green armor, can't take now").
+
+### The game's flashes shown: hurt, a pickup, the berserk, the radiation suit (2026-11-22)
+
+The maintainer, watching: no green under a radiation suit, no red after a berserk pack. None
+of Doom's palette flashes were shown at all: the frame comes to us as palette indices, and
+the viewer coloured every one with PLAYPAL's first palette. The game works out which of the
+14 it means each frame as it draws the status bar (`st_palette`: 1-8 the reds of a hit and
+of the berserk, 9-12 a pickup's gold, 13 the suit's green); `evil_palette` gives it, and the
+watch colours the frame with that one (through the brightness set). The window, the
+stream's view, the console's picture and a recording all take it. Seen in a recording of
+E2M2: red for 22 s from the berserk pack, and a moment at each hit.

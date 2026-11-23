@@ -692,6 +692,16 @@ EVIL_API void evil_fov_set(int degrees)
   }
 }
 
+/* Which of PLAYPAL's palettes the game shows the frame in, as its status bar last worked it
+ * out (ST_doPaletteStuff, as each frame's drawn): 0 the plain one, 1-8 the reds (hurt, the
+ * berserk), 9-12 the golds (a pickup), 13 the green (the radiation suit). Our frames are
+ * palette indices: whoever colours them needs this. */
+EVIL_API int evil_palette(void)
+{
+  extern int st_palette;
+  return st_palette < 0 ? 0 : st_palette;
+}
+
 EVIL_API int evil_fov_get(void)
 {
   extern int evil_fov;

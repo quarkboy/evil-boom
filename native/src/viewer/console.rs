@@ -329,7 +329,7 @@ impl Watch {
                 Command::Picture { brightness, fov } => {
                     if let Some(b) = brightness {
                         super::set_brightness(b);
-                        self.palette = super::brightened(&self.base_palette);
+                        self.set_palette();
                     }
                     if let Some(f) = fov {
                         self.engine.set_fov(f);

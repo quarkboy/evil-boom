@@ -309,6 +309,7 @@ pub struct Dsda {
     sound_rate_fn: Option<SoundRateFn>,
     volume_fn: Option<VolumeFn>,
     fov_fns: Option<(unsafe extern "C" fn(c_int), unsafe extern "C" fn() -> c_int)>,
+    palette_fn: Option<unsafe extern "C" fn() -> c_int>,
     get_volume_fn: Option<GetVolumeFn>,
     present_fn: Option<PresentFn>,
     title_fn: Option<PlainFn>,
@@ -497,6 +498,9 @@ impl Dsda {
         let volume_fn = unsafe { get::<VolumeFn>(&lib, b"evil_volume") }.ok();
         let get_volume_fn = unsafe { get::<GetVolumeFn>(&lib, b"evil_get_volume") }.ok();
         // SAFETY: as above: `void evil_fov_set(int)` and `int evil_fov_get(void)`; optional.
+        // SAFETY: as above: `int evil_palette(void)`; optional.
+        let palette_fn =
+            unsafe { get::<unsafe extern "C" fn() -> c_int>(&lib, b"evil_palette") }.ok();
         let fov_fns = unsafe {
             get::<unsafe extern "C" fn(c_int)>(&lib, b"evil_fov_set")
                 .ok()
@@ -605,6 +609,7 @@ impl Dsda {
             sound_rate_fn,
             volume_fn,
             fov_fns,
+            palette_fn,
             get_volume_fn,
             present_fn,
             title_fn,
@@ -759,6 +764,15 @@ impl Dsda {
             waiting: o[4] != 0,
             item: o[5],
         })
+    }
+
+    /// Which of PLAYPAL's palettes the last frame drawn is shown in (0 the plain one; the reds
+    /// of a hit or the berserk, the gold of a pickup, the radiation suit's green). 0 without
+    /// the call.
+    pub fn palette(&self) -> usize {
+        // SAFETY: no arguments, a plain value back; see `load`.
+        self.palette_fn
+            .map_or(0, |f| usize::try_from(unsafe { f() }).unwrap_or(0))
     }
 
     /// How wide the view's drawn, in degrees (Doom's own: 90). None without the call.

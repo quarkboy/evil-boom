@@ -211,6 +211,7 @@ pub(super) fn run(
     }
     if ticked && watch.frame_per_tic {
         watch.frame = watch.engine.frame();
+        watch.sync_palette();
     }
     Ok(watch)
 }

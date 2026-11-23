@@ -400,6 +400,11 @@ impl Engine {
         self.game.volume()
     }
 
+    /// Which of PLAYPAL's palettes the last frame drawn is shown in (`Dsda::palette`).
+    pub fn palette(&self) -> usize {
+        self.game.palette()
+    }
+
     /// How wide the view's drawn, in degrees (Doom's own: 90). None from an engine built
     /// without it.
     pub fn fov(&self) -> Option<i32> {
