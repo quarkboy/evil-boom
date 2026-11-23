@@ -30,6 +30,19 @@
 | MAP26's door and exit ring (0aedce7) | 16 |
 | MAP14's door, MAP05's switch (f895af5) | 18 |
 
+**All four skills at 575ceee** (charmed, seed 1, the hour; `out/mm-survey/1123g-*`):
+
+| skill | exits of 32 | not out |
+|---|---|---|
+| 1 | 19 | 06 08 09 12 17 18 21 22 23 25 26 30 31 |
+| 2 | 20 | 06 09 12 16 17 18 21 22 23 25 30 31 |
+| 3 | 19 | 06 09 12 15 16 17 18 22 23 25 28 30 31 |
+| 4 | 18 | 04 06 09 12 15 16 17 21 22 23 25 28 30 31 |
+
+Not out on any: 06, 09, 12, 17, 22, 23, 25, 30, 31. Out on some and not others, so worth a
+seed or two more before a trace: 04, 08, 15, 16, 18, 20, 21, 26, 28 (MAP20 is out on all four
+here, without endless bullets).
+
 Not out at f895af5: MAP06, 09, 12, 15, 16, 17, 18, 20, 22, 23, 25, 28, 30 (the Icon of Sin), 31.
 
 By the omniscient planner at 0.9.1, 17 of the 32 had no route: MAP04, 06, 09, 12, 15, 16, 17,
