@@ -63,7 +63,7 @@ jobs:
 
       - name: Evil
         working-directory: native
-        run: cargo build --release --locked --target-dir ../out/build
+        run: cargo build --profile dist --locked --target-dir ../out/build
 
       - name: Package
         run: |
@@ -106,7 +106,7 @@ jobs:
         # (the C runtime linked in: no Visual C++ redistributable needed)
         env:
           RUSTFLAGS: -C target-feature=+crt-static
-        run: cargo build --release --locked --target-dir ../out/build
+        run: cargo build --profile dist --locked --target-dir ../out/build
 
       - name: Package
         shell: msys2 {0}

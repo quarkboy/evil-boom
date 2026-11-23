@@ -3,8 +3,8 @@
 # Copyright (C) 2026 Quarkboy
 # package-windows.sh VERSION [OUT]: a Windows release, out/release/evil-boom-VERSION-windows-x86_64.zip
 # (or under OUT), from the built program and engine. Run in MSYS2's MINGW64 shell, after
-# tools/build-engine.sh and the Rust build (BIN=PATH for the program; out/build/release/evil-boom.exe
-# unless given).
+# tools/build-engine.sh and the Rust build (cargo build --profile dist; BIN=PATH for the program;
+# out/build/dist/evil-boom.exe unless given).
 #
 # The folder: evil-boom.exe, the engine (libdsda-evil.dll, dsda-doom.wad), the MinGW-w64 DLLs the
 # engine needs (found beside it when it's loaded), each one's package licenses in licenses/,
@@ -15,7 +15,7 @@ version=${1:?usage: tools/release/package-windows.sh VERSION [OUT]}
 out=${2:-out/release}
 name=evil-boom-$version-windows-x86_64
 dir=$out/$name
-bin=${BIN:-out/build/release/evil-boom.exe}
+bin=${BIN:-out/build/dist/evil-boom.exe}
 engine=third_party/dsda-doom/prboom2/build
 rm -rf "$dir"
 mkdir -p "$dir/config" "$dir/licenses"

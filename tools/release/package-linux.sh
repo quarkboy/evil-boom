@@ -3,7 +3,8 @@
 # Copyright (C) 2026 Quarkboy
 # package-linux.sh VERSION [OUT]: a Linux release, out/release/evil-boom-VERSION-linux-x86_64.tar.gz
 # (or under OUT), from the built program and engine (tools/build-engine.sh, then cargo build
-# --release --target-dir ../out/build; BIN=PATH for another build of the program).
+# --profile dist --target-dir ../out/build: the published build, Cargo.toml's `dist`; BIN=PATH
+# for another build of the program).
 #
 # The folder: evil-boom, the engine (libdsda-evil.so, dsda-doom.wad), config/, lib/ with the
 # engine's libraries (SDL2, SDL2_mixer, libsndfile and its codecs, libzip, ...), found through the
@@ -16,7 +17,7 @@ version=${1:?usage: tools/release/package-linux.sh VERSION [OUT]}
 out=${2:-out/release}
 name=evil-boom-$version-linux-x86_64
 dir=$out/$name
-bin=${BIN:-out/build/release/evil-boom}
+bin=${BIN:-out/build/dist/evil-boom}
 engine=third_party/dsda-doom/prboom2/build
 rm -rf "$dir"
 mkdir -p "$dir/lib" "$dir/config"

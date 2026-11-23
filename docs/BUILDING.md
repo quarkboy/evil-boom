@@ -127,8 +127,26 @@ plays SoundFonts through FluidSynth and the recordings through Ogg Vorbis, both 
 
 - `cargo build --release --no-default-features`: no watch window (headless runs, sweeps and the
   score still work).
-- Release builds keep incremental compilation and 16 codegen units (a change rebuilds in about
-  12 s instead of 110 s; the bot runs under 1% slower).
+
+### Build profiles
+
+Three, in `native/Cargo.toml`:
+
+| profile | for | how | where it lands |
+|---|---|---|---|
+| `release` | the day's work: tests, sweeps, the three-lives test, watching | `cargo build --release --target-dir ../out/build` | `out/build/release/` |
+| `dist` | what's published | `cargo build --profile dist --target-dir ../out/build` | `out/build/dist/` |
+| `profiling` | a sampling profiler | `cargo build --profile profiling --target-dir ../out/build` | `out/build/profiling/` |
+
+- `release` keeps incremental compilation and 16 codegen units (a change rebuilds in about
+  12 s instead of 110 s; the bot runs under 1% slower), with line tables for backtraces.
+- `dist` is whole-program optimised (fat LTO, one codegen unit) with no debug info; the symbol
+  table stays, so a crash still names its functions. It takes minutes to build. The release
+  workflow and `tools/release/package-*.sh` use it. Results measured for a commit message
+  are `release`'s: the two play the same (`tools/parity.sh check out/build/dist/evil-boom`).
+- `profiling` is `release` with full debug info. With frame pointers
+  (`RUSTFLAGS="-C force-frame-pointers=yes"`) a profiler's call stacks are whole. Without a
+  profiler, `EVIL_DEBUG_SLOW=MS` ([DEBUGGING.md](DEBUGGING.md)) names the slow parts of a tic.
 - Build into `out/` (`--target-dir ../out/build`): the tools and docs assume
   `out/build/release/evil-boom`. Any other folder works; give the scripts the binary
   (`BIN=...`).
