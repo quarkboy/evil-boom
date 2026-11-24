@@ -273,6 +273,20 @@ build kept from each commit said which commit, and that the level had never been
 (strandings on every build). **One seed a level says little here: eight, and the count of
 restarts, before and after.**
 
+**MAP15: one thing; out on 7 seeds of 8 at skill 3** (it was 3 of 8).
+The yellow card lies down a drop in a part of the level that's left by teleporter and
+never come back to. She took the teleporter when it was the nearest thing to do, the card
+unseen twenty steps off. Found by setting a run that got out beside one that didn't: the
+keys each had. Now a teleporter she's never taken waits for what else is to do where she
+is, as a one-way drop does. (This changes the order of things on every level with a
+teleporter: ten of parity's 24 runs, one of them for the better in how it ends.)
+
+**MAP27 again: a walkway believed to sink.** That rule sent her, on MAP27, under a walkway
+raised for good from 72 to 256 which a line also works as a lift: any lift she knows was
+believed to come back to rest at its *starting* height, so the walkway was "a way up",
+waited under 133 times. Now a floor moved for good rests where that left it. MAP27 UV:
+8 of 8, 1,430-2,168 s.
+
 **MAP22: a cave with no way out, by the model.** Twice in the hour she took a teleporter into
 a water cave (sectors 315, 316, 327, 328, 333, 339, 341, 548, 549) and was stranded there:
 the reach from the pad is those nine and no trigger. The way on is past a pit 128 across
