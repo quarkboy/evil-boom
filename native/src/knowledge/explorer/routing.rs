@@ -860,7 +860,10 @@ impl Explorer {
         if let Some(at) = self.barrels_on_landing(route, obs) {
             return Some(Refusal::BarrelsOnLanding { at });
         }
-        if obj.kind != Kind::Exit && self.dead_end(route, obj, obs, view) {
+        if obj.kind != Kind::Exit
+            && !self.dead_ends_whatever
+            && self.dead_end(route, obj, obs, view)
+        {
             return Some(Refusal::DeadEnd);
         }
         if obj.kind != Kind::Exit && !obj.risky && self.shuts_in(route, obj, obs, view) {

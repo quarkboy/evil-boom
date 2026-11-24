@@ -783,6 +783,11 @@ pub struct Explorer {
     harm_anything: bool,
     /// the last resort `floors_waded_across`: floors that hurt are walked across too
     wade_floors: bool,
+    /// the last resort `dead_ends_gone_into`: a drop into ground she knows all of, with no
+    /// way back, isn't refused
+    dead_ends_whatever: bool,
+    /// what she knew when `dead_ends_gone_into` last found nothing
+    dead_ends_none: Option<String>,
     /// ...found nothing, knowing this much: not looked for again till she knows more
     anything_none: Option<String>,
     /// what's been turned down for want of health, this life: what `anything_whatever` has
@@ -1028,6 +1033,8 @@ impl Explorer {
             harm_whatever: false,
             harm_anything: false,
             wade_floors: false,
+            dead_ends_whatever: false,
+            dead_ends_none: None,
             anything_none: None,
             health_refused: BTreeSet::new(),
             dare_hunts: false,

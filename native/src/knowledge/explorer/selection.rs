@@ -291,6 +291,8 @@ impl Explorer {
     ///     (`with_harm_allowed`);
     /// 11. a repeatable switch at hand that she knows, pressed again (`known_switches_again`).
     /// 12. the floor that hurts walked across where she hasn't been (`floors_waded_across`).
+    /// 13. a drop she'd not come back from, into ground she knows, for a wall to try there
+    ///     (`dead_ends_gone_into`).
     ///
     /// With nothing at all, she stands, and where she can get to is noted as a trap.
     pub(super) fn next(&mut self, obs: &Observation, hooks: &mut dyn Hooks) {
@@ -318,6 +320,7 @@ impl Explorer {
         self.harm_ways_only = false;
         self.wade_switches = false;
         self.wade_floors = false;
+        self.dead_ends_whatever = false;
         self.known_again = false;
         self.from_dead_end = false;
         self.resort_wanted = None;
@@ -404,6 +407,9 @@ impl Explorer {
         }
         if !found {
             found = self.floors_waded_across(obs, hooks);
+        }
+        if !found {
+            found = self.dead_ends_gone_into(obs, hooks);
         }
         if !found {
             found = self.way_on_whatever(obs, hooks);
@@ -589,6 +595,40 @@ impl Explorer {
         } else {
             self.wade_floors = false;
             self.harm_allowed = false;
+        }
+        found
+    }
+
+    /// Nothing at all else, and something still to try down a drop she'd not get back up
+    /// from, into ground she knows all of: down she goes. That drop is refused while there's
+    /// anything else, to keep what she has; with nothing else she has nothing to keep, and
+    /// where she stands is as much a trap as where she'd land. (Memento Mori MAP21: two
+    /// walls to try in a hall below, "a drop into somewhere with no way back and nothing
+    /// there to try", stood above it till the level was begun again.)
+    fn dead_ends_gone_into(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
+        if !self.may(Resort::Harm) || !self.knowledge.perceive {
+            return false;
+        }
+        // Once for what she knows: found nothing, there's nothing till she knows more.
+        let known = self.knowledge.known_summary();
+        if self.dead_ends_none.as_deref() == Some(known.as_str()) {
+            return false;
+        }
+        self.dead_ends_none = Some(known);
+        // (what was turned down a moment ago for being such a drop is asked about again)
+        self.dropped.clear();
+        self.no_route.clear();
+        self.dead_ends_whatever = true;
+        self.suspecting = Suspecting::EveryWall;
+        let found = self.safe_then_risky(obs, hooks);
+        self.suspecting = Suspecting::No;
+        if found {
+            self.log.push(format!(
+                "tic {}: nothing else to do: down where there's no way back from, for what's left to try there",
+                obs.tic
+            ));
+        } else {
+            self.dead_ends_whatever = false;
         }
         found
     }
