@@ -151,17 +151,42 @@ impl<'a> Ground<'a> {
     /// The pocket round poly `p`, no bigger than `max_area`, if it's in one: the biggest such
     /// with the narrowest mouth.
     pub fn around(&self, p: usize, max_area: f64) -> Option<Pocket> {
-        let whole = *self.measures.piece.get(&p)?;
-        let mut inside = BTreeSet::from([p]);
-        let mut a = self.measures.areas[&p];
+        let m = &*self.measures;
+        let whole = *m.piece.get(&p)?;
+        let mut a = m.areas[&p];
         // (the narrowest mouth so far: its width, and how many polys were in then)
         let mut best: Option<(f64, usize)> = None;
         let mut taken = vec![p];
-        loop {
-            let open: f64 = inside
+        // What's in, by a flag a poly; of those, the ones with ground outside them still (the
+        // edge), in order; and the ground just outside (the next to take in). Kept as the
+        // pocket grows: gone through anew at each step, every poly taken in so far was asked
+        // about again for each one added, and a pocket of a thousand polys round a spot in
+        // an open hall was a third of her thinking on Sunder MAP12. The mouth is summed over
+        // the edge in the order it was over the whole inside (what's not on the edge added
+        // nothing), so to the same width, to the bit.
+        let mut is_in = vec![false; m.member.len()];
+        is_in[p] = true;
+        let outside = |i: usize, is_in: &[bool]| {
+            let mesh = self.mesh;
+            mesh.poly(i)
+                .portals
                 .iter()
-                .flat_map(|&i| self.out(i, &inside))
-                .map(|q| self.wide(q))
+                .map(move |&q| (q, mesh.portals[q].other(i)))
+                .filter(|&(_, o)| m.has(o) && !is_in[o])
+                .collect::<Vec<(usize, usize)>>()
+        };
+        let mut edge: BTreeSet<usize> = BTreeSet::new();
+        let mut next_to: BTreeSet<usize> = BTreeSet::new();
+        let first = outside(p, &is_in);
+        if !first.is_empty() {
+            edge.insert(p);
+        }
+        next_to.extend(first.into_iter().map(|(_, o)| o));
+        loop {
+            let open: f64 = edge
+                .iter()
+                .flat_map(|&i| outside(i, &is_in))
+                .map(|(q, _)| self.wide(q))
                 .sum();
             if a > max_area || a > whole - a || open <= 0.0 {
                 break;
@@ -174,21 +199,15 @@ impl<'a> Ground<'a> {
             }
             // The neighbour that leaves the least open: what it shares with the inside closes,
             // what else it has opens.
-            let next = inside
+            let next = next_to
                 .iter()
-                .flat_map(|&i| {
-                    self.out(i, &inside)
-                        .map(move |q| self.mesh.portals[q].other(i))
-                })
-                .collect::<BTreeSet<usize>>()
-                .into_iter()
-                .map(|o| {
+                .map(|&o| {
                     let (mut shut, mut opens) = (0.0, 0.0);
                     for &q in &self.mesh.poly(o).portals {
                         let other = self.mesh.portals[q].other(o);
-                        if inside.contains(&other) {
+                        if m.member.get(other) == Some(&true) && is_in[other] {
                             shut += self.wide(q);
-                        } else if self.measures.has(other) {
+                        } else if m.has(other) {
                             opens += self.wide(q);
                         }
                     }
@@ -196,9 +215,28 @@ impl<'a> Ground<'a> {
                 })
                 .min_by(|x, y| x.0.total_cmp(&y.0).then(x.1.cmp(&y.1)));
             let Some((_, o)) = next else { break };
-            inside.insert(o);
+            is_in[o] = true;
+            next_to.remove(&o);
             taken.push(o);
-            a += self.measures.areas[&o];
+            a += m.areas[&o];
+            // (its neighbours inside may have no ground outside them now; those outside are
+            // next to the pocket)
+            for &q in &self.mesh.poly(o).portals {
+                let other = self.mesh.portals[q].other(o);
+                if !m.has(other) {
+                    continue;
+                }
+                if is_in[other] {
+                    if outside(other, &is_in).is_empty() {
+                        edge.remove(&other);
+                    }
+                } else {
+                    next_to.insert(other);
+                }
+            }
+            if !outside(o, &is_in).is_empty() {
+                edge.insert(o);
+            }
         }
         let (width, n) = best?;
         let polys: BTreeSet<usize> = taken[..n].iter().copied().collect();
