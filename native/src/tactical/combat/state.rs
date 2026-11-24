@@ -102,6 +102,8 @@ pub struct Stepping {
     /// stepped for a shot at these for long with them none the worse: each not stepped for
     /// again till its tic
     pub(super) no_step: BTreeMap<i32, (i64, u32)>,
+    /// the spot she's stepping to for plasma to get to this one (`stepping_for_plasma`)
+    pub(super) plasma_to: Option<(i32, Point)>,
     /// backed off from these for long with them none the worse: each not backed off from
     /// again till its tic. (Each, not the last only: with a pit of demons under her ledge
     /// she left one, backed off from the next for its twenty seconds, and by then the first

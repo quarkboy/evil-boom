@@ -637,7 +637,8 @@ impl Combat {
     /// degrees off it either side), that she can take without dropping off anything (the
     /// fight's own `safe`) and from where it would; the way to it. Not for rockets: stepping
     /// for one puts her nearer what it could burst on more often than it helps.
-    pub(super) fn plasma_spot(&mut self, obs: &Observation, t: &Thing) -> Option<Point> {
+    /// (The way, and the spot itself.)
+    pub(super) fn plasma_spot(&mut self, obs: &Observation, t: &Thing) -> Option<(Point, Point)> {
         let pos = obs.pos();
         let to = heading(pos, (t.x, t.y));
         for off in [0.0, 30.0, -30.0, 60.0, -60.0] {
@@ -650,7 +651,7 @@ impl Combat {
                 }
                 let q = (pos.0 + d.0 * len, pos.1 + d.1 * len);
                 if self.projectile_reaches(obs, t, q, PLASMA_RADIUS) {
-                    return Some(d);
+                    return Some((d, q));
                 }
             }
         }

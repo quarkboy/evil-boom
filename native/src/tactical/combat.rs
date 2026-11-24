@@ -482,6 +482,7 @@ impl Combat {
                 legs_way: None,
                 legs_turned: i64::MIN / 2,
                 no_step: BTreeMap::new(),
+                plasma_to: None,
                 no_back: BTreeMap::new(),
                 no_keep: BTreeMap::new(),
             },

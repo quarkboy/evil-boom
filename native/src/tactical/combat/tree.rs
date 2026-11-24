@@ -687,10 +687,65 @@ fn stepping_for_shot(c: &mut Combat, obs: &Observation, s: &Situation) -> Option
 /// pit, or the floor in front of them up on one): a step on to where it would get there, never
 /// off the ledge. Not for rockets (see `plasma_spot`).
 fn stepping_for_plasma(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
-    let t = s.target.as_ref().filter(|_| {
-        obs.weapon == Some(6) && c.trigger.held_fire == Some(HeldFire::PlasmaBlocked)
-    })?;
-    let way = c.plasma_spot(obs, t)?;
+    let t = s.target.as_ref().filter(|t| {
+        obs.weapon == Some(6)
+            && c.trigger.held_fire == Some(HeldFire::PlasmaBlocked)
+            && !c
+                .steer
+                .no_step
+                .get(&t.id)
+                .is_some_and(|&(till, _)| obs.tic < till)
+    });
+    let Some(t) = t else {
+        c.steer.plasma_to = None;
+        return None;
+    };
+    // Not for ever, as a step for any other shot isn't (`stepping_for_shot`): stepped for so
+    // `engage.close_give_up` and it none the worse, no more steps for it a while. (E4M9: a
+    // Demon across a ledge's lip, stepped for and walked back from by turns for the hour.)
+    const STEP_BREAK: i64 = 2 * 35;
+    if c.patience.spent(
+        Effort::SteppedFor,
+        t.id,
+        obs.tic,
+        c.tune.engage.close_give_up,
+        Some((f64::from(t.health), 0.0)),
+        Some(STEP_BREAK),
+    ) {
+        let left = left_till(
+            c.steer.no_step.get(&t.id),
+            obs.tic,
+            c.tune.engage.given_up_tics,
+        );
+        c.steer.no_step.insert(t.id, left);
+        c.steer.plasma_to = None;
+        c.give_up(obs, t.id);
+        return None;
+    }
+    // The spot found is gone to, not looked for again from each step of the way: the spots
+    // are tried 16 apart along five ways from where she stands, and a unit on, those she'd
+    // try are other spots, none of which may do. She took a step, found no spot, was walked
+    // back by the route, found the spot again: every tic, there and back, nothing fired.
+    /// at the spot within this
+    const AT_SPOT: f64 = 3.0;
+    let pos = s.pos;
+    let kept = c.steer.plasma_to.filter(|&(id, q)| {
+        let far = dist(pos, q);
+        id == t.id && far > AT_SPOT && {
+            let d = ((q.0 - pos.0) / far, (q.1 - pos.1) / far);
+            c.safe(obs, d, far)
+        }
+    });
+    let to = match kept {
+        Some((_, q)) => q,
+        None => {
+            let (_, q) = c.plasma_spot(obs, t)?;
+            c.steer.plasma_to = Some((t.id, q));
+            q
+        }
+    };
+    let far = dist(pos, to).max(1e-6);
+    let way = ((to.0 - pos.0) / far, (to.1 - pos.1) / far);
     Some(Act::new(
         Move::SteppingForShot,
         Some(way),
