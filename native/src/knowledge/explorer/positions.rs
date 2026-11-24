@@ -69,6 +69,23 @@ impl Explorer {
         .into_iter()
         .map(|(dx, dy)| (pos.0 + dx, pos.1 + dy))
         .filter(|&q| floor_at(q).is_some_and(|f| (f - z).abs() < 1.0))
+        // (a lip there's a way off by the map, that is: a piece her box gets out of through
+        // some side of it. A sill too shallow to stand in holds her up all the same, and
+        // planned from it nothing is in reach: where she is then is where she'll be the
+        // moment she moves, under her middle. Memento Mori MAP27: a switch in an alcove 16
+        // deep at the top of a lift's shaft, pressed from the lift, which went down and
+        // left her held by the alcove's sill 400 over it. Nothing to do, and the level
+        // begun again)
+        .filter(|&q| {
+            self.nav.poly_at(q).is_some_and(|p| {
+                self.nav
+                    .mesh
+                    .poly(p)
+                    .portals
+                    .iter()
+                    .any(|&pi| self.nav.portal_fits[pi])
+            })
+        })
         .min_by(|a, b| dist(*a, pos).total_cmp(&dist(*b, pos)))
         .unwrap_or(pos)
     }
