@@ -702,6 +702,13 @@ impl Explorer {
         if !self.directed && !jumping && hooks.interrupt(self, obs, &obj) {
             return self.ends(obs, Why::Interrupted);
         }
+        if !self.directed
+            && !jumping
+            && obj.kind != Kind::Teleporter
+            && self.teleporter_only_now(obs)
+        {
+            return self.ends(obs, Why::Interrupted);
+        }
         if obs.tic - self.since > self.allowed {
             self.drop_objective(&obj, obs, Why::TookTooLong);
             let stuck = self.follower.as_ref().is_some_and(|f| {

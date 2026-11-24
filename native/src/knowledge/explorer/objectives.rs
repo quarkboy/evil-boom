@@ -335,7 +335,7 @@ impl Explorer {
             }
         }
         let glap = crate::debug::lap("g.walls", glap);
-        out.extend(self.teleporters(&reach, pos));
+        out.extend(self.teleporters(obs, &reach, pos));
         let glap = crate::debug::lap("g.teleporters", glap);
         out.extend(self.frontier(&reach, pos));
         let glap = crate::debug::lap("g.frontier", glap);
@@ -1045,7 +1045,17 @@ impl Explorer {
 
     /// Teleporters she has seen and not been through: walk over one (from the side that sends
     /// you) to find out where it goes. One per pad, over its side nearest her.
-    pub(super) fn teleporters(&self, reach: &BTreeSet<usize>, pos: Point) -> Vec<Objective> {
+    ///
+    /// And one whose near side is going down under her, the line still a step she can take as
+    /// the floors stand this tic though not as they'll be left: now or not at all, so right
+    /// away (TNT MAP07: the block before the teleporter out of the first yard sinks as she
+    /// steps onto it; a player runs on across it into the pad).
+    pub(super) fn teleporters(
+        &self,
+        obs: &Observation,
+        reach: &BTreeSet<usize>,
+        pos: Point,
+    ) -> Vec<Objective> {
         let (k, nav) = (&self.knowledge, &self.nav);
         let mut best: Vec<(BTreeSet<usize>, bool, Objective)> = Vec::new();
         let now = self.states();
@@ -1069,12 +1079,16 @@ impl Explorer {
                 continue;
             }
             let (front, back) = nav.map.sides(li);
+            let mut only_now = false;
             if let (Some(f), Some(b)) = (front, back)
                 && !now[f]
                     .iter()
                     .any(|&a| now[b].iter().any(|&c| can_cross(a, c)))
             {
-                continue; // (the pad isn't down yet, as far as she's seen)
+                only_now = self.over_now(obs, f, b);
+                if !only_now {
+                    continue; // (the pad isn't down yet, as far as she's seen)
+                }
             }
             let (a, b) = nav.map.line_seg(li);
             let length = dist(a, b).max(1.0);
@@ -1112,8 +1126,12 @@ impl Explorer {
             let mut o = Objective::new(
                 Kind::Teleporter,
                 spot,
-                format!("try teleporter (line {li})"),
+                format!(
+                    "try teleporter (line {li}){}",
+                    if only_now { " right away" } else { "" }
+                ),
             );
+            o.urgent = only_now;
             o.trigger = Some(t);
             o.pad = pad.clone();
             match best.iter_mut().find(|(p, _, _)| *p == pad) {
@@ -1125,6 +1143,46 @@ impl Explorer {
             }
         }
         best.into_iter().map(|(_, _, o)| o).collect()
+    }
+
+    /// Is she on sector `f`, with the step from it into `b` one she can take as the two stand
+    /// this tic?
+    fn over_now(&self, obs: &Observation, f: usize, b: usize) -> bool {
+        let nav = &self.nav;
+        nav.poly_at(obs.pos()).map(|p| nav.sector_of_poly(p)) == Some(f)
+            && obs
+                .height(f)
+                .zip(obs.height(b))
+                .is_some_and(|(a, c)| can_cross(a, c))
+    }
+
+    /// A teleporter she hasn't been through, on the floor she's on, to be had only now: the
+    /// floor's going down under her, and the line's a step she can still take but won't be
+    /// where the floor's left (see `teleporters`). What she was about gives way to it.
+    pub(super) fn teleporter_only_now(&self, obs: &Observation) -> bool {
+        let (k, nav) = (&self.knowledge, &self.nav);
+        let Some(here) = nav.poly_at(obs.pos()).map(|p| nav.sector_of_poly(p)) else {
+            return false;
+        };
+        let lines: Vec<(usize, usize)> = k
+            .teleporters()
+            .into_iter()
+            .filter(|li| !k.teleports.contains_key(li))
+            .filter_map(|li| match nav.map.sides(li) {
+                (Some(f), Some(b)) if f == here => Some((f, b)),
+                _ => None,
+            })
+            .collect();
+        if lines.is_empty() {
+            return false;
+        }
+        let now = self.states();
+        lines.into_iter().any(|(f, b)| {
+            self.over_now(obs, f, b)
+                && !now[f]
+                    .iter()
+                    .any(|&a| now[b].iter().any(|&c| can_cross(a, c)))
+        })
     }
 
     /// Sounds she heard but couldn't see the source of, lately: go to the reachable spot nearest

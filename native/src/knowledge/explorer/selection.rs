@@ -8,9 +8,10 @@ use super::{
     GIVE_UP_TICS, JUMP_MISSES, STUCK_TIMES, WHILE_OPEN,
 };
 use crate::domain::Observation;
-use crate::geom::{dist, Point};
+use crate::geom::{dist, segments_cross, Point};
 use crate::knowledge::model::{Behind, Note, Wall, SUSPICION_MIN, THOROUGHNESS};
 use crate::motor::follower::RouteFollower;
+use crate::nav::{can_cross, Heights};
 use crate::navigator::TriggerLine;
 use crate::walkthrough::Step;
 use std::collections::{BTreeMap, BTreeSet};
@@ -1169,6 +1170,34 @@ impl Explorer {
                     .partial_cmp(&(b.1.tier(), b.0))
                     .unwrap_or(std::cmp::Ordering::Equal)
             });
+            // Not over a line she knows takes the floor from before a teleporter she hasn't been
+            // through, while there's a way to the teleporter: that first. (TNT MAP07: landed by
+            // the pad on the block she'd learned a life before sinks for good, she went back
+            // over its line for armour, and the way out of the yard was gone again.)
+            if routed[0].1.kind != Kind::Exit
+                && let Some(li) = self.spoils_teleporter(obs, &routed[0].2)
+            {
+                let is = |o: &Objective| {
+                    o.kind == Kind::Teleporter
+                        && o.trigger.as_ref().is_some_and(|t| t.line == li as i64)
+                };
+                let mut at = routed.iter().position(|r| is(&r.1));
+                if at.is_none()
+                    && let Some(obj) = rest.iter().find(|o| is(o)).cloned()
+                    && let Some(steps) = self.route_to(&obj, obs).filter(|st| !st.is_empty())
+                    && self.spoils_teleporter(obs, &steps).is_none()
+                {
+                    routed.push((route_length(&steps), obj, steps));
+                    at = Some(routed.len() - 1);
+                }
+                if let Some(i) = at {
+                    self.log.push(format!(
+                        "tic {}: '{}' goes over a line that takes the floor from before a teleporter not tried (line {li}): that first",
+                        obs.tic, routed[0].1.label
+                    ));
+                    routed.swap(0, i);
+                }
+            }
             // And on the way to anything that comes first for what it is (the exit, a gun, a keyed
             // door), what she'd pick up that's nearer by the way than it is had first. Blind, she has
             // what lies about by the time she knows of anything far; knowing the level, she'd walk past
@@ -1253,6 +1282,58 @@ impl Explorer {
             return true;
         }
         false
+    }
+
+    /// A teleporter she hasn't been through that this way would lose her: it goes over a
+    /// walk-over line she knows lowers, for good, the floor the teleporter's line is stepped
+    /// over from, to where the line's no step she can take. (Its line.)
+    fn spoils_teleporter(&self, obs: &Observation, steps: &[Step]) -> Option<usize> {
+        let (k, nav) = (&self.knowledge, &self.nav);
+        let pads: Vec<(usize, usize, usize)> = k
+            .teleporters()
+            .into_iter()
+            .filter(|li| !k.teleports.contains_key(li))
+            .filter_map(|li| match nav.map.sides(li) {
+                (Some(f), Some(b)) => Some((li, f, b)),
+                _ => None,
+            })
+            .collect();
+        if pads.is_empty() {
+            return None;
+        }
+        let states = self.states();
+        let over =
+            |a: &[Heights], b: &[Heights]| a.iter().any(|&x| b.iter().any(|&y| can_cross(x, y)));
+        let mut way = vec![obs.pos()];
+        way.extend(
+            steps
+                .iter()
+                .filter_map(|st| st.path.as_ref())
+                .flat_map(|p| p.waypoints.iter().flatten().copied()),
+        );
+        for (t, sectors) in k.known_triggers() {
+            let Some(line) = t.linedef() else { continue };
+            if !t.info.trigger.walked() || !t.permanent() {
+                continue;
+            }
+            let (a, b) = nav.map.line_seg(line);
+            if !way.windows(2).any(|w| segments_cross(w[0], w[1], a, b)) {
+                continue;
+            }
+            let effects = nav.effects_now(&t, &states);
+            for &(li, f, back) in &pads {
+                if !sectors.contains(&f) || !over(&states[f], &states[back]) {
+                    continue;
+                }
+                if effects
+                    .iter()
+                    .any(|(s, hs)| *s == f && !hs.is_empty() && !over(hs, &states[back]))
+                {
+                    return Some(li);
+                }
+            }
+        }
+        None
     }
 
     /// Set about `obj` by `steps` (its route).
