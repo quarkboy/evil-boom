@@ -436,8 +436,35 @@ impl<'a> Analysis<'a> {
                     .extend(hs.iter().map(|h| h.floor));
             }
         }
+        // (and from behind what's shut only where it's opened for good: a door that shuts
+        // again is in the shot's way as often as not by the time it's made, and a shot that
+        // hits the door is a gun line "tried". Memento Mori MAP27: a door's gun line, offered
+        // from outside the yellow door of the room before it; she shot as that door opened,
+        // nothing came of it, and the line wasn't gone back to for half an hour)
+        let opened_for_good: BTreeSet<usize> = out
+            .iter()
+            .filter(|t| t.permanent())
+            .flat_map(|t| {
+                t.effects
+                    .iter()
+                    .filter(|(_, hs)| hs.iter().any(|h| h.ceiling - h.floor > 0.0))
+                    .map(|(s, _)| *s)
+            })
+            .collect();
         for t in out.iter_mut().filter(|t| t.info.trigger.shot()) {
             let li = t.line as usize;
+            t.activators.retain(|&p| {
+                if self
+                    .use_gates
+                    .get(&(li, p))
+                    .is_some_and(|gates| !gates.is_subset(&opened_for_good))
+                {
+                    self.use_gates.remove(&(li, p));
+                    self.shot_floors.remove(&(li, p));
+                    return false;
+                }
+                true
+            });
             t.activators.retain(|&p| {
                 let s = mesh.poly(p).sector;
                 let Some(&(lo, hi)) = self.shot_floors.get(&(li, p)) else {
