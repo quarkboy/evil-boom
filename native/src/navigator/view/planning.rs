@@ -137,6 +137,23 @@ impl View {
                         permanent: t.permanent(),
                         lock_ok: (0..64u8).map(|m| t.info.lock.satisfied(Keys(m))).collect(),
                         timing,
+                        // (what it covers in a thousand tics, less the one it takes to start)
+                        speed: {
+                            let far = |floor| Heights {
+                                floor,
+                                ceiling: 4096.0,
+                            };
+                            1000.0
+                                / (n.movers
+                                    .timing_from(
+                                        t.info.special,
+                                        &t.info.description,
+                                        far(0.0),
+                                        far(1000.0),
+                                    )
+                                    .travel
+                                    - 1.0)
+                        },
                         perm_travel,
                         shift_from: t.shift_from,
                         once: t.once(),
@@ -890,6 +907,28 @@ impl View {
                     match via {
                         Some(Step::Tele(TeleEdge::Jump(j))) => {
                             for &(s, h) in &n.jumps[j].requires {
+                                // (off a lift as it goes by: no line makes that height.
+                                // What's needed is whatever put the floor where the lift
+                                // works from, and the lift's own line)
+                                let passing = n.jumps[j].rising.is_some_and(|r| r.sector == s)
+                                    && !st[s].contains(&h);
+                                if passing {
+                                    for x in st[s].iter().filter(|x| !states0[s].contains(x)) {
+                                        needed.insert((s, x.key()));
+                                        needed_h.insert((s, x.key()), *x);
+                                    }
+                                    for &t in triggers {
+                                        if t.info.category == crate::specials::Category::Lift
+                                            && !t.permanent()
+                                            && t.sectors.contains(&s)
+                                            && !t.activators.is_disjoint(reach_all)
+                                            && need_t.insert(t.line)
+                                        {
+                                            queue.push(t.activators.clone());
+                                        }
+                                    }
+                                    continue;
+                                }
                                 needed.insert((s, h.key()));
                                 needed_h.insert((s, h.key()), h);
                             }

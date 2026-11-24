@@ -195,6 +195,10 @@ pub enum TeleKind {
 pub struct RisingTakeoff {
     pub sector: usize,
     pub lineup_floor: f64,
+    /// a lift works the floor (a line that takes it down and lets it come back): it goes by
+    /// the takeoff's height each time it's called, whether or not she's seen it there
+    #[serde(default)]
+    pub lift: bool,
 }
 
 impl RisingTakeoff {
@@ -226,6 +230,16 @@ pub(crate) fn jump_height(
             && h.floor <= target.floor + 4.0
             && h.ceiling - h.floor.max(target.floor) >= crate::geom::PLAYER_HEIGHT
     })
+    // Or a lift's floor with a height below the takeoff's and one at or above it, both now:
+    // down and due back up. It goes by the takeoff's height between the two, with her on it
+    // if she's there by then. (TNT MAP08: four
+    // pillars, each raised to the ceiling by one switch and worked as a lift by another, are
+    // the way onto the four ledges of the last hall, jumped off as they pass.)
+        || (ride.lift
+            && states.iter().any(|h| {
+                h.floor < target.floor && h.ceiling - target.floor >= crate::geom::PLAYER_HEIGHT
+            })
+            && states.iter().any(|h| h.floor >= target.floor))
 }
 
 /// A way from a poly to a poly that isn't walking through a portal.
@@ -942,6 +956,7 @@ mod rising_takeoff_tests {
             ceiling: 136.0,
         };
         let ride = Some(RisingTakeoff {
+            lift: false,
             sector: 1,
             lineup_floor: -55.0,
         });

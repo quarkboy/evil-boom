@@ -1102,6 +1102,57 @@ impl View {
         self.nav.pickup_spots(x, y, states)
     }
 
+    /// A height-dependent trigger's effects from wherever something else puts the sectors it
+    /// moves (each of their other heights in `states`, in turn): a pillar one switch raises
+    /// to the ceiling and another works as a lift goes by every ledge between, and from the
+    /// floor it started on the lift does nothing. For the passes that ask what could ever be
+    /// reached. (TNT MAP08: the four ledges of its last hall are got onto so; with the
+    /// pillars only ever at the floor or the ceiling, the exit was "not reachable even in
+    /// principle".)
+    pub fn moved_variants(
+        &self,
+        t: &TriggerLine,
+        relevant: &[usize],
+        states: &States,
+    ) -> crate::navigator::Effects {
+        let init = &self.nav.movers.initial;
+        let mut out = crate::navigator::Effects::new();
+        // (a lift only: it comes back to where it was, so it adds the heights between and
+        // no more. A floor a line raises by so much would go up again from each height it
+        // had been given, without end)
+        if t.info.category != crate::specials::Category::Lift || t.permanent() {
+            return out;
+        }
+        for &own in t.sectors.iter().filter(|s| relevant.contains(s)) {
+            for &at in &states[own] {
+                if at == crate::navigator::rep(&states[own], init[own]) {
+                    continue;
+                }
+                let reps: Vec<(usize, Heights)> = relevant
+                    .iter()
+                    .map(|&r| {
+                        let h = if r == own {
+                            at
+                        } else {
+                            crate::navigator::rep(&states[r], init[r])
+                        };
+                        (r, h)
+                    })
+                    .collect();
+                out.extend(self.nav.effects_from_reps(t, &reps));
+            }
+        }
+        out
+    }
+
+    /// The heights round a trigger that goes by them (None: it doesn't): the passes that fire
+    /// each trigger once fire such a one again when these have changed since.
+    pub fn heights_round(t: &TriggerLine, states: &States) -> Option<Vec<Vec<Heights>>> {
+        t.relevant
+            .as_ref()
+            .map(|r| r.iter().map(|&s| states[s].clone()).collect())
+    }
+
     /// Fire every reachable trigger and take every reachable key until nothing changes:
     /// (reach, heights, keys) then. Every height a trigger gives is kept (it needn't be fired:
     /// this is the planner's first check, and mustn't come up short), but a sector moved only
@@ -1120,6 +1171,7 @@ impl View {
         let mut states = states.clone();
         let mut keys = keys;
         let mut fired: BTreeSet<i64> = BTreeSet::new();
+        let mut fired_at: BTreeMap<i64, Vec<Vec<Heights>>> = BTreeMap::new();
         // (the heights only a move for good gives, and the sectors something else moves too)
         let mut after = AfterOnly::default();
         let mut mixed: BTreeSet<usize> = BTreeSet::new();
@@ -1127,11 +1179,13 @@ impl View {
             let doors = self.local_doors(keys);
             after.retain(|s, _| !mixed.contains(s));
             let reach = self.reachable_phased(start, &states, Some(&doors), &after);
+            let round = Self::heights_round;
             let new: Vec<&TriggerLine> = triggers
                 .iter()
                 .copied()
                 .filter(|t| {
-                    !fired.contains(&t.line)
+                    (!fired.contains(&t.line)
+                        || round(t, &states).is_some_and(|now| fired_at.get(&t.line) != Some(&now)))
                         && t.activators.iter().any(|p| reach.contains(p))
                         && t.info.lock.satisfied(keys)
                 })
@@ -1144,12 +1198,20 @@ impl View {
             if new.is_empty() && new_keys.is_empty() {
                 return (reach, states, keys);
             }
+            let keys_before = keys;
             for k in new_keys {
                 keys = keys.with(k);
             }
+            let before = states.clone();
             for t in new {
-                fired.insert(t.line);
+                // (fired again for the heights round it having changed: only what it'd do from
+                // them is added, below. Its own effects are in, and putting them in again can
+                // take a height out and put it back, for ever)
+                let again = !fired.insert(t.line);
                 for (s, hs) in self.nav.effects_now(t, &states) {
+                    if again {
+                        break;
+                    }
                     if !t.permanent() {
                         mixed.insert(s);
                     }
@@ -1164,7 +1226,7 @@ impl View {
                         add_height(&mut states[s], h);
                     }
                 }
-                if t.relevant.is_some() {
+                if let Some(relevant) = &t.relevant {
                     // (and as it'd be with everything round it down)
                     for (s, hs) in self.low_variant(t).0 {
                         mixed.insert(s);
@@ -1172,7 +1234,20 @@ impl View {
                             add_height(&mut states[s], h);
                         }
                     }
+                    for (s, hs) in self.moved_variants(t, relevant, &states) {
+                        mixed.insert(s);
+                        for h in hs {
+                            add_height(&mut states[s], h);
+                        }
+                    }
                 }
+                if let Some(now) = round(t, &states) {
+                    fired_at.insert(t.line, now);
+                }
+            }
+            // (a trigger fired again for nothing new, and no key: done)
+            if states == before && keys == keys_before {
+                return (reach, states, keys);
             }
         }
     }

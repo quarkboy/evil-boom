@@ -59,6 +59,8 @@ pub struct Trigger {
     /// can it be used with these keys, by key bitmask
     pub lock_ok: Vec<bool>,
     pub timing: HashMap<Pair, Timing>,
+    /// units a tic its movers go (for a move that begins somewhere the map didn't have it)
+    pub speed: f64,
     /// moves that stay put: sector -> travel to its first target
     pub perm_travel: HashMap<usize, f64>,
     /// stairs: (start sector, its first floor); the effects shift as it rises
@@ -382,6 +384,23 @@ impl Planner<'_> {
                 // it away again
                 let held = timing.is_some_and(|tm| tm.hold.is_some())
                     && !base[*s].iter().any(|x| x.key() == h.key());
+                // (the way there from where the floor stands now, where that's one place and
+                // not the map's: a pillar raised to the ceiling and then called down as a lift
+                // is a hundred tics coming, and its line pressed from a room away, which by
+                // the map's heights, the lift at the bottom already, was no time at all and
+                // too little to get to it in)
+                let timing = timing.map(|tm| match base[*s].as_slice() {
+                    [from] if tm.hold.is_some() && t.speed > 0.0 => {
+                        let moved = (h.floor - from.floor)
+                            .abs()
+                            .max((h.ceiling - from.ceiling).abs());
+                        Timing {
+                            travel: tm.travel.max((moved / t.speed).ceil() + 1.0),
+                            hold: tm.hold,
+                        }
+                    }
+                    _ => tm,
+                });
                 if self.facts.temporary.contains(&pair) || held {
                     let tm = timing.unwrap_or(Timing {
                         travel: 0.0,

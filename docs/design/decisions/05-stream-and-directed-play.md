@@ -4397,3 +4397,33 @@ library's slow, safe hash, some 5% of her thinking, and a faster one would chang
 some of them are gone through in, so not a change that changes nothing; and the fight makes
 a map of every monster in the level each tic (`note_deaths`), 5% on Sunder and nothing on a
 level of a few hundred.
+
+## A lift goes by every height between its ends: TNT MAP08 (2026-11-24)
+
+TNT on skills 1 and 2, surveyed again (256 runs): 153 out, 42 stuck, 61 died. The planner
+called eight levels' exits unreachable (MAP08, 09, 10, 16, 20, 21, 27, 28); MAP31 really
+is, in this WAD: its yellow card is flagged for multiplayer only, the old bug.
+
+MAP08's last hall has four ledges at four heights, each got onto by a jump off a pillar:
+one switch raises the pillar to the ceiling for good, another then works it as a lift, and
+it's jumped off as it goes by the ledge. The finder had the jumps (a takeoff from a floor
+that rises, `RisingTakeoff`), but they counted only with the floor seen at the height, and
+to the planner a pillar was at the floor or at the ceiling: "not reachable even in
+principle".
+
+- `jump_height`: such a takeoff, off a floor a lift works (`RisingTakeoff::lift`), also
+  counts where the floor has a height below the takeoff's and one at or above it, both
+  now: it goes by between them.
+- The relaxed needs name, for such a jump, what put the floor where the lift works from
+  and the lift's own line. No line makes the height itself.
+- `saturate`: a lift's effects are also worked out from wherever something else puts its
+  floor, and again when the heights round it change. Lifts only: tried for every
+  height-dependent line, a floor raised by so much went up again from each new height
+  without end (four DOOM levels never started; the three-lives test caught it).
+- A temporary move is timed from where the floor stands in the plan's world, not where
+  the map began it: the pillar called down from the ceiling is a hundred tics coming.
+
+TNT MAP08: the omniscient plan from "no route" to out in 198 s; the eight runs 0 out -> 6
+(one stood the hour, one died). Three-lives test: exits 293 -> 293 (MAP09 +1, MAP14 -1),
+nothing stood the hour; parity all 24 the same. The finder's version went up (37): every
+level's jumps are found again, once.

@@ -233,6 +233,11 @@ pub(super) fn find_jumps_cached(nav: &Navigator) -> (Vec<Jump>, String) {
                 // Leave time to turn and get to the run-up. A floor still at its
                 // bottom stop alone cannot establish this opportunity.
                 crate::nav::RisingTakeoff {
+                    lift: nav.triggers.iter().any(|t| {
+                        t.info.category == crate::specials::Category::Lift
+                            && !t.permanent()
+                            && t.sectors.contains(&sector)
+                    }),
                     sector,
                     lineup_floor: (low + 1.0)
                         .max(landing - crate::nav::RisingTakeoff::WAIT_TICS as f64),
