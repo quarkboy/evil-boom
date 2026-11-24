@@ -715,6 +715,8 @@ pub struct Explorer {
     /// each sector as she last saw it, as of the knowledge's tic and life it was made for
     /// (`as_seen`): made once a tic, not for each of the thousands of spots asked about in it
     seen_now: std::cell::RefCell<Option<SeenNow>>,
+    /// the looks at unseen walls already taken (`unfinished`)
+    looks: std::cell::RefCell<viewpoints::Looks>,
     /// the most plan steps a route is searched for in (`drive budget`)
     pub plan_expansions: usize,
     /// times the budget's been halved, and the tic a search last used it up
@@ -1010,6 +1012,7 @@ impl Explorer {
             refused_now: (i64::MIN, BTreeSet::new()),
             standable_cache: std::cell::RefCell::new(StandableCache::default()),
             seen_now: std::cell::RefCell::new(None),
+            looks: std::cell::RefCell::default(),
             suspects: None,
             secret_suspects: None,
             plan_expansions: PLAN_EXPANSIONS,

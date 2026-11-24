@@ -46,31 +46,56 @@ fn nearest_centres(centres: &[Point], mid: Point) -> Vec<Point> {
     near.into_iter().map(|(_, _, c)| c).collect()
 }
 
+/// Is a wall seen from a spot, looking at its middle? Kept by (the wall's line, the spot):
+/// the answer holds while the heights she's seen hold (`Looks`).
+type LookKey = (usize, u64, u64);
+
+/// The looks at unseen walls already taken, at one set of heights and one width of view. A
+/// look is a walk of the whole BSP in front of the spot, and the same walls are asked about,
+/// from the same few spots near each, every time she lists what she could do: on a map of
+/// long views that was half of all her thinking (Sunder MAP15), the answers the same each
+/// time until a door opens or a floor moves.
+#[derive(Default)]
+pub(super) struct Looks {
+    heights: Vec<(f64, f64)>,
+    width: i32,
+    seen: crate::det::HashMap<LookKey, bool>,
+}
+
+/// The spot nearest the wall's middle that the wall is seen from, and the looks taken to
+/// find it that weren't on file.
 fn visible_viewpoint(
     line: usize,
     mid: Point,
     pos: Point,
     centres: &[Point],
     sight: &Sight,
-    width: i32,
-    heights: &[(f64, f64)],
-) -> Option<WallViewpoint> {
-    nearest_centres(centres, mid).into_iter().find_map(|c| {
-        let angle = (mid.1 - c.1).atan2(mid.0 - c.0).to_degrees();
-        let seen = sight.view(&View {
-            x: c.0,
-            y: c.1,
-            angle,
-            width,
-            heights,
+    looks: &Looks,
+) -> (Option<WallViewpoint>, Vec<(LookKey, bool)>) {
+    let mut taken = Vec::new();
+    let found = nearest_centres(centres, mid).into_iter().find_map(|c| {
+        let key = (line, c.0.to_bits(), c.1.to_bits());
+        let drawn = looks.seen.get(&key).copied().unwrap_or_else(|| {
+            let angle = (mid.1 - c.1).atan2(mid.0 - c.0).to_degrees();
+            let seen = sight.view(&View {
+                x: c.0,
+                y: c.1,
+                angle,
+                width: looks.width,
+                heights: &looks.heights,
+            });
+            let drawn = seen.drawn.contains(&line);
+            taken.push((key, drawn));
+            drawn
         });
-        seen.drawn.contains(&line).then(|| WallViewpoint {
+        drawn.then(|| WallViewpoint {
             score: dist(c, pos) + dist(c, mid),
             line,
             position: c,
             wall_middle: mid,
         })
-    })
+    });
+    (found, taken)
 }
 
 fn best_viewpoint(visible: impl Iterator<Item = WallViewpoint>) -> Option<WallViewpoint> {
@@ -79,10 +104,7 @@ fn best_viewpoint(visible: impl Iterator<Item = WallViewpoint>) -> Option<WallVi
 
 /// Test independent walls in parallel, returning results in the original order so equal
 /// scores select the same objective. The calling thread also evaluates one batch.
-fn wall_viewpoints(
-    walls: &[usize],
-    viewpoint: impl Fn(usize) -> Option<WallViewpoint> + Sync,
-) -> Vec<Option<WallViewpoint>> {
+fn wall_viewpoints<T: Send>(walls: &[usize], viewpoint: impl Fn(usize) -> T + Sync) -> Vec<T> {
     let evaluate = |batch: &[usize]| batch.iter().copied().map(&viewpoint).collect::<Vec<_>>();
     let batches = (walls.len() / WALLS_PER_WORKER).min(MAX_VIEWPOINT_WORKERS);
     if batches < 2 {
@@ -146,11 +168,23 @@ impl Explorer {
                 walls.len() - 1
             });
         }
-        let width = k.width;
-        let candidates = wall_viewpoints(&walls, |line| {
+        // (the looks on file are for these heights and this width, or they're thrown out)
+        let mut looks = self.looks.borrow_mut();
+        if looks.heights != heights || looks.width != k.width {
+            looks.heights = heights;
+            looks.width = k.width;
+            looks.seen.clear();
+        }
+        let on_file: &Looks = &looks;
+        let found = wall_viewpoints(&walls, |line| {
             let (a, b) = m.line_seg(line);
-            visible_viewpoint(line, midpoint(a, b), pos, &centres, sight, width, &heights)
+            visible_viewpoint(line, midpoint(a, b), pos, &centres, sight, on_file)
         });
+        let mut candidates = Vec::with_capacity(found.len());
+        for (viewpoint, taken) in found {
+            candidates.push(viewpoint);
+            looks.seen.extend(taken);
+        }
         let mut out = Vec::new();
         for (s, lines) in rooms {
             let visible = lines.into_iter().filter_map(|line| {
