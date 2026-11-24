@@ -884,7 +884,6 @@ impl Explorer {
         /// room to spare round a barrel's half-width
         const SPARE: f64 = 6.0;
         const EVERY: f64 = 8.0;
-        let nav = &self.nav;
         let standing = obs.barrels.as_ref()?;
         let jumps: Vec<&crate::navigator::Jump> = route
             .legs
@@ -904,7 +903,6 @@ impl Explorer {
             .filter(|&p| standing.iter().any(|&b| dist(b, p) < 2.0 * BARREL_RADIUS))
             .collect();
         for j in jumps {
-            let landing = nav.sector_of_poly(j.dest_poly);
             let length = dist(j.takeoff, j.dest).max(1e-6);
             let mut at = 0.0;
             while at <= length {
@@ -912,10 +910,12 @@ impl Explorer {
                     j.takeoff.0 + (j.dest.0 - j.takeoff.0) * at / length,
                     j.takeoff.1 + (j.dest.1 - j.takeoff.1) * at / length,
                 );
-                if nav.poly_at(p).map(|q| nav.sector_of_poly(q)) == Some(landing)
-                    && let Some(&b) = seen
-                        .iter()
-                        .find(|&&b| dist(b, p) < PLAYER_RADIUS + BARREL_RADIUS + SPARE)
+                // (over the landing's floor, where she comes down against it; or anywhere
+                // under the flight, a barrel stopping her box at any height: jumps are found
+                // and checked with the barrels gone, `JumpLab::world_cleared`)
+                if let Some(&b) = seen
+                    .iter()
+                    .find(|&&b| dist(b, p) < PLAYER_RADIUS + BARREL_RADIUS + SPARE)
                 {
                     return Some(b);
                 }

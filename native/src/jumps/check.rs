@@ -159,7 +159,7 @@ impl JumpLab {
     /// strip onto what's beyond, to (x, y); any that sticks only from a shorter run-up with
     /// "~x,y", that run-up; "unverified" if it can't be set up.
     pub fn check_jumps(&self, jumps: &[Jump]) -> Vec<String> {
-        let mut sim = PlayerSim::new(self, self.world());
+        let mut sim = PlayerSim::new(self, self.world_cleared());
         jumps
             .iter()
             .map(|j| {
@@ -251,7 +251,7 @@ impl JumpLab {
     /// The flight of one jump, tic by tic (x, y, z, angle), for comparing with the engine.
     pub fn trace(&self, j: &Jump, soft: bool) -> Vec<(f64, f64, f64, f64)> {
         let push = if soft { Push::Release(0.0) } else { Push::Full };
-        let mut sim = PlayerSim::new(self, self.world());
+        let mut sim = PlayerSim::new(self, self.world_cleared());
         let Some(heading) = self.prepare(&mut sim, j) else {
             return Vec::new();
         };
@@ -324,7 +324,7 @@ impl JumpLab {
     /// its landing (stops there, or slides or runs across it as it does). 1 for one that
     /// can't be varied (no room to).
     pub fn robustness(&self, jumps: &[Jump]) -> Vec<f64> {
-        let mut sim = PlayerSim::new(self, self.world());
+        let mut sim = PlayerSim::new(self, self.world_cleared());
         jumps
             .iter()
             .map(|j| {

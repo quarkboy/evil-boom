@@ -322,7 +322,10 @@ pub struct World {
 }
 
 impl World {
-    pub fn new(lab: &JumpLab) -> World {
+    pub fn new(
+        lab: &JumpLab,
+        obstacles: &crate::det::HashMap<crate::geom::Cell, Vec<crate::geom::Seg>>,
+    ) -> World {
         let m = &lab.map;
         let lines = (0..m.linedefs.len())
             .map(|li| {
@@ -366,8 +369,7 @@ impl World {
             let first = sides.next()?;
             sides.all(|c| c == first).then_some(first)
         });
-        let things = lab
-            .obstacle_grid
+        let things = obstacles
             .iter()
             .map(|(c, es)| {
                 (

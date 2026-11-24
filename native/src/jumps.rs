@@ -127,6 +127,8 @@ pub struct JumpLab {
     pub static_grid: HashMap<Cell, Vec<Seg>>,
     /// cell -> solid things' box edges
     pub obstacle_grid: HashMap<Cell, Vec<Seg>>,
+    /// ...those of them that can't be shot away (no barrels): what a jump is checked against
+    pub lasting_grid: HashMap<Cell, Vec<Seg>>,
     /// per sector: (floor, ceiling) at the start
     pub initial: Vec<(f64, f64)>,
     /// teleport lines (the simulator stops at one)
@@ -148,12 +150,15 @@ pub struct JumpLab {
     floor_piece: Vec<usize>,
     /// the simulator's geometry (built on first use)
     world: OnceLock<World>,
+    /// ...and with only the things that can't be shot away (`world_cleared`)
+    cleared: OnceLock<World>,
 }
 
 /// What JumpLab is built from, besides the map and the mesh.
 pub struct JumpFacts {
     pub static_grid: HashMap<Cell, Vec<Seg>>,
     pub obstacle_grid: HashMap<Cell, Vec<Seg>>,
+    pub lasting_grid: HashMap<Cell, Vec<Seg>>,
     pub initial: Vec<(f64, f64)>,
     pub teleports: HashSet<usize>,
     pub start_angle: f64,
@@ -178,7 +183,20 @@ impl JumpLab {
     }
 
     fn world(&self) -> &World {
-        self.world.get_or_init(|| World::new(self))
+        self.world
+            .get_or_init(|| World::new(self, &self.obstacle_grid))
+    }
+
+    /// The simulator's geometry with the barrels gone: what a jump is checked in. A barrel
+    /// stops her box at any height, as every thing in the game does, so a jump over a row of
+    /// them fails where they stand; but they're hers to shoot away, and whether there's a
+    /// jump at all goes without them, as the mesh does. A route with one is held till the
+    /// barrels in its flight are cleared (`Explorer::barrels_in_flight`). (TNT MAP09: the
+    /// blue card is on a crate jumped to from a balcony, a row of four barrels under the
+    /// flight; every jump to it failed, and the level's second half was out of reach.)
+    fn world_cleared(&self) -> &World {
+        self.cleared
+            .get_or_init(|| World::new(self, &self.lasting_grid))
     }
 
     /// Walked from `a` to `b` with the sectors at `heights`, as the game moves a player (run,
@@ -360,6 +378,7 @@ impl JumpLab {
         let JumpFacts {
             static_grid,
             obstacle_grid,
+            lasting_grid,
             initial,
             teleports,
             start_angle,
@@ -371,6 +390,7 @@ impl JumpLab {
             mesh,
             static_grid,
             obstacle_grid,
+            lasting_grid,
             initial,
             teleports,
             start_angle,
@@ -381,6 +401,7 @@ impl JumpLab {
             sector_lines,
             floor_piece,
             world: OnceLock::new(),
+            cleared: OnceLock::new(),
         }
     }
 }

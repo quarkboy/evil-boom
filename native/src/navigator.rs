@@ -368,6 +368,7 @@ impl Navigator {
             crate::jumps::JumpFacts {
                 static_grid: w.static_wall_grid.clone(),
                 obstacle_grid: obstacle_grid.clone(),
+                lasting_grid: widths::obstacle_grid(&map, skill, false),
                 initial: movers
                     .initial
                     .iter()
