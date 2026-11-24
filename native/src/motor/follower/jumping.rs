@@ -33,6 +33,10 @@ const RUN_SPEED: f64 = 16.0;
 /// units a tic a floor goes down (Doom's lowering floors, FLOORSPEED)
 const SINK_RATE: f64 = 1.0;
 
+/// tics a lift is ridden for a jump off it as it comes back up (down a long shaft, its wait at
+/// the bottom, up again)
+const LIFT_ROUND: i64 = 20 * 35;
+
 /// a jump goes without settling if what it needs runs out sooner
 const JUMP_HURRY: f64 = 2.0 * TICRATE;
 
@@ -98,11 +102,27 @@ impl RouteFollower {
                 return self.sprint_jump(obs);
             }
             let since = *self.jump.lineup_tic.get_or_insert(obs.tic);
-            if obs.tic - since > crate::nav::RisingTakeoff::WAIT_TICS
-                || at_edge > target.floor + 4.0
-                || current.ceiling - current.floor < crate::geom::PLAYER_HEIGHT
-            {
+            // (a lift is ridden down past the takeoff's height and waited on at the bottom:
+            // above it and going down, or standing, isn't the jump missed. Missed is above
+            // it and going up, or the lift's whole round gone by)
+            let missed = if ride.lift {
+                obs.tic - since > LIFT_ROUND || (speed > 0.0 && current.floor > target.floor + 4.0)
+            } else {
+                obs.tic - since > crate::nav::RisingTakeoff::WAIT_TICS
+                    || at_edge > target.floor + 4.0
+            };
+            if missed || current.ceiling - current.floor < crate::geom::PLAYER_HEIGHT {
                 self.jump.lineup_tic = None;
+                self.log.add(
+                    obs.tic,
+                    format!(
+                        "the jump off sector {sector} as it rises: not made (floor {:.0} going {speed:+.0} a tic, {:.0} by the edge, wanted {:.0}; waited {})",
+                        current.floor,
+                        at_edge,
+                        target.floor,
+                        obs.tic - since
+                    ),
+                );
                 return self.fail(obs, Trouble::TakeoffLow);
             }
             self.progress_tic = obs.tic;
