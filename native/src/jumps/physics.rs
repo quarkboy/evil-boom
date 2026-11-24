@@ -374,17 +374,46 @@ impl World {
         (minx, miny): (i64, i64),
         (maxx, maxy): (i64, i64),
         out: &mut Vec<usize>,
+        seen: &mut Seen,
     ) {
         let Some(b) = &self.blocks else { return };
         for by in miny..=maxy {
             for bx in minx..=maxx {
                 for &li in b.block(bx, by) {
-                    if !out.contains(&li) {
+                    if seen.first(li) {
                         out.push(li);
                     }
                 }
             }
         }
+    }
+}
+
+/// Which lines a gathering has taken already: each goes in once, in the order found, and
+/// asking is a look at the line's own mark, not a search of what's gathered so far (in a block
+/// of a few hundred lines that search was a sixth of the simulator's time).
+#[derive(Default)]
+struct Seen {
+    /// per line: the gathering that last took it
+    mark: Vec<u32>,
+    gathering: u32,
+}
+
+impl Seen {
+    /// A new gathering: nothing taken yet.
+    fn begin(&mut self, lines: usize) {
+        if self.mark.len() != lines || self.gathering == u32::MAX {
+            self.mark = vec![0; lines];
+            self.gathering = 0;
+        }
+        self.gathering += 1;
+    }
+
+    /// Take `li`: was it not taken yet, this gathering?
+    fn first(&mut self, li: usize) -> bool {
+        let new = self.mark[li] != self.gathering;
+        self.mark[li] = self.gathering;
+        new
     }
 }
 
@@ -434,6 +463,8 @@ pub struct PlayerSim<'a> {
     blocked_by_thing: bool,
     /// crossed a teleport line from its front: the sim doesn't follow it
     pub teleported: bool,
+    /// the lines a gathering of them has taken (`lines_near`, `path_traverse`)
+    seen: std::cell::RefCell<Seen>,
 }
 
 impl<'a> PlayerSim<'a> {
@@ -464,6 +495,7 @@ impl<'a> PlayerSim<'a> {
             ceilz: 0,
             blocked_by_thing: false,
             teleported: false,
+            seen: std::cell::RefCell::default(),
         }
     }
 
@@ -755,6 +787,9 @@ impl<'a> PlayerSim<'a> {
         (x2, y2): (Fixed, Fixed),
     ) -> Vec<(Fixed, usize)> {
         let mut candidates = Vec::new();
+        let mut taken = self.seen.borrow_mut();
+        let seen = &mut *taken;
+        seen.begin(self.world.lines.len());
         match &self.world.blocks {
             Some(b) => {
                 // don't start exactly on a block edge
@@ -765,20 +800,20 @@ impl<'a> PlayerSim<'a> {
                     y1 += FRAC;
                 }
                 for block in walk_blocks(b, (x1, y1), (x2, y2)) {
-                    self.world.block_lines(block, block, &mut candidates);
+                    self.world.block_lines(block, block, &mut candidates, seen);
                 }
             }
             None => {
                 let (ax, ay, bx, by) = (to_units(x1), to_units(y1), to_units(x2), to_units(y2));
                 self.grid_lines(
-                    ax.min(bx),
-                    ay.min(by),
-                    ax.max(bx),
-                    ay.max(by),
+                    (ax.min(bx), ay.min(by)),
+                    (ax.max(bx), ay.max(by)),
                     &mut candidates,
+                    seen,
                 );
             }
         }
+        drop(taken);
         let trace = Divline {
             x: x1,
             y: y1,
@@ -833,10 +868,16 @@ impl<'a> PlayerSim<'a> {
     }
 
     /// Lines near the box, from the navmesh's grid (when the map has no blockmap).
-    fn grid_lines(&self, x0: f64, y0: f64, x1: f64, y1: f64, out: &mut Vec<usize>) {
+    fn grid_lines(
+        &self,
+        (x0, y0): (f64, f64),
+        (x1, y1): (f64, f64),
+        out: &mut Vec<usize>,
+        seen: &mut Seen,
+    ) {
         for c in cells(x0, y0, x1, y1) {
             for &li in self.lab.mesh.line_grid.get(&c).into_iter().flatten() {
-                if !out.contains(&li) {
+                if seen.first(li) {
                     out.push(li);
                 }
             }
@@ -846,6 +887,8 @@ impl<'a> PlayerSim<'a> {
     /// The lines PIT_CheckLine sees for the box at (x, y).
     fn lines_near(&self, b: &BBox) -> Vec<usize> {
         let mut out = Vec::new();
+        let seen = &mut *self.seen.borrow_mut();
+        seen.begin(self.world.lines.len());
         match &self.world.blocks {
             Some(bm) => {
                 let lo = (
@@ -856,14 +899,13 @@ impl<'a> PlayerSim<'a> {
                     (b.right - bm.x) >> BLOCK_SHIFT,
                     (b.top - bm.y) >> BLOCK_SHIFT,
                 );
-                self.world.block_lines(lo, hi, &mut out);
+                self.world.block_lines(lo, hi, &mut out, seen);
             }
             None => self.grid_lines(
-                to_units(b.left),
-                to_units(b.bottom),
-                to_units(b.right),
-                to_units(b.top),
+                (to_units(b.left), to_units(b.bottom)),
+                (to_units(b.right), to_units(b.top)),
                 &mut out,
+                seen,
             ),
         }
         out

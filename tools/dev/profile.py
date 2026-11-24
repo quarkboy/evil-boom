@@ -14,6 +14,11 @@ import sys
 from collections import Counter
 
 
+# (the standard library's own frames, and the wrappers round a closure: left out of the
+# list by time under them, where they only repeat the caller's line)
+LIBRARY = re.compile(r"^(<?&?(mut )?(core|alloc|std|hashbrown)::|<?\[?(fn|usize|u\d+|i\d+|f64|&)|_|main$)")
+
+
 def short(name):
     name = re.sub(r"::h[0-9a-f]{16}$", "", name)
     name = re.sub(r"<([^<>]*) as [^<>]*>", r"\1", name)
@@ -36,7 +41,8 @@ def main():
         n = int(count)
         total += n
         for f in set(frames):
-            inclusive[f] += n
+            if not LIBRARY.match(f):
+                inclusive[f] += n
         own[frames[-1]] += n
     print(f"{total} samples, {total / 499:.1f} s" + (f" under {under}" if under else ""))
     for title, table in (("under it", inclusive), ("in itself", own)):
