@@ -1155,14 +1155,20 @@ impl RouteFollower {
             // (or a floor moving this tic towards where the plan has it, whoever set it going:
             // a bridge raised by a switch pressed before this route was made is taken as up,
             // and is some seconds getting there. Waited for at the edge while it moves)
-            let moving = |s: usize| {
-                self.prev_live
-                    .get(s)
-                    .is_some_and(|&was| was != obs.heights[s])
+            // (towards it: one going the other way, a block set sinking as she stepped over
+            // its line, only gets further from it, and the wait is for the way to be gone)
+            let nearing = |s: usize| {
+                self.prev_live.get(s).is_some_and(|&was| {
+                    let now = obs.heights[s];
+                    self.states[s].iter().any(|h| {
+                        (now.floor - h.floor).abs() + (now.ceiling - h.ceiling).abs()
+                            < (was.floor - h.floor).abs() + (was.ceiling - h.ceiling).abs()
+                    })
+                })
             };
             let on_its_way = [(ns, a), (cs, b)]
                 .into_iter()
-                .any(|(s, other)| moving(s) && level(s, other));
+                .any(|(s, other)| nearing(s) && level(s, other));
             // (not for ever: something that goes up and down for good is level only in
             // passing, and isn't waited on past `MOVING_WAIT`)
             let waited = if on_its_way {
@@ -1185,6 +1191,30 @@ impl RouteFollower {
                 return Drop::None;
             }
             self.drops_ok.insert(key);
+            // (a floor going down under the way to this step's teleporter, the line still a
+            // step she can take from it: on over it now. Any wait, any other way, and the line's
+            // out of reach. TNT MAP07: the block before the pad out of the first yard, set
+            // sinking by the line at its edge)
+            let sinking = self
+                .prev_live
+                .get(ns)
+                .is_some_and(|was| obs.heights[ns].floor < was.floor - 0.01);
+            let step = self.step();
+            let line_from_it = step.action == Action::Cross
+                && step.trigger.as_ref().is_some_and(|t| {
+                    t.info.category == crate::specials::Category::Teleport
+                        && t.linedef().is_some_and(|li| {
+                            let (f, back) = view.nav.map.sides(li);
+                            f == Some(ns) && back.is_some_and(|k| can_cross(b, obs.heights[k]))
+                        })
+                });
+            if sinking && line_from_it {
+                self.log.add(
+                    obs.tic,
+                    format!("sector {ns} going down before the teleporter: on across it now"),
+                );
+                return Drop::None;
+            }
             let why = format!("unexpected drop into sector {ns}");
             // (heights she allowed for, a lift down that she counted on coming up: only the timing
             // is off, on by the drop as before. Heights she didn't: what's beyond is for the

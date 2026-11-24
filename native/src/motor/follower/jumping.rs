@@ -7,8 +7,8 @@ use super::Trouble;
 use super::{run_controls, JumpNews, RouteFollower, Run, LIFT_STILL};
 use crate::domain::{heading, norm, Controls, Observation, TICRATE};
 use crate::geom::{
-    closest_on_portal, closest_point, dist, funnel, oriented, Point, Seg, PLAYER_HEIGHT,
-    PLAYER_RADIUS,
+    closest_on_portal, closest_point, dist, funnel, oriented, segment_distance, Point, Seg,
+    PLAYER_HEIGHT, PLAYER_RADIUS,
 };
 use crate::jumps::RunStart;
 use crate::motor::fmt_live;
@@ -276,6 +276,29 @@ impl RouteFollower {
             ((jump.runup.0 - obs.x) * 0.3, (jump.runup.1 - obs.y) * 0.3),
             Some(face),
         )
+    }
+
+    /// Is the floor that sinks once stepped on, which she's just come down on from `takeoff`,
+    /// going down, or about to? Going down now; or her flight came over one of the lines that
+    /// lower it (her box on the line as she crossed it: the floor starts the tic after). Come
+    /// onto it over another edge, it stands till she walks over such a line, and she goes on
+    /// her way across it (TNT MAP07: the block before the teleporter, its line on the far
+    /// side from the jump).
+    fn set_sinking(&self, obs: &Observation, s: usize, takeoff: Point) -> bool {
+        let nav = &self.view.nav;
+        let going_down = obs
+            .height(s)
+            .zip(self.prev_live.get(s))
+            .is_some_and(|(l, p)| l.floor < p.floor - 0.01);
+        going_down
+            || nav.triggers.iter().any(|t| {
+                t.info.trigger.walked()
+                    && t.effect(s).is_some()
+                    && t.linedef().is_some_and(|li| {
+                        let (a, b) = nav.line_ends(li);
+                        segment_distance(takeoff, obs.pos(), a, b) < 1.5 * PLAYER_RADIUS
+                    })
+            })
     }
 
     /// Running over floors that sink once stepped on (platforms in nukage that go down as she
@@ -676,7 +699,9 @@ impl RouteFollower {
             self.seg_i = (self.seg_i + 1).min(self.segments.len() - 1);
             self.enter_segment(obs.tic);
             self.look = Some(hd);
-            if let Some(s) = land.filter(|s| self.jump.sinking.contains(s)) {
+            if let Some(s) = land.filter(|&s| self.jump.sinking.contains(&s))
+                && self.set_sinking(obs, s, jump.takeoff)
+            {
                 // going down under her: no settling, run on across
                 self.log
                     .add(obs.tic, format!("sector {s} sinking: running on"));
