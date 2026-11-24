@@ -20,7 +20,6 @@ use crate::det::HashSet;
 use crate::domain::{FRICTION, MAX_MOVE, RUN_THRUST};
 use crate::domain::{MAX_TURN, TURN_ACCEL};
 use crate::geom::{dist, Point, MAX_STEP};
-use crate::nav::Heights;
 
 const TICRATE: usize = 35;
 /// a jump has to work this far to either side of its line too (1 is too strict: it loses jumps
@@ -484,11 +483,24 @@ impl JumpLab {
     /// lowering together, say), standing at the run-up facing the takeoff; the heading, or
     /// None if it can't be stood at.
     fn prepare(&self, sim: &mut PlayerSim<'_>, j: &Jump) -> Option<f64> {
-        let mut heights: Vec<Heights> = self
-            .initial
-            .iter()
-            .map(|&(floor, ceiling)| Heights { floor, ceiling })
-            .collect();
+        // (the map's own heights, but for what the jump needs moved: put back and set sector
+        // by sector, not the whole map's made anew for each try of each jump. On a map of
+        // thirteen thousand sectors and thirty thousand jumps that was most of four minutes)
+        let fixed = |(floor, ceiling): (f64, f64)| {
+            (
+                super::physics::to_fixed(floor),
+                super::physics::to_fixed(ceiling),
+            )
+        };
+        match sim.moved.take() {
+            Some(moved) => {
+                for s in moved {
+                    sim.heights[s] = fixed(self.initial[s]);
+                }
+            }
+            None => sim.heights = self.initial.iter().copied().map(fixed).collect(),
+        }
+        let mut moved = Vec::new();
         for &(s, h) in &j.requires {
             let init = self.initial[s];
             if (h.floor, h.ceiling) == init {
@@ -501,23 +513,17 @@ impl JumpLab {
             {
                 for (ts, hs) in t {
                     if let Some(first) = hs.first() {
-                        heights[*ts] = *first;
+                        sim.heights[*ts] = fixed((first.floor, first.ceiling));
+                        moved.push(*ts);
                     }
                 }
             }
         }
         for &(s, h) in &j.requires {
-            heights[s] = h;
+            sim.heights[s] = fixed((h.floor, h.ceiling));
+            moved.push(s);
         }
-        sim.heights = heights
-            .iter()
-            .map(|h| {
-                (
-                    super::physics::to_fixed(h.floor),
-                    super::physics::to_fixed(h.ceiling),
-                )
-            })
-            .collect();
+        sim.moved = Some(moved);
         sim.place((j.runup.0.round(), j.runup.1.round()), self.start_angle);
         for _ in 0..4 {
             sim.step(Controls::default());

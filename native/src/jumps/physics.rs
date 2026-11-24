@@ -419,6 +419,8 @@ pub struct PlayerSim<'a> {
     world: &'a World,
     /// per sector: (floor, ceiling) now
     pub heights: Vec<(Fixed, Fixed)>,
+    /// the sectors whose heights aren't the map's own (None: not known, any may be)
+    pub(super) moved: Option<Vec<usize>>,
     pub x: Fixed,
     pub y: Fixed,
     pub z: Fixed,
@@ -436,7 +438,9 @@ pub struct PlayerSim<'a> {
 
 impl<'a> PlayerSim<'a> {
     pub fn new(lab: &'a JumpLab, world: &'a World) -> Self {
-        Self::with_heights(lab, world, &lab.initial)
+        let mut sim = Self::with_heights(lab, world, &lab.initial);
+        sim.moved = Some(Vec::new());
+        sim
     }
 
     pub(super) fn with_heights(lab: &'a JumpLab, world: &'a World, heights: &[(f64, f64)]) -> Self {
@@ -448,6 +452,7 @@ impl<'a> PlayerSim<'a> {
             lab,
             world,
             heights,
+            moved: None,
             x: 0,
             y: 0,
             z: 0,
