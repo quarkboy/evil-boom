@@ -58,10 +58,34 @@ impl Player {
             .map(|t| (dist((t.x, t.y), pos), (t.x, t.y), t.name, t.id))
             .collect();
         ammo.sort_by(|a, b| a.0.total_cmp(&b.0));
+        // Not for one she has gone for twice already and come away from no richer: there's a
+        // way to it by the map and she doesn't get there (run off it each time by what's
+        // after her, or it's nowhere she can stand), and gone for a third time it's the same
+        // twenty seconds again, for ever. (Memento Mori MAP22: a Shell, a Spider Mastermind
+        // about; "away for the Shell" 151 times, fifty minutes, to the end of the hour.) With
+        // a round gained since, she's got to something: all to go for again.
+        const AMMO_TRIES: u32 = 2;
+        let rounds = obs
+            .ammo
+            .as_ref()
+            .map_or(0, |a| a.iter().map(|&(_, n)| n).sum::<i32>());
+        self.ammo_gone_for.retain(|&(_, _, had)| rounds <= had);
         let mut refused: Vec<i32> = Vec::new();
         for (_, at, name, id) in ammo.into_iter().take(6) {
+            if self
+                .ammo_gone_for
+                .iter()
+                .any(|&(t, n, _)| t == id && n >= AMMO_TRIES)
+            {
+                refused.push(id);
+                continue;
+            }
             if let Some(f) = self.go_to_point(obs, at, &them, "for ammo", clear, true) {
                 self.log(format!("tic {}: out of ammo: away for the {name}", obs.tic));
+                match self.ammo_gone_for.iter_mut().find(|e| e.0 == id) {
+                    Some(e) => e.1 += 1,
+                    None => self.ammo_gone_for.push((id, 1, rounds)),
+                }
                 return Some(f);
             }
             refused.push(id);

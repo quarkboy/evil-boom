@@ -302,6 +302,8 @@ pub struct Player {
     /// away from them out of ammo with none known: since when, and what she had and knew
     /// then (rounds, lines and sectors seen); None: not fled so yet, or better off since
     away_since: Option<(i64, (i32, usize))>,
+    /// ammo gone for out of ammo: the thing, how often, and the rounds she had (`for_ammo`)
+    ammo_gone_for: Vec<(i32, u32, i32)>,
     /// retreats to cover one after another with nothing come of them: how many, when the last
     /// was, and what she'd killed and knew then
     cover_runs: (u32, i64, (i32, Known)),
@@ -394,6 +396,7 @@ impl Player {
             barrel_runs: Vec::new(),
             retreat_tic: -1_000_000_000,
             away_since: None,
+            ammo_gone_for: Vec::new(),
             cover_runs: (0, 0, (0, Known::default())),
             cover_off: (0, 0),
             back_runs: (0, 0, (0, Known::default())),
