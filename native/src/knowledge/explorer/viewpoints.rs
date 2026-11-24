@@ -151,11 +151,11 @@ impl Explorer {
             })
             .collect();
         // Only spots the box can stand at.
-        let seen = self.as_seen();
+        // (`standable`: as she's seen the heights, the list not compared for each spot)
         let centres: Vec<Point> = reach
             .iter()
             .map(|&p| mesh.poly(p).center)
-            .filter(|&c| self.standable_at(c, true, &seen))
+            .filter(|&c| self.standable(c, true))
             .collect();
         let sight = &k.sight;
         let rooms = k.unseen_walls();
