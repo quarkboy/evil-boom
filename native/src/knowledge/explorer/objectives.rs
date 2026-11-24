@@ -1079,6 +1079,18 @@ impl Explorer {
                 continue;
             }
             let (front, back) = nav.map.sides(li);
+            // The pad a teleporter she's taken put her on: its own lines most likely lead back
+            // where she came from, and back may be for good. Left till there's nothing else
+            // but walls (`pads_come_out_on`).
+            if !self.pads_back
+                && back.is_some_and(|b| {
+                    k.teleports
+                        .values()
+                        .any(|&to| nav.poly_at(to).map(|p| nav.sector_of_poly(p)) == Some(b))
+                })
+            {
+                continue;
+            }
             let mut only_now = false;
             if let (Some(f), Some(b)) = (front, back)
                 && !now[f]

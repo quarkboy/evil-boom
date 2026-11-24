@@ -4308,3 +4308,39 @@ was something to be satisfied with, and are now worked on like DOOM and DOOM II.
 gone from CLAUDE.md, CONTRIBUTING.md and TESTING.md. What's said of them above ("held out",
 "stays held out of tuning") was so when written. The three-lives test itself is unchanged:
 DOOM and DOOM II, so its numbers stay comparable with those before.
+
+## Teleporters and floors that go for good: TNT MAP07's first yard (2026-11-24)
+
+The first TNT level worked on after MAP02 and MAP06 that needed more than one rule. Its
+first yard is left by a teleporter across a block that three walk-over lines lower a stage
+at a time; after the second stage the pad is out of reach and the yard is shut for good
+(the level's own softlock: a player who dawdles is shut in too). The pad out in the big
+yard teleports back into it.
+
+What was settled, each a general rule:
+
+- **A floor that sinks once stepped on is run off only when it's going down** (or her
+  flight came over a line that lowers it). The list of such floors says what could happen,
+  not what has.
+- **A wait at an edge is for a floor moving towards the plan's height**, never one moving
+  away from it.
+- **A teleporter on a floor going down under her is "right away"**: offered while its line
+  is still a step she can take as the floors stand this tic, though she already believes
+  the floor down; what she was about gives way to it, and the follower goes on across.
+- **Not over a line she knows takes the floor from before an untried teleporter**, while
+  there's a way to the teleporter that doesn't.
+- **The teleporter on a pad another put her on is a last resort before the walls**
+  (`pads_come_out_on`): most likely the way back, and back can be for good. First tried
+  as "later" among the ordinary objectives: it then still came before a switch pressed
+  from a floor that hurts, and took her back into the shut yard twenty minutes in with
+  that switch (the way on) unpressed.
+
+TNT MAP07, skills 1 and 2, the test's four seeds, three lives: 0 of 8 out, then 5 of 8.
+Three-lives test: exits 293 -> 293. The wider rule tried on Memento Mori ("an untried
+teleporter after everything else in reach") cost exits and was reverted; this one is
+only the pad she came out on.
+
+Left: a place she was stranded in is kept as a trap and not gone back into, which here is
+the yard every life must cross: stranded there once, the next life can end standing in
+the start corridor. The trap was the block being down, not the yard. And the fight's legs
+carry her over the stairs' lines (the second and third stage) with the right plan in hand.

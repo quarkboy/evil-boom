@@ -368,6 +368,7 @@ impl Explorer {
         self.harm_allowed = false;
         self.harm_ways_only = false;
         self.wade_switches = false;
+        self.pads_back = false;
         self.wade_floors = false;
         self.dead_ends_whatever = false;
         self.known_again = false;
@@ -397,6 +398,9 @@ impl Explorer {
         }
         if !found {
             found = self.switches_waded_for(obs, hooks);
+        }
+        if !found {
+            found = self.pads_come_out_on(obs, hooks);
         }
         if !found && perceive && self.suspecting == Suspecting::No {
             found = self.suspect_walls(obs, hooks);
@@ -620,6 +624,26 @@ impl Explorer {
             ));
         } else {
             self.wade_switches = false;
+        }
+        found
+    }
+
+    /// Nothing else but the walls: the teleporters on the pads that other teleporters put her
+    /// on. Such a pad's own lines most likely take her back where she came from, and back can
+    /// be for good, so they wait for everything else she can get to, a switch waded for
+    /// too; but they come before the walls, being the way back out of a far room as often.
+    /// (TNT MAP07: the pad in the big yard goes back into the first one, which is shut by
+    /// then; taken while a switch in the nukage was still to press, twenty minutes in.)
+    fn pads_come_out_on(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
+        self.pads_back = true;
+        let found = self.safe_then_risky(obs, hooks);
+        if found {
+            self.log.push(format!(
+                "tic {}: nothing else to do but walls: the teleporter on a pad she came out on",
+                obs.tic
+            ));
+        } else {
+            self.pads_back = false;
         }
         found
     }

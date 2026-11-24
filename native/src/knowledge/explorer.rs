@@ -899,6 +899,9 @@ pub struct Explorer {
     /// a switch she can see may be pressed from a floor that hurts (nothing else but walls:
     /// `switches_waded_for`)
     wade_switches: bool,
+    /// the teleporters on the pads that others put her on may be taken (nothing else but
+    /// walls: `pads_come_out_on`)
+    pads_back: bool,
     /// her health when she stepped onto a floor that hurts for a risky objective there (on
     /// purpose, not fallen in), while she's still down on it
     waded: Option<f64>,
@@ -1084,6 +1087,7 @@ impl Explorer {
             harm_allowed: false,
             harm_ways_only: false,
             wade_switches: false,
+            pads_back: false,
             from_dead_end: false,
             waded_dead_end: false,
             waded: None,
