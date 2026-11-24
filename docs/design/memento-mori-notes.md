@@ -1,6 +1,7 @@
 # Memento Mori, level by level (working notes)
 
-> **Status:** in progress, on the branch `memento-mori` (2026-11-23 on). The maintainer's
+> **Status:** paused 2026-11-24 at the maintainer's word, to be picked up again; on the branch
+> `memento-mori`, not pushed, nothing of it on `main` or on the three-lives test yet (2026-11-23 on). The maintainer's
 > brief: custom-WAD compatibility, starting with Memento Mori (`wads/mm_allup/MM.WAD`), every
 > level from a pistol start (the WAD is made for that), all four skills, to find what stops her
 > finishing: switches she doesn't take for switches, and the way levels are built. The
@@ -30,6 +31,27 @@
 | MAP26's door and exit ring (0aedce7) | 16 |
 | MAP14's door, MAP05's switch (f895af5) | 18 |
 | MAP20's ledge and ceiling (575ceee) | 19 |
+
+**All four skills at e0cb7a6, where it's paused** (charmed, seed 1, the hour;
+`out/mm-survey/1124b-*`):
+
+| skill | exits of 32 | not out |
+|---|---|---|
+| 1 | 21 | 09 12 16 17 18 22 23 25 26 30 31 |
+| 2 | 22 | 09 12 16 17 18 22 23 25 30 31 |
+| 3 | 21 | 09 12 16 17 18 22 23 25 28 30 31 |
+| 4 | 19 | 05 09 12 16 17 18 22 23 25 26 28 30 31 |
+
+Against the survey at 575ceee: 19, 20, 19, 18. One seed a level, which says little (see
+MAP27): by eight seeds MAP06, 15, 21 and 27 are the ones mended since, and MAP28 is out
+given two hours. Not out on any skill: 09, 12, 16, 17, 18, 22, 23, 25, 30 (the Icon of
+Sin), 31. MAP05 on skill 4 was out before and isn't on this seed: not looked at.
+
+**To pick up from:** MAP09 (the platform switch, a risky jump dropped with "no route"; the
+stairs lowered twice), MAP12 (the pit's rim: the way planned clear of a rim's ends),
+MAP17 and MAP25 (many restarts, not traced), MAP16 and MAP26 (out on half the seeds in two
+hours), MAP22 (strandings, with endless bullets), MAP31 (no route in principle), then
+with monsters able to hurt her. And the three-lives test for what's here, before `main`.
 
 **All four skills at d298546** (charmed, seed 1, the hour; `out/mm-survey/1124a-*`): skill 1:
 20 of 32 (not out: 09 12 16 17 18 21 22 23 25 26 30 31); skill 2: 21 (04 09 12 16 17 18 21 22
