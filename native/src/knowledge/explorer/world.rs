@@ -118,12 +118,34 @@ impl Explorer {
         // A lift or a timed door she knows comes back to where it rests, wherever she last saw it.
         // Not a crusher stopped where it is: a crusher-stop line leaves it there till something
         // starts it again.
+        // Nor one that something she set off this life has moved for good since: where it
+        // rests is where that left it, not where the map began it. (Memento Mori MAP27: a
+        // walkway raised by a switch from 72 to 256, which a line at its end also works as
+        // a lift. Believed still to come to rest at 72, it was a way up from the floor
+        // below: walked onto low and ridden up. 133 waits under it.)
+        let for_good: BTreeSet<usize> = k
+            .fired
+            .iter()
+            .filter(|f| f.life == k.lives)
+            .filter_map(|f| known.get(&(f.line as i64)).map(|ts| (f, ts)))
+            .filter(|(_, (t, _))| t.permanent())
+            .flat_map(|(f, (_, sectors))| {
+                sectors
+                    .iter()
+                    .copied()
+                    .filter(|&s| !k.doubtful(f.line, s))
+                    .collect::<Vec<_>>()
+            })
+            .collect();
         for (t, sectors) in known.values() {
             if !t.permanent() {
                 for &s in sectors {
                     if t.info.category == Category::Crusher
                         && k.stopped_for(s, now, CRUSHER_STOPPED)
                     {
+                        continue;
+                    }
+                    if for_good.contains(&s) {
                         continue;
                     }
                     add_height(&mut out[s], nav.movers.initial[s]);
