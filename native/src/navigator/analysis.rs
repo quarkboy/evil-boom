@@ -803,6 +803,38 @@ impl<'a> Analysis<'a> {
                 }
             }
         }
+        // (and square in front of the line itself: a long piece of floor has its edges' spots
+        // a hundred apart and its middle's seventy, and a switch in a recess is pressed from
+        // a few units of it either way, none of which need be one of those. TNT MAP06: the
+        // switch that calls a lift back to a walkway 900 long, in a recess in the walkway's
+        // wall, by the lift; "no ground to press it from", and at the top of the lift she
+        // was in a trap)
+        let mid = ((inner.0 + inner2.0) / 2.0, (inner.1 + inner2.1) / 2.0);
+        // (the front is right of a->b)
+        let (fx, fy) = ((b.1 - a.1) / length, -(b.0 - a.0) / length);
+        for d in [PLAYER_RADIUS + 1.0, 32.0, 48.0] {
+            for along in [mid, inner, inner2] {
+                let q = (along.0 + fx * d, along.1 + fy * d);
+                if self.mesh.poly_at(q) == Some(pi)
+                    && crate::mesh::inside(vs, q.0, q.1)
+                    && !self.box_on_wall(q)
+                    && !self.box_on_ledge(q, poly.sector)
+                    && reaches(q)
+                {
+                    let over = self.moving_walls_at(q, poly.sector, li);
+                    if over.is_empty() {
+                        clear = true;
+                    } else if !places.contains(&over) && places.len() < STAND_PLACES {
+                        places.push(over);
+                    }
+                    if good(q) && spots.len() < STAND_PLACES {
+                        spots.push(q);
+                    } else if loose.len() < STAND_PLACES {
+                        loose.push(q);
+                    }
+                }
+            }
+        }
         // (and through the poly's middle, where its edges' spots were all by something: a
         // door's sill between two more doors has room in the middle and none along the walls)
         let (x0, x1, y0, y1) = vs.iter().fold(
