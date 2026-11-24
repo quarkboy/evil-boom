@@ -593,22 +593,59 @@ impl NavCore {
         };
         let sector = self.poly_sector[frm];
         let here = Self::heights_with_doors(st, doors, sector, None);
-        let mut blocking = Vec::new();
-        for gate in gates {
-            for &s in &gate.sectors {
-                if s == sector {
+        // What her box can be over as she goes: the floor she's on, and any floor a step off
+        // one it can be over already. A stair of steps narrower than she is has her box over
+        // two or three at once, each a step above the last, and she's lifted by each in turn
+        // (the game takes the highest floor under her box, and that's a step up from where
+        // the one before left her). Judged from the floor she set out on alone, the second
+        // step was a wall beside the first. (TNT MAP09: the stairs to the red card, steps 16
+        // deep and 16 high, built by a switch and never climbed: "no route".)
+        let others: Vec<(usize, Rc<Vec<Heights>>)> = {
+            let mut seen: Vec<usize> = Vec::new();
+            gates
+                .iter()
+                .flat_map(|g| g.sectors.iter().copied())
+                .filter(|&s| {
+                    s != sector && !seen.contains(&s) && {
+                        seen.push(s);
+                        true
+                    }
+                })
+                .map(|s| (s, Self::heights_with_doors(st, doors, s, Some(frm))))
+                .collect()
+        };
+        let mut over: Vec<Heights> = here.to_vec();
+        let mut stepped: Vec<usize> = Vec::new();
+        loop {
+            let mut more = false;
+            for (s, there) in &others {
+                if stepped.contains(s) {
                     continue;
                 }
-                let there = Self::heights_with_doors(st, doors, s, Some(frm));
-                if !here
+                let onto: Vec<Heights> = there
                     .iter()
-                    .any(|&ha| there.iter().any(|&hb| can_cross(ha, hb)))
-                {
-                    blocking.push(gate.line);
-                    break;
+                    .copied()
+                    .filter(|&hb| over.iter().any(|&ha| can_cross(ha, hb)))
+                    .collect();
+                if !onto.is_empty() {
+                    stepped.push(*s);
+                    over.extend(onto);
+                    more = true;
                 }
             }
+            if !more {
+                break;
+            }
         }
+        let blocking: Vec<usize> = gates
+            .iter()
+            .filter(|g| {
+                g.sectors
+                    .iter()
+                    .any(|s| *s != sector && !stepped.contains(s))
+            })
+            .map(|g| g.line)
+            .collect();
         self.callbacks.fits(portal, blocking)
     }
 

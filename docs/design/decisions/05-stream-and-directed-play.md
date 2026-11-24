@@ -4427,3 +4427,30 @@ TNT MAP08: the omniscient plan from "no route" to out in 198 s; the eight runs 0
 (one stood the hour, one died). Three-lives test: exits 293 -> 293 (MAP09 +1, MAP14 -1),
 nothing stood the hour; parity all 24 the same. The finder's version went up (37): every
 level's jumps are found again, once.
+
+## TNT MAP09: barrels under a jump, and stairs narrower than she is (2026-11-24)
+
+The maintainer's walkthrough and a look in the game settled both.
+
+- **Barrels under a jump.** The blue card is on a crate jumped to from a balcony; a row of
+  barrels stands on the floor 128 below the flight, and a thing stops her box at any
+  height. The jump simulator had barrels as it has pillars, so the jump failed its check
+  and was thrown away. Jumps are checked with the barrels gone (`world_cleared`), and a
+  route with one waits till the barrels under its flight are cleared (the rule there was
+  for barrels on a landing). Three-lives: exits 293 -> 292, and one run stood the hour,
+  E4M9 skill 3: a fight loop the run now met, not the rule's doing (below). Kept, as what's
+  so in the game.
+- **Steps narrower than she is.** The stairs to the red card are 16 deep and 16 high: her
+  box is over two or three at once. The fit at a portal judged every floor near it from
+  the floor she set out on, so the second step was a wall beside the first and the stairs
+  were out of reach the moment they were built. Her box can be over the floor she's on and
+  any floor a step off one it can be over already (`NavCore::fits_now`, `gate_blockers`):
+  the game takes the highest floor under her box, each a step up from where the last left
+  her. Charmed, MAP09 from 180 of 439 sectors in the hour to out in 2005 s; the eight
+  mortal runs 0 out -> 2 (five died, one stood the hour). Three-lives: exits 292 -> 294
+  (E4M7 +2), nothing new stood the hour.
+
+Open, from the E4M9 run: with plasma going into a ledge's lip she flips every tic between
+"stepping for a shot (its way blocked)" and "shooting on the way", neither done; the
+give-ups do fire (21 times) but each is a rest, and she goes at the same Demon again.
+The flip is the first thing to trace.

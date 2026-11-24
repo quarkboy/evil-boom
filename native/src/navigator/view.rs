@@ -379,30 +379,59 @@ impl Navigator {
                 add_height(&mut here, h);
             }
         }
-        let mut out = Vec::new();
-        for (li, _, (f, b)) in gates {
+        let heights_of = |s: usize| {
+            let mut hs = states[s].clone();
+            if let Some(d) = doors
+                .and_then(|d| d.get(&s))
+                .filter(|d| d.users.contains(&frm))
+            {
+                for &h in &d.heights {
+                    add_height(&mut hs, h);
+                }
+            }
+            hs
+        };
+        // (what her box can be over, stepping from floor to floor: as `NavCore::fits_now`)
+        let mut others: Vec<(usize, Vec<Heights>)> = Vec::new();
+        for (_, _, (f, b)) in gates {
             for s in [*f, *b] {
-                if s == sector {
-                    continue;
-                }
-                let mut hs = states[s].clone();
-                if let Some(d) = doors
-                    .and_then(|d| d.get(&s))
-                    .filter(|d| d.users.contains(&frm))
-                {
-                    for &h in &d.heights {
-                        add_height(&mut hs, h);
-                    }
-                }
-                if !here
-                    .iter()
-                    .any(|&ha| hs.iter().any(|&hb| can_cross(ha, hb)))
-                {
-                    out.push(*li);
-                    break;
+                if s != sector && !others.iter().any(|(o, _)| *o == s) {
+                    others.push((s, heights_of(s)));
                 }
             }
         }
+        let mut over = here;
+        let mut stepped: Vec<usize> = Vec::new();
+        loop {
+            let mut more = false;
+            for (s, there) in &others {
+                if stepped.contains(s) {
+                    continue;
+                }
+                let onto: Vec<Heights> = there
+                    .iter()
+                    .copied()
+                    .filter(|&hb| over.iter().any(|&ha| can_cross(ha, hb)))
+                    .collect();
+                if !onto.is_empty() {
+                    stepped.push(*s);
+                    over.extend(onto);
+                    more = true;
+                }
+            }
+            if !more {
+                break;
+            }
+        }
+        let out: Vec<usize> = gates
+            .iter()
+            .filter(|(_, _, (f, b))| {
+                [*f, *b]
+                    .into_iter()
+                    .any(|s| s != sector && !stepped.contains(&s))
+            })
+            .map(|(li, _, _)| *li)
+            .collect();
         out
     }
 
