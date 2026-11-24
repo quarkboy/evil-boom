@@ -551,14 +551,18 @@ impl NavCore {
         doors: Option<&Doors>,
         s: usize,
         frm: Option<usize>,
-    ) -> Vec<Heights> {
-        let mut out = st.heights(s).to_vec();
-        if let Some(door) = doors.and_then(|d| d.get(&s))
-            && frm.is_none_or(|p| door.users.contains(&p))
-        {
-            out.extend_from_slice(&door.heights);
+    ) -> Rc<Vec<Heights>> {
+        // (the sector's own list, shared, where no door adds to it: this is asked at every
+        // edge of every flood, and a copy made each time was a tenth of a flood's cost)
+        let own = st.heights(s);
+        match doors.and_then(|d| d.get(&s)) {
+            Some(door) if frm.is_none_or(|p| door.users.contains(&p)) => {
+                let mut out = own.to_vec();
+                out.extend_from_slice(&door.heights);
+                Rc::new(out)
+            }
+            _ => own,
         }
-        out
     }
 
     /// Does the box get through `portal` from poly `frm` with the gate lines round it as the
@@ -604,8 +608,8 @@ impl NavCore {
     ) -> bool {
         let hs_a = Self::heights_with_doors(st, doors, e.from_sector, None);
         let hs_b = Self::heights_with_doors(st, doors, e.to_sector, Some(frm));
-        for &ha in &hs_a {
-            for &hb in &hs_b {
+        for &ha in hs_a.iter() {
+            for &hb in hs_b.iter() {
                 if self.lands(e, ha, hb) {
                     return true;
                 }
@@ -667,13 +671,14 @@ impl NavCore {
         }
         let late_a = after.get(&e.from_sector);
         let hs_a: Vec<Heights> = Self::heights_with_doors(st, doors, e.from_sector, None)
-            .into_iter()
+            .iter()
+            .copied()
             .filter(|h| !late || late_a.is_none_or(|v| v.contains(h)))
             .collect();
         let hs_b = Self::heights_with_doors(st, doors, e.to_sector, Some(frm));
         let late_b = after.get(&e.to_sector);
         for &ha in &hs_a {
-            for &hb in &hs_b {
+            for &hb in hs_b.iter() {
                 if self.lands(e, ha, hb) {
                     out[usize::from(late_b.is_some_and(|v| v.contains(&hb)))] = true;
                 }
