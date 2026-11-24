@@ -31,6 +31,12 @@
 | MAP14's door, MAP05's switch (f895af5) | 18 |
 | MAP20's ledge and ceiling (575ceee) | 19 |
 
+**All four skills at d298546** (charmed, seed 1, the hour; `out/mm-survey/1124a-*`): skill 1:
+20 of 32 (not out: 09 12 16 17 18 21 22 23 25 26 30 31); skill 2: 21 (04 09 12 16 17 18 21 22
+25 30 31); skill 3: 20 (09 12 15 16 17 18 22 25 26 28 30 31); skill 4: 18 (04 09 12 15 16 17 21
+22 23 25 27 28 30 31). MAP06 out on all four. (MAP26 at skill 3 was out on seed 1 before and
+isn't now: it's out on 1 seed of 5 on the old build and 0 of 4 on this: never sound.)
+
 **All four skills at 575ceee** (charmed, seed 1, the hour; `out/mm-survey/1123g-*`):
 
 | skill | exits of 32 | not out |
@@ -248,6 +254,24 @@ what "(risky)" refuses, and why what's left when nothing else is isn't tried
    And her model of walk-over lines has them crossed by her middle, on the line itself:
    which ground a line can be set off from, and "couldn't cross it", go by that. The game
    is more generous. Not looked into further.
+
+**MAP27: three things; out on UV, 8 seeds of 8** (charmed; 1,479-2,655 s, one restart in
+the eight; it was 4 of 8 at 2e9daec and 1 of 8 in between, by my own change, the first here).
+1. *My gun-line rule, too wide.* f585751 offered a door's gun line (893) from outside
+   the yellow door of the room before it: shot as that door opened, nothing came of it,
+   "tried". Now from behind what's shut only where that's opened *for good*.
+2. *A way out that only walking finds.* She's shut in a nukage hall (207) whose way out
+   is a door opened by a line across the hall's far end. A floor that hurts is never walked
+   to see what walking it sets off. Now it is, as a last resort (`floors_waded_across`).
+3. *Held up on a sill.* A switch in an alcove 16 deep at the top of a lift's shaft: pressed
+   from the lift, which goes down and leaves her box on the alcove's sill, 400 up. Planned
+   from "the floor she's on", nothing was in reach. Now a lip counts for that only if her
+   box gets out of its piece of the map by some side; else she's planned from under her
+   middle.
+How it was found is worth keeping: the survey's one seed said "stuck"; eight seeds on each
+build kept from each commit said which commit, and that the level had never been sound
+(strandings on every build). **One seed a level says little here: eight, and the count of
+restarts, before and after.**
 
 **MAP22: a cave with no way out, by the model.** Twice in the hour she took a teleporter into
 a water cave (sectors 315, 316, 327, 328, 333, 339, 341, 548, 549) and was stranded there:
