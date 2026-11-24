@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 
 use crate::map::{
     Blockmap, Linedef, MapData, MapSeg, Node, Sector, Sidedef, Subsector, Thing, Vertex,
+    NF_SUBSECTOR,
 };
 
 /// Lumps that may follow a map marker, in any of the three map formats.
@@ -303,15 +304,35 @@ pub fn load_map(wad: &Wad, map_name: &str, texture_wads: &[&Wad]) -> Result<MapD
             tag: u16_at(r, 24),
         })
         .collect();
-    // standard nodes only (extended/GL nodes are left empty)
+    // The nodes: the classic lumps, or ZDoom's extended nodes in NODES (`XNOD`: what a map too
+    // big for the classic ones is built with). Compressed (`ZNOD`) and GL nodes aren't read:
+    // the map is refused, in words, where it used to load with no nodes and she saw nothing.
     let (ssectors, nodes_raw) = (lump("SSECTORS"), lump("NODES"));
-    let extended = |d: &[u8]| {
-        [b"XNOD", b"ZNOD", b"XGLN", b"ZGLN"]
-            .iter()
-            .any(|m| d.starts_with(*m))
-    };
+    let mut vertexes: Vec<Vertex> = vertexes;
     let (mut segs, mut subsectors, mut nodes) = (Vec::new(), Vec::new(), Vec::new());
-    if !ssectors.is_empty() && !extended(ssectors) && !extended(nodes_raw) {
+    if nodes_raw.starts_with(b"XNOD") {
+        let x = extended_nodes(&nodes_raw[4..], vertexes.len())
+            .ok_or_else(|| format!("{map_name}: its extended nodes (XNOD) are cut short"))?;
+        vertexes.extend(x.vertexes);
+        (segs, subsectors, nodes) = (x.segs, x.subsectors, x.nodes);
+    } else if let Some(kind) = [
+        &b"ZNOD"[..],
+        b"XGLN",
+        b"ZGLN",
+        b"XGL2",
+        b"ZGL2",
+        b"XGL3",
+        b"ZGL3",
+    ]
+    .into_iter()
+    .chain([&b"xNd4\0\0\0\0"[..]])
+    .find(|m| nodes_raw.starts_with(m) || ssectors.starts_with(m))
+    {
+        return Err(format!(
+            "{map_name}: nodes of a kind that isn't read ({}): only classic and XNOD are",
+            String::from_utf8_lossy(&kind[..4])
+        ));
+    } else if !ssectors.is_empty() {
         segs = records(lump("SEGS"), 12)
             .map(|r| MapSeg {
                 v1: usize::from(u16_at(r, 0)),
@@ -327,14 +348,21 @@ pub fn load_map(wad: &Wad, map_name: &str, texture_wads: &[&Wad]) -> Result<MapD
             })
             .collect();
         // x, y, dx, dy, front bbox (4), back bbox (4), front child, back child
+        let child = |c: u16| {
+            if c & 0x8000 != 0 {
+                NF_SUBSECTOR | u32::from(c & 0x7FFF)
+            } else {
+                u32::from(c)
+            }
+        };
         nodes = records(nodes_raw, 28)
             .map(|r| Node {
                 x: f64::from(i16_at(r, 0)),
                 y: f64::from(i16_at(r, 2)),
                 dx: f64::from(i16_at(r, 4)),
                 dy: f64::from(i16_at(r, 6)),
-                front: u16_at(r, 24),
-                back: u16_at(r, 26),
+                front: child(u16_at(r, 24)),
+                back: child(u16_at(r, 26)),
             })
             .collect();
     }
@@ -366,6 +394,87 @@ pub fn load_map(wad: &Wad, map_name: &str, texture_wads: &[&Wad]) -> Result<MapD
     };
     whole(&map)?;
     Ok(map)
+}
+
+/// What ZDoom's extended nodes hold (`XNOD`, after the four letters): the vertices the node
+/// builder added, the subsectors, the segs and the nodes.
+struct Extended {
+    vertexes: Vec<Vertex>,
+    segs: Vec<MapSeg>,
+    subsectors: Vec<Subsector>,
+    nodes: Vec<Node>,
+}
+
+/// Read extended nodes. The format, all little-endian: the count of the map's own vertices
+/// the segs use and of those added, then the added ones (x, y in 16.16 fixed point); the
+/// subsectors, a seg count each (their segs follow on from one another); the segs (two
+/// vertices as u32, the line as u16, the side as u8); the nodes (the classic 28 bytes with
+/// the two children as u32, the top bit a subsector's). A vertex numbered past the map's own
+/// is an added one. None if the lump ends before what it says it holds.
+fn extended_nodes(data: &[u8], map_vertexes: usize) -> Option<Extended> {
+    let mut at = 0usize;
+    let mut take = |n: usize| {
+        let part = data.get(at..at.checked_add(n)?)?;
+        at += n;
+        Some(part)
+    };
+    let u32_of = |b: &[u8]| u32::from_le_bytes([b[0], b[1], b[2], b[3]]);
+    let own = u32_of(take(4)?) as usize;
+    let added = u32_of(take(4)?) as usize;
+    let mut vertexes = Vec::new();
+    for r in records(take(added.checked_mul(8)?)?, 8) {
+        let fixed = |b: &[u8]| f64::from(i32::from_le_bytes([b[0], b[1], b[2], b[3]])) / 65536.0;
+        vertexes.push(Vertex {
+            x: fixed(&r[0..4]),
+            y: fixed(&r[4..8]),
+        });
+    }
+    // (the added ones go after all of the map's, whatever count of them the builder used)
+    let vertex = |v: u32| {
+        let v = v as usize;
+        if v < own {
+            v
+        } else {
+            map_vertexes + (v - own)
+        }
+    };
+    let count = u32_of(take(4)?) as usize;
+    let mut subsectors = Vec::new();
+    let mut first_seg = 0usize;
+    for r in records(take(count.checked_mul(4)?)?, 4) {
+        let seg_count = u32_of(r) as usize;
+        subsectors.push(Subsector {
+            seg_count,
+            first_seg,
+        });
+        first_seg = first_seg.checked_add(seg_count)?;
+    }
+    let count = u32_of(take(4)?) as usize;
+    let segs = records(take(count.checked_mul(11)?)?, 11)
+        .map(|r| MapSeg {
+            v1: vertex(u32_of(&r[0..4])),
+            v2: vertex(u32_of(&r[4..8])),
+            linedef: usize::from(u16_at(r, 8)),
+            direction: i16::from(r[10]),
+        })
+        .collect();
+    let count = u32_of(take(4)?) as usize;
+    let nodes = records(take(count.checked_mul(32)?)?, 32)
+        .map(|r| Node {
+            x: f64::from(i16_at(r, 0)),
+            y: f64::from(i16_at(r, 2)),
+            dx: f64::from(i16_at(r, 4)),
+            dy: f64::from(i16_at(r, 6)),
+            front: u32_of(&r[24..28]),
+            back: u32_of(&r[28..32]),
+        })
+        .collect();
+    Some(Extended {
+        vertexes,
+        segs,
+        subsectors,
+        nodes,
+    })
 }
 
 /// Everything in the map that points at something points at something there: a line's ends
@@ -410,10 +519,10 @@ fn whole(m: &MapData) -> Result<(), String> {
     }
     for (i, n) in m.nodes.iter().enumerate() {
         for child in [n.front, n.back] {
-            let there = if child & 0x8000 != 0 {
-                usize::from(child & 0x7FFF) < m.subsectors.len()
+            let there = if child & NF_SUBSECTOR != 0 {
+                ((child & !NF_SUBSECTOR) as usize) < m.subsectors.len()
             } else {
-                usize::from(child) < m.nodes.len()
+                (child as usize) < m.nodes.len()
             };
             if !there {
                 return no(format!("node {i} has a child that isn't there"));
@@ -427,6 +536,51 @@ fn whole(m: &MapData) -> Result<(), String> {
 mod tests {
     use super::*;
     use crate::test_support::{u16s, wad_bytes};
+
+    /// Extended nodes as ZDoom writes them: the added vertices go after all of the map's
+    /// own, a subsector's segs follow on from the one before, and a child's top bit is a
+    /// subsector's. Cut short, they're refused.
+    #[test]
+    fn extended_nodes_are_read() {
+        let mut d = Vec::new();
+        let u = |d: &mut Vec<u8>, x: u32| d.extend(x.to_le_bytes());
+        u(&mut d, 4); // the map's own vertices the builder used
+        u(&mut d, 1); // one added: (1.5, -2)
+        d.extend((3i32 << 15).to_le_bytes());
+        d.extend((-2i32 << 16).to_le_bytes());
+        u(&mut d, 2); // two subsectors: 3 segs, then 1
+        u(&mut d, 3);
+        u(&mut d, 1);
+        u(&mut d, 4); // four segs
+        for (v1, v2, line, side) in [
+            (0u32, 1u32, 0u16, 0u8),
+            (1, 4, 1, 0),
+            (4, 0, 2, 1),
+            (2, 3, 3, 0),
+        ] {
+            u(&mut d, v1);
+            u(&mut d, v2);
+            d.extend(line.to_le_bytes());
+            d.push(side);
+        }
+        u(&mut d, 1); // one node: its children the two subsectors
+        d.extend(u16s(&[10, 20, 0, 64]));
+        d.extend([0u8; 16]);
+        u(&mut d, 0x8000_0000);
+        u(&mut d, 0x8000_0001);
+        // (a map of six vertices: the added one is its seventh)
+        let x = extended_nodes(&d, 6).expect("read");
+        assert_eq!((x.vertexes[0].x, x.vertexes[0].y), (1.5, -2.0));
+        assert_eq!(
+            (x.subsectors[1].first_seg, x.subsectors[1].seg_count),
+            (3, 1)
+        );
+        assert_eq!((x.segs[1].v1, x.segs[1].v2), (1, 6));
+        assert_eq!((x.segs[2].linedef, x.segs[2].direction), (2, 1));
+        assert_eq!((x.nodes[0].x, x.nodes[0].dy), (10.0, 64.0));
+        assert_eq!(x.nodes[0].back, NF_SUBSECTOR | 1);
+        assert!(extended_nodes(&d[..d.len() - 1], 6).is_none());
+    }
 
     /// A one-room map: a square of four lines, one sector. `vertex`: the first line's second
     /// end, to point it somewhere that isn't there.

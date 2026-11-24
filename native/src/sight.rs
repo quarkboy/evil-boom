@@ -174,7 +174,7 @@ impl Sight {
         };
         match self.nodes.len().checked_sub(1) {
             None => walk.subsector(0),
-            Some(root) => walk.node(u16::try_from(root).unwrap_or(0)),
+            Some(root) => walk.node(u32::try_from(root).unwrap_or(0)),
         }
         walk.out
     }
@@ -199,15 +199,15 @@ struct Walk<'a> {
 }
 
 impl Walk<'_> {
-    fn node(&mut self, child: u16) {
+    fn node(&mut self, child: u32) {
         if self.covered.full() {
             return;
         }
         if child & NF_SUBSECTOR != 0 {
-            self.subsector(usize::from(child & !NF_SUBSECTOR));
+            self.subsector((child & !NF_SUBSECTOR) as usize);
             return;
         }
-        let n = self.sight.nodes[usize::from(child)];
+        let n = self.sight.nodes[child as usize];
         let near = n.child_toward(self.view.x, self.view.y);
         let far = if near == n.front { n.back } else { n.front };
         self.node(near);

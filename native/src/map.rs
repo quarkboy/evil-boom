@@ -10,7 +10,7 @@ use crate::geom::{Point, Seg};
 /// A linedef side that isn't there.
 pub const NO_SIDEDEF: u16 = 0xFFFF;
 /// A BSP child that is a subsector, not a node.
-pub const NF_SUBSECTOR: u16 = 0x8000;
+pub const NF_SUBSECTOR: u32 = 0x8000_0000;
 /// Linedef flags (vanilla, Boom, MBF21).
 pub const ML_BLOCKING: u16 = 0x0001;
 pub const ML_BLOCKMONSTERS: u16 = 0x0002;
@@ -154,13 +154,13 @@ pub struct Node {
     pub y: f64,
     pub dx: f64,
     pub dy: f64,
-    pub front: u16,
-    pub back: u16,
+    pub front: u32,
+    pub back: u32,
 }
 
 impl Node {
     /// The child on the side of the partition line that (x, y) is on.
-    pub fn child_toward(&self, x: f64, y: f64) -> u16 {
+    pub fn child_toward(&self, x: f64, y: f64) -> u32 {
         if self.dx * (y - self.y) - self.dy * (x - self.x) < 0.0 {
             self.front
         } else {

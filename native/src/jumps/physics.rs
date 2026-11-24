@@ -263,7 +263,7 @@ struct SimNode {
     dx: Fixed,
     dy: Fixed,
     /// [front, back]
-    children: [u16; 2],
+    children: [u32; 2],
 }
 
 /// The blockmap in fixed point.
@@ -816,14 +816,14 @@ impl<'a> PlayerSim<'a> {
                 .poly_at((to_units(x), to_units(y)))
                 .map(|p| self.lab.mesh.poly(p).sector);
         };
-        let mut child = last as u16;
+        let mut child = last as u32;
         while child & NF_SUBSECTOR == 0 {
-            let n = &nodes[usize::from(child)];
+            let n = &nodes[child as usize];
             child = n.children[usize::from(dmul_scale32_positive(y - n.y, n.dx, n.x - x, n.dy))];
         }
         self.world
             .subsector_sectors
-            .get(usize::from(child & !NF_SUBSECTOR))
+            .get((child & !NF_SUBSECTOR) as usize)
             .copied()
     }
 

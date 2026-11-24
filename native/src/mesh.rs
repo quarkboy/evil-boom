@@ -343,15 +343,15 @@ impl Mesh {
         ];
         fn descend(
             m: &MapData,
-            child: u16,
+            child: u32,
             poly: Vec<Point>,
             out: &mut HashMap<usize, Vec<Point>>,
         ) {
             if child & NF_SUBSECTOR != 0 {
-                out.insert(usize::from(child & !NF_SUBSECTOR), poly);
+                out.insert((child & !NF_SUBSECTOR) as usize, poly);
                 return;
             }
-            let n = m.nodes[usize::from(child)];
+            let n = m.nodes[child as usize];
             let (o, d) = ((n.x, n.y), (n.dx, n.dy));
             let front = clip(&poly, o, d, true);
             let back = clip(&poly, o, d, false);
@@ -359,7 +359,7 @@ impl Mesh {
             descend(m, n.back, back, out);
         }
         let mut by_subsector: HashMap<usize, Vec<Point>> = HashMap::default();
-        match u16::try_from(m.nodes.len()) {
+        match u32::try_from(m.nodes.len()) {
             Ok(0) => {
                 by_subsector.insert(0, world);
             }
@@ -685,9 +685,9 @@ impl Mesh {
         };
         let mut child = self.nodes[last].child_toward(x, y);
         while child & NF_SUBSECTOR == 0 {
-            child = self.nodes[usize::from(child)].child_toward(x, y);
+            child = self.nodes[child as usize].child_toward(x, y);
         }
-        let ss = usize::from(child & !NF_SUBSECTOR);
+        let ss = (child & !NF_SUBSECTOR) as usize;
         let Some(group) = self.pieces.get(&ss) else {
             return self.polys.get(ss).and_then(|p| p.as_ref()).map(|_| ss);
         };
