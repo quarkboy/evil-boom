@@ -455,18 +455,7 @@ impl Explorer {
                     && (exit_polys.is_empty() || open || !exit_polys.is_subset(g))
             });
             if risk_it || keeps {
-                // (a teleporter she's never taken may be the last she sees of all this: where
-                // it leads is the unknown, and so is the way back. It waits for what else
-                // there is to do here, as a drop does. Memento Mori MAP15: the yellow card
-                // lies down a drop in a part of the level left by teleporter and not come
-                // back to. On half the seeds she took the teleporter with the card unseen,
-                // twenty steps away, and was the rest of the hour without it.)
-                let all = o.kind == Kind::Teleporter;
-                lost.push(if all {
-                    reach.clone()
-                } else {
-                    gone.unwrap_or_default()
-                });
+                lost.push(gone.unwrap_or_default());
                 kept.push(o);
             }
         }
