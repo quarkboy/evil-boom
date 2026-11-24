@@ -39,6 +39,16 @@ const HAZARD_FLATS: [&str; 7] = [
 
 impl Knowledge {
     fn see_subsector(&mut self, ss: usize) {
+        // (once: its polys are known from then on. Every subsector in view was put through
+        // this every tic, a list made and a set searched for each, thousands a tic where
+        // the view is long)
+        if self.subsectors_seen.len() <= ss {
+            let all = self.nav.map.subsectors.len().max(ss + 1);
+            self.subsectors_seen.resize(all, false);
+        }
+        if std::mem::replace(&mut self.subsectors_seen[ss], true) {
+            return;
+        }
         let nav = Rc::clone(&self.nav);
         self.seen_polys.extend(nav.mesh.subsector_polys(ss));
     }
@@ -92,18 +102,31 @@ impl Knowledge {
         for &ss in &seen.subsectors {
             self.see_subsector(ss);
         }
-        let mut in_view: BTreeSet<usize> = BTreeSet::new();
+        // (the sectors in view: each taken once, by a flag, however many of its lines are
+        // seen; the set made of them after)
+        let mut flagged = vec![false; m.sectors.len()];
+        let mut viewed: Vec<usize> = Vec::new();
+        let mut view = |s: usize| {
+            let new = !std::mem::replace(&mut flagged[s], true);
+            if new {
+                viewed.push(s);
+            }
+            new
+        };
         for &li in &seen.through {
             // Not on the automap, but the floor across it is in view.
             let (f, b) = m.sides(li);
             for s in [f, b].into_iter().flatten() {
-                in_view.insert(s);
-                self.sectors.insert(s);
+                if view(s) {
+                    self.sectors.insert(s);
+                }
             }
         }
         for &li in &seen.drawn {
             let (f, b) = m.sides(li);
-            in_view.extend([f, b].into_iter().flatten());
+            for s in [f, b].into_iter().flatten() {
+                view(s);
+            }
             // (the front is right of v1->v2)
             let (v1, v2) = m.line_seg(li);
             if (v2.0 - v1.0) * (obs.y - v1.1) - (v2.1 - v1.1) * (obs.x - v1.0) < 0.0 {
@@ -118,9 +141,10 @@ impl Knowledge {
             self.visited.insert(poly);
             let on_floor = obs.z.is_none_or(|z| z <= obs.heights[sector].floor + 1.0);
             self.feel(if on_floor { Some(sector) } else { None }, obs);
-            in_view.insert(sector);
+            view(sector);
             self.sectors.insert(sector);
         }
+        let in_view: BTreeSet<usize> = viewed.into_iter().collect();
         if let Some(last) = &self.last
             && let (Some(now), Some(before)) = (obs.suits, last.suits)
             && now > before

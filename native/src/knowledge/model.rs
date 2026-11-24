@@ -217,6 +217,8 @@ pub struct Knowledge {
     pub crossed: BTreeSet<usize>,
     /// polys seen into (or in front of a mapped line)
     pub seen_polys: BTreeSet<usize>,
+    /// by subsector: its polys are in `seen_polys` already
+    subsectors_seen: Vec<bool>,
     pub heard: Vec<Heard>,
     /// sector stood on -> did it hurt
     pub felt: BTreeMap<usize, bool>,
@@ -257,6 +259,9 @@ pub struct Knowledge {
     looks: std::cell::OnceCell<Vec<bool>>,
     /// which lines are the face of a block that looks like a lift (`lift_face`: worked out once)
     lift_faces: std::cell::OnceCell<BTreeSet<usize>>,
+    /// the sector each of the map's things lies in (None: off the mesh), found when first
+    /// asked (`known_things`)
+    thing_sectors: std::cell::OnceCell<Vec<Option<usize>>>,
     /// a radiation suit on till this tic
     pub suit_until: Option<i64>,
     /// tries at the level so far
@@ -414,6 +419,7 @@ impl Knowledge {
             visited: BTreeSet::new(),
             crossed: BTreeSet::new(),
             seen_polys: BTreeSet::new(),
+            subsectors_seen: Vec::new(),
             heard: Vec::new(),
             felt: BTreeMap::new(),
             missed_jumps: BTreeMap::new(),
@@ -430,6 +436,7 @@ impl Knowledge {
             changed_floor: BTreeMap::new(),
             looks: std::cell::OnceCell::new(),
             lift_faces: std::cell::OnceCell::new(),
+            thing_sectors: std::cell::OnceCell::new(),
             suit_until: None,
             lives: 1,
             events: Vec::new(),
@@ -746,17 +753,22 @@ impl Knowledge {
     /// The map's things in sectors she has seen (at the skill played).
     pub fn known_things(&self) -> Vec<crate::map::Thing> {
         let nav = &self.nav;
+        // (where a thing of the map lies doesn't change: found once. Each asking found the
+        // poly under every thing of the level again, eight thousand of them on Sunder MAP15,
+        // and it's asked several times for each list of what she could do)
+        let sectors = self.thing_sectors.get_or_init(|| {
+            nav.map
+                .things
+                .iter()
+                .map(|t| nav.mesh.poly_at((t.x, t.y)).map(|p| nav.sector_of_poly(p)))
+                .collect()
+        });
         nav.map
             .things
             .iter()
-            .filter(|t| {
-                t.in_skill(nav.skill)
-                    && nav
-                        .mesh
-                        .poly_at((t.x, t.y))
-                        .is_some_and(|p| self.sectors.contains(&nav.sector_of_poly(p)))
-            })
-            .copied()
+            .zip(sectors)
+            .filter(|(t, s)| t.in_skill(nav.skill) && s.is_some_and(|s| self.sectors.contains(&s)))
+            .map(|(t, _)| *t)
             .collect()
     }
 
