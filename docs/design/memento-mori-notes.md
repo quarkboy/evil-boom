@@ -287,6 +287,34 @@ believed to come back to rest at its *starting* height, so the walkway was "a wa
 waited under 133 times. Now a floor moved for good rests where that left it. MAP27 UV:
 8 of 8, 1,430-2,168 s.
 
+**MAP21: one thing; out on 6 seeds of 8 at skill 3** (it was 0 of 8, a restart in each).
+Two walls left to try in a hall below her, down a drop she'd not get back up, all of the
+hall seen: "a drop into somewhere with no way back and nothing there to try", refused,
+and she stood above it till the level began again. Refusing keeps what she has; with
+nothing else to do she has nothing to keep. Now a last resort takes that drop
+(`dead_ends_gone_into`).
+
+**MAP28: slow, not stuck.** Out on 4 seeds of 4 given two hours (4,240-4,809 s), on none in
+one. From minute 25 to minute 50 she sees nothing new and tries walls; what ends it is a
+door behind a timed lift whose switch she first tries at 2,887 s. Why so late isn't traced.
+
+**MAP23: the fight's, not the way's.** 127,000 of monster health and more killed than the
+level counts (they come back): the hour goes on fighting from a pistol start. Out on 1 or
+2 seeds of 8, at 2,981 s and later. Left.
+
+**MAP22 again.** Without endless bullets she's out of ammo with a Spider Mastermind about
+from 531 s and gets nowhere (178-418 of 560 sectors); the fight had her "away for the
+Shell" 151 times, twenty seconds each, which is mended (a thing gone for twice with no
+round gained isn't gone for a third time) without her getting any further. With endless
+bullets and two hours: out on 2 seeds of 4 (3,645 s and 4,407 s), three to twelve
+restarts a run. One of those restarts is my own `floors_waded_across`, which walks her
+into a pit of slime with no way out (she'd have had nothing to do and begun again there
+anyway).
+
+**Two hours instead of one** (skill 3, four seeds): MAP28 4 of 4; MAP16 2; MAP26 2; MAP18 1;
+MAP21 0 (before its fix); MAP22 0. So MAP28 is only slow; the others have something that
+more time doesn't mend.
+
 **MAP22: a cave with no way out, by the model.** Twice in the hour she took a teleporter into
 a water cave (sectors 315, 316, 327, 328, 333, 339, 341, 548, 549) and was stranded there:
 the reach from the pad is those nine and no trigger. The way on is past a pit 128 across
