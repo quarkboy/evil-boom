@@ -216,6 +216,39 @@ with no way back *that she knows of*; pressing it is what makes the way back), M
 what "(risky)" refuses, and why what's left when nothing else is isn't tried
 (`EVIL_DEBUG_NO_ROUTE=1` prints each refusal).
 
+**MAP12: one thing mended, one found and not; not out.**
+1. *A lift stowed in a ceiling.* The way down from a room is a lift (sector 125) whose floor
+   and ceiling are one height: wall on every side. A line across the room's door calls it
+   as she comes in, and so do its own faces (597-599). It came down, went back up while she
+   looked where it led, and the door had shut behind her. Its faces were plain walls to
+   her. Now the side of something she knows moves, standing as a wall, is a thing to press
+   (`on_a_mover`): 144 -> 208 of 226 sectors seen.
+2. *The pit by the blue card, and how the game sets off a walk-over line.* The switch that
+   opens the blue card's chamber (1068) is down a pit whose rim lines raise posts round the
+   pit, for whoever has dropped in (inside, more lines raise the pit's floor again). She
+   sets the rim off from outside, every time: going from one 16-wide strip beside the pit
+   to another she rounds the pit's corner six units out, never over the pit. Traced tic by
+   tic: the game fires a walk-over line when her *box* is on it and her *middle* changes
+   sides of the line carried on past its ends (P_TryMove: each line the box met is asked
+   which side she's on now and was before). So a line is set off by passing within 16 of
+   its end. With the posts up there's no way into the pit, and the level can't be finished:
+   "nothing left to do" on the platform, then the platform kept as a trap and refused in
+   every life after, and the lives after stranded sooner.
+   Tried, none kept:
+   - not walking to a spot where her box is out over a drop: out in 2,659 s on one seed
+     (skill 3, endless bullets), stuck on the other eleven of twelve, and 11 of parity's
+     24 runs went another way;
+   - only where the whole poly is rim: no better, and as many runs changed;
+   - no portals under 6 wide (the slivers along the rim): she rounds the corner by the
+     next way;
+   - a guard in the follower that goes wide round the end of a drop's rim: wedged her at
+     rims everywhere (15-22 restarts a run).
+   What it wants is the way planned clear of a rim's ends by her box, as it is of a wall's,
+   where there's room: in the path's funnel, not in the steering. Not done.
+   And her model of walk-over lines has them crossed by her middle, on the line itself:
+   which ground a line can be set off from, and "couldn't cross it", go by that. The game
+   is more generous. Not looked into further.
+
 **MAP22: a cave with no way out, by the model.** Twice in the hour she took a teleporter into
 a water cave (sectors 315, 316, 327, 328, 333, 339, 341, 548, 549) and was stranded there:
 the reach from the pad is those nine and no trigger. The way on is past a pit 128 across
