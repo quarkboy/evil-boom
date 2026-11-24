@@ -172,17 +172,29 @@ impl Core {
 }
 
 /// Heights from a `States` for the core.
-struct StatesSource(Vec<Rc<Vec<Heights>>>);
+/// (A sector's are made ready when first asked for: a search asks for those of the sectors
+/// it gets to, and making every sector's ready for every search, a list apiece, was a sixth
+/// of her thinking on a map of thirteen thousand, in the allocator.)
+struct StatesSource<'a> {
+    states: &'a States,
+    made: Vec<Option<Rc<Vec<Heights>>>>,
+}
 
-impl StatesSource {
-    fn new(states: &States) -> Self {
-        StatesSource(states.iter().map(|hs| Rc::new(hs.clone())).collect())
+impl<'a> StatesSource<'a> {
+    fn new(states: &'a States) -> Self {
+        StatesSource {
+            states,
+            made: vec![None; states.len()],
+        }
     }
 }
 
-impl HeightSource for StatesSource {
+impl HeightSource for StatesSource<'_> {
     fn heights(&mut self, sector: usize) -> Rc<Vec<Heights>> {
-        self.0.get(sector).cloned().unwrap_or_default()
+        let Some(slot) = self.made.get_mut(sector) else {
+            return Rc::default();
+        };
+        Rc::clone(slot.get_or_insert_with(|| Rc::new(self.states[sector].clone())))
     }
 }
 
