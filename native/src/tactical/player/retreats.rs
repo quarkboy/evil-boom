@@ -599,13 +599,28 @@ impl Player {
     /// Is poly `p` in a pocket of the ground she knows: somewhere small with one narrow way in
     /// (`pockets`), that a few of them in its mouth would shut her in?
     pub(super) fn in_pocket(&self, p: usize) -> bool {
-        let known = self.explorer.knowledge.known_polys();
+        // (the ground she knows and its measures, made when she knows of more of it; not for
+        // each spot asked about, nor to find the answer's on file)
+        let k = &self.explorer.knowledge;
+        let known = k.seen_polys.len() + k.visited.difference(&k.seen_polys).count();
         let mut memo = self.pocketed.borrow_mut();
-        if memo.0 != known.len() {
-            *memo = (known.len(), Default::default());
+        if memo.as_ref().is_none_or(|m| m.known != known) {
+            let polys = k.known_polys();
+            *memo = Some(Pocketed {
+                known,
+                measures: crate::pockets::Measures::new(&self.explorer.nav.mesh, &polys),
+                polys,
+                answers: Default::default(),
+            });
         }
-        *memo.1.entry(p).or_insert_with(|| {
-            crate::pockets::Ground::new(&self.explorer.nav.mesh, &known)
+        let Pocketed {
+            polys,
+            measures,
+            answers,
+            ..
+        } = memo.as_mut().expect("just made");
+        *answers.entry(p).or_insert_with(|| {
+            crate::pockets::Ground::measured(&self.explorer.nav.mesh, polys, measures)
                 .around(p, self.fight.tune.retreat.pocket_area)
                 .is_some()
         })

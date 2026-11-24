@@ -288,6 +288,15 @@ struct Retreat {
     route: RouteFollower,
 }
 
+/// The ground she knows, as it was when she knew of `known` polys: its measures, and for the
+/// polys asked about, whether each is in a pocket (`Player::in_pocket`).
+struct Pocketed {
+    known: usize,
+    polys: std::collections::BTreeSet<usize>,
+    measures: crate::pockets::Measures,
+    answers: std::collections::BTreeMap<usize, bool>,
+}
+
 pub struct Player {
     pub explorer: Explorer,
     fight: Fight,
@@ -334,7 +343,7 @@ pub struct Player {
     wait_until: i64,
     /// which polys are in a pocket of the ground she knows (`pockets`), as far as asked: for
     /// that many polys known
-    pocketed: std::cell::RefCell<(usize, std::collections::BTreeMap<usize, bool>)>,
+    pocketed: std::cell::RefCell<Option<Pocketed>>,
     /// the things lying about that she's seen (items, and whatever else isn't a monster or a
     /// missile), by what and where (`what_where`): seen when the floor they're on was in her view with them on it
     things_seen: BTreeSet<(&'static str, i32, i32)>,

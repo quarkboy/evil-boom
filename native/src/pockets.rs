@@ -51,20 +51,28 @@ fn area(vertices: &[Point]) -> f64 {
         / 2.0
 }
 
-/// The ground's polys' areas, and the area of the connected piece each is in.
-pub struct Ground<'a> {
-    mesh: &'a Mesh,
-    polys: &'a BTreeSet<usize>,
+/// The ground's measures: its polys' areas, the area of the connected piece each is in, and
+/// which of the mesh's polys are of it. Made once for a ground and held (`Ground::measured`):
+/// the fight asks about one spot at a time, and making them for each spot asked about was a
+/// fifth of her thinking on a big map.
+#[derive(Clone)]
+pub struct Measures {
     areas: BTreeMap<usize, f64>,
     piece: BTreeMap<usize, f64>,
+    /// by poly: is it of the ground?
+    member: Vec<bool>,
 }
 
-impl<'a> Ground<'a> {
-    pub fn new(mesh: &'a Mesh, polys: &'a BTreeSet<usize>) -> Ground<'a> {
+impl Measures {
+    pub fn new(mesh: &Mesh, polys: &BTreeSet<usize>) -> Measures {
         let areas: BTreeMap<usize, f64> = polys
             .iter()
             .map(|&p| (p, area(&mesh.poly(p).vertices)))
             .collect();
+        let mut member = vec![false; polys.last().map_or(0, |&p| p + 1)];
+        for &p in polys {
+            member[p] = true;
+        }
         let mut piece: BTreeMap<usize, f64> = BTreeMap::new();
         for &root in polys {
             if piece.contains_key(&root) {
@@ -74,7 +82,7 @@ impl<'a> Ground<'a> {
             while let Some(p) = todo.pop() {
                 for &q in &mesh.poly(p).portals {
                     let o = mesh.portals[q].other(p);
-                    if polys.contains(&o) && seen.insert(o) {
+                    if member.get(o) == Some(&true) && seen.insert(o) {
                         todo.push(o);
                     }
                 }
@@ -82,11 +90,44 @@ impl<'a> Ground<'a> {
             let whole: f64 = seen.iter().map(|p| areas[p]).sum();
             piece.extend(seen.into_iter().map(|p| (p, whole)));
         }
+        Measures {
+            areas,
+            piece,
+            member,
+        }
+    }
+
+    fn has(&self, p: usize) -> bool {
+        self.member.get(p) == Some(&true)
+    }
+}
+
+/// A ground (some of the mesh's polys) and its measures.
+pub struct Ground<'a> {
+    mesh: &'a Mesh,
+    polys: &'a BTreeSet<usize>,
+    measures: std::borrow::Cow<'a, Measures>,
+}
+
+impl<'a> Ground<'a> {
+    pub fn new(mesh: &'a Mesh, polys: &'a BTreeSet<usize>) -> Ground<'a> {
         Ground {
             mesh,
             polys,
-            areas,
-            piece,
+            measures: std::borrow::Cow::Owned(Measures::new(mesh, polys)),
+        }
+    }
+
+    /// The ground of `polys`, its measures made already (`Measures::new`, of the same polys).
+    pub fn measured(
+        mesh: &'a Mesh,
+        polys: &'a BTreeSet<usize>,
+        measures: &'a Measures,
+    ) -> Ground<'a> {
+        Ground {
+            mesh,
+            polys,
+            measures: std::borrow::Cow::Borrowed(measures),
         }
     }
 
@@ -98,7 +139,7 @@ impl<'a> Ground<'a> {
     ) -> impl Iterator<Item = usize> + 'b {
         self.mesh.poly(p).portals.iter().copied().filter(move |&q| {
             let o = self.mesh.portals[q].other(p);
-            self.polys.contains(&o) && !inside.contains(&o)
+            self.measures.has(o) && !inside.contains(&o)
         })
     }
 
@@ -110,9 +151,9 @@ impl<'a> Ground<'a> {
     /// The pocket round poly `p`, no bigger than `max_area`, if it's in one: the biggest such
     /// with the narrowest mouth.
     pub fn around(&self, p: usize, max_area: f64) -> Option<Pocket> {
-        let whole = *self.piece.get(&p)?;
+        let whole = *self.measures.piece.get(&p)?;
         let mut inside = BTreeSet::from([p]);
-        let mut a = self.areas[&p];
+        let mut a = self.measures.areas[&p];
         // (the narrowest mouth so far: its width, and how many polys were in then)
         let mut best: Option<(f64, usize)> = None;
         let mut taken = vec![p];
@@ -147,7 +188,7 @@ impl<'a> Ground<'a> {
                         let other = self.mesh.portals[q].other(o);
                         if inside.contains(&other) {
                             shut += self.wide(q);
-                        } else if self.polys.contains(&other) {
+                        } else if self.measures.has(other) {
                             opens += self.wide(q);
                         }
                     }
@@ -157,7 +198,7 @@ impl<'a> Ground<'a> {
             let Some((_, o)) = next else { break };
             inside.insert(o);
             taken.push(o);
-            a += self.areas[&o];
+            a += self.measures.areas[&o];
         }
         let (width, n) = best?;
         let polys: BTreeSet<usize> = taken[..n].iter().copied().collect();
@@ -173,7 +214,7 @@ impl<'a> Ground<'a> {
             mouth,
             at,
             width,
-            area: polys.iter().map(|p| self.areas[p]).sum(),
+            area: polys.iter().map(|p| self.measures.areas[p]).sum(),
             polys,
         })
     }
