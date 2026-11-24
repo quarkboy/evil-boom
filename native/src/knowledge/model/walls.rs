@@ -569,6 +569,36 @@ impl Knowledge {
             })
     }
 
+    /// Is the line a side of something she knows moves (a sector some line she's learned
+    /// moves) that stands as a wall now? Having watched a block of wall go down and come
+    /// back, a player presses it.
+    /// (Memento Mori MAP12: a lift stowed in a room's ceiling, floor to ceiling a wall on
+    /// every side, brought down once by the line across the room's door as she came in. It
+    /// went back up while she looked at where it led, the door had shut behind her, and its
+    /// own faces, which call it, were walls to her: stranded.)
+    pub fn on_a_mover(&self, li: usize) -> bool {
+        let (Some(front), Some(back)) = self.nav.map.sides(li) else {
+            return false;
+        };
+        // (and a wall to her as it stands: nothing to walk onto or under. One she can walk
+        // through as it is has shown her what it is; offered whatever its height, every
+        // side of every lift and door she'd worked was a thing to press: 10 of parity's 24
+        // runs went another way, mostly longer and for more damage)
+        let at = |s: usize| {
+            self.seen_heights
+                .get(&s)
+                .copied()
+                .unwrap_or(self.nav.movers.initial[s])
+        };
+        let (f, b) = (at(front), at(back));
+        !crate::nav::can_cross(f, b)
+            && !crate::nav::can_cross(b, f)
+            && self
+                .learned
+                .values()
+                .any(|moved| moved.contains(&front) || moved.contains(&back))
+    }
+
     /// Does the wall stand out from those round it (`odd`): a mark, as a player reads it?
     pub fn marked(&self, li: usize) -> bool {
         self.odd(li).0

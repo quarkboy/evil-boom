@@ -594,6 +594,7 @@ impl Knowledge {
                             || self.door_shaped(li)
                             || (i.trigger.used() && self.before_a_door(li))
                             || (i.trigger.used() && self.under_a_key(li))
+                            || (i.trigger.used() && self.on_a_mover(li))
                             || self.in_the_way.contains(&li)
                             || self.locked.contains(&li)
                             || (i.trigger.shot() && self.odd(li).0))
