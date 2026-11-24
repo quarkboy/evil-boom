@@ -68,6 +68,54 @@ impl Explorer {
                     .then(dist(a.2, obs.pos()).total_cmp(&dist(b.2, obs.pos())))
             });
         }
+        // One wall stands for all the walls with the same thing behind them, and the one
+        // chosen may be one she can't stand before (a short facet in a corner): then another
+        // of them she can, no less suspect. (TNT MAP02: the start room's only way out is a
+        // block of rock in its corner, a lift; its three faces one thing, the one chosen a
+        // facet wedged against the room's wall. Never offered, and nothing else to do: stood
+        // in the first room, every run.)
+        if found.iter().any(|w| !self.standable(w.2, false)) {
+            use crate::knowledge::model::Wall;
+            let survey = self.wall_survey(obs);
+            let behind_of = |li: usize| {
+                survey
+                    .iter()
+                    .find(|(l, _)| *l == li)
+                    .and_then(|(_, w)| match w {
+                        Wall::Suspect { behind, .. } => *behind,
+                        Wall::Skip(_) => None,
+                    })
+            };
+            let pos = obs.pos();
+            for w in found.iter_mut() {
+                if self.standable(w.2, false) {
+                    continue;
+                }
+                let Some(behind) = behind_of(w.1) else {
+                    continue;
+                };
+                let other = survey
+                    .iter()
+                    .filter_map(|(li, x)| match x {
+                        Wall::Suspect {
+                            signs,
+                            behind: b,
+                            stand,
+                            aim,
+                        } if *b == Some(behind)
+                            && signs.score() >= w.0
+                            && self.standable(*stand, false) =>
+                        {
+                            Some((signs.score(), *li, *stand, *aim))
+                        }
+                        _ => None,
+                    })
+                    .min_by(|a, b| dist(a.2, pos).total_cmp(&dist(b.2, pos)));
+                if let Some(o) = other {
+                    *w = o;
+                }
+            }
+        }
         found
             .into_iter()
             // The ones with more to go on, then the nearest of them: not the nearest first and then
