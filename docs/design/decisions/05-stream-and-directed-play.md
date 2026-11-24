@@ -4340,7 +4340,19 @@ Three-lives test: exits 293 -> 293. The wider rule tried on Memento Mori ("an un
 teleporter after everything else in reach") cost exits and was reverted; this one is
 only the pad she came out on.
 
-Left: a place she was stranded in is kept as a trap and not gone back into, which here is
-the yard every life must cross: stranded there once, the next life can end standing in
-the start corridor. The trap was the block being down, not the yard. And the fight's legs
-carry her over the stairs' lines (the second and third stage) with the right plan in hand.
+- **Going on across the sinking floor, the route keeps her** (added after): for the second
+  it takes, nothing ends the objective and the fight only shoots, as in a jump. The fight's
+  "falling back to cover" and a heal had each taken her off the block in that half second.
+  MAP07 on skill 2, 16 seeds: 4 out, 9 standing the hour, 3 died -> 6, 6, 4; thirteen runs
+  the same. Three-lives test: all 544 runs the same (it doesn't come up in DOOM or DOOM II).
+
+A correction: this note first said the yard was kept as a trap after a stranding and not
+gone back into. It isn't so. The start corridor and the yard are one closed piece of floor,
+she starts each life inside it, and a trap she's standing in is ignored already. What lost
+the later lives was the block sunk again with the right plan in hand.
+
+Left: on skill 2 six of sixteen runs still stand the hour. The fight's legs carry her over
+the stairs' lines (the second and third stage) before she's at the block at all. And the
+maintainer's thought, not built: a trap every way on goes through (nothing left to do
+without it) lifted, once, on dying; to build when a level shows one that's further in than
+where she starts.

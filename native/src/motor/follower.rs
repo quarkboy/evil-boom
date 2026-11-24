@@ -354,6 +354,9 @@ pub struct RouteFollower {
     pub failed_presses: Vec<(Point, usize)>,
     drops_ok: BTreeSet<(usize, usize, [u64; 4])>,
     edge_wait: bool,
+    /// going on across a floor that's sinking before a teleporter of her way, till this tic
+    /// (`unexpected_drop`): nothing takes her off the route meanwhile
+    dash_until: i64,
     /// a lift on its way round across her path: which, as last seen, and since when
     lift_back: Option<(usize, Heights, i64)>,
     settle_logged: i64,
@@ -484,6 +487,7 @@ impl RouteFollower {
             failed_presses: Vec::new(),
             drops_ok: BTreeSet::new(),
             edge_wait: false,
+            dash_until: -1,
             lift_back: None,
             settle_logged: -1,
             cross_ready: false,
@@ -651,6 +655,12 @@ impl RouteFollower {
     /// Running over (or off) floors going down under her: done only on a floor that stays put.
     pub fn running_off(&self) -> bool {
         self.jump.run.is_some()
+    }
+
+    /// Going on across a floor that's sinking before a teleporter of her way: a second at
+    /// most, and stopped for anything the teleporter's out of reach.
+    pub fn dashing(&self, tic: i64) -> bool {
+        tic <= self.dash_until
     }
 
     /// At a jump's run-up with what it needs there, settling on the spot square on to the

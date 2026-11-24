@@ -630,7 +630,7 @@ impl Explorer {
         let committed = self
             .follower
             .as_ref()
-            .is_some_and(|f| f.in_jump() || f.jumps_ahead());
+            .is_some_and(|f| f.in_jump() || f.jumps_ahead() || f.dashing(obs.tic));
         let k = &self.knowledge;
         if obj.kind == Kind::Frontier && !committed {
             let known = k.known_polys();

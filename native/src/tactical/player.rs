@@ -981,8 +981,8 @@ impl Player {
         last: Option<&Controls>,
         icon: Option<boss::Turn>,
     ) -> Controls {
-        // In a jump, or crossing a crusher it has timed, the route keeps the legs and the fight
-        // only shoots.
+        // In a jump, or crossing a crusher it has timed, or going on across a floor sinking
+        // before its teleporter, the route keeps the legs and the fight only shoots.
         let free = matches!(icon, Some(boss::Turn::Free(_)));
         let stay = matches!(icon, Some(boss::Turn::Stay(_)));
         // ...as on the last dash to a sphere: nothing she could do instead is worth more than
@@ -992,7 +992,7 @@ impl Player {
                 .explorer
                 .follower
                 .as_ref()
-                .is_some_and(|f| f.jumping() || f.crossing_crusher())
+                .is_some_and(|f| f.jumping() || f.crossing_crusher() || f.dashing(obs.tic))
             || crate::debug::timed("player.dashing", || self.fight.dashing(&self.explorer, obs))
             // ...and with the sphere on, on her way to what it's for: straight there, through
             // whatever's between, shooting only what's ahead. Its seconds aren't for them.

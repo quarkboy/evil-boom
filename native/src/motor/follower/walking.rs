@@ -70,6 +70,10 @@ const UNSTICKS_BEFORE_REPLAN: i32 = 2;
 const WEDGED_TRIES: i32 = 3;
 const WEDGED_STEP: f64 = 12.0;
 
+/// tics nothing takes her off a route going on across a floor sinking before its teleporter (a
+/// step's height of sinking, and a little)
+const DASH_TICS: i64 = 35;
+
 impl RouteFollower {
     /// Walking the segment's track: what comes before the walking (a jump or a barrel in hand,
     /// a floor going down under her, a lift to wait for, a drop, a crusher, a door), getting
@@ -1200,19 +1204,29 @@ impl RouteFollower {
                 .get(ns)
                 .is_some_and(|was| obs.heights[ns].floor < was.floor - 0.01);
             let step = self.step();
-            let line_from_it = step.action == Action::Cross
+            let from_it = |li: usize| {
+                let (f, back) = view.nav.map.sides(li);
+                f == Some(ns) && back.is_some_and(|k| can_cross(b, obs.heights[k]))
+            };
+            // (the step's own line, or one its path goes through on the way)
+            let line_from_it = (step.action == Action::Cross
                 && step.trigger.as_ref().is_some_and(|t| {
                     t.info.category == crate::specials::Category::Teleport
-                        && t.linedef().is_some_and(|li| {
-                            let (f, back) = view.nav.map.sides(li);
-                            f == Some(ns) && back.is_some_and(|k| can_cross(b, obs.heights[k]))
-                        })
+                        && t.linedef().is_some_and(from_it)
+                }))
+                || path.teleports.iter().any(|&(left, arrived)| {
+                    view.nav.teleports.iter().any(|t| {
+                        t.dest_poly == arrived && t.src_polys.contains(&left) && from_it(t.line)
+                    })
                 });
             if sinking && line_from_it {
-                self.log.add(
-                    obs.tic,
-                    format!("sector {ns} going down before the teleporter: on across it now"),
-                );
+                if obs.tic > self.dash_until {
+                    self.log.add(
+                        obs.tic,
+                        format!("sector {ns} going down before the teleporter: on across it now"),
+                    );
+                }
+                self.dash_until = obs.tic + DASH_TICS;
                 return Drop::None;
             }
             let why = format!("unexpected drop into sector {ns}");
