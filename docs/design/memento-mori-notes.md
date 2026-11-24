@@ -43,9 +43,26 @@
 | 4 | 19 | 05 09 12 16 17 18 22 23 25 26 28 30 31 |
 
 Against the survey at 575ceee: 19, 20, 19, 18. One seed a level, which says little (see
-MAP27): by eight seeds MAP06, 15, 21 and 27 are the ones mended since, and MAP28 is out
+MAP27): by eight seeds MAP06, 15, 21 and 27 are the ones mended since (MAP15 by the teleporter rule, since taken out: below), and MAP28 is out
 given two hours. Not out on any skill: 09, 12, 16, 17, 18, 22, 23, 25, 30 (the Icon of
 Sin), 31. MAP05 on skill 4 was out before and isn't on this seed: not looked at.
+
+**On the three-lives test** (2026-11-24; 544 runs, against `main` at 35a0ee5 played the
+same day, `out/lives/1124-*`):
+
+| | exits | progress | damage | deaths | secs | stood the hour |
+|---|---|---|---|---|---|---|
+| main | 297 | 0.804 | 0.771 | 1.088 | 525 | 0 |
+| the branch whole (e0cb7a6) | 287 | 0.802 | 0.771 | 1.119 | 541 | 1 (DOOM II MAP03 HMP) |
+| without the teleporter rule (929dfbd) | 292 | 0.803 | 0.772 | 1.081 | 524 | 0 |
+
+The teleporter rule (f8340f4) was the cost: the MAP03 run stands the hour from that commit
+on and on none before, and on eight levels that lost exits it took 46 exits to 38. Taken
+out (929dfbd); MAP15 of Memento Mori goes back to 3 seeds of 8 till there's a narrower
+rule. What's left is exits -0.009 (s.e. 0.010), run for run, with deaths and time level
+and nothing stood: within the noise of the test, leaning a little under. By level, more:
+MAP06 +2, MAP18 +2, E2M5, MAP10, MAP26; less, one each: E1M9, E2M2, E2M7, E3M7, E4M7, E4M9,
+MAP12, MAP19, MAP22, MAP28, MAP30, MAP32. Not yet taken to `main`.
 
 **To pick up from:** MAP09 (the platform switch, a risky jump dropped with "no route"; the
 stairs lowered twice), MAP12 (the pit's rim: the way planned clear of a rim's ends),
