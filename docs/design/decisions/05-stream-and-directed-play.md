@@ -4356,3 +4356,44 @@ the stairs' lines (the second and third stage) before she's at the block at all.
 maintainer's thought, not built: a trap every way on goes through (nothing left to do
 without it) lifted, once, on dying; to build when a level shows one that's further in than
 where she starts.
+
+## Sunder as a stress test: where her time went (2026-11-24)
+
+Sunder (Insane_Gazebo's set: MAP15 has 65,473 lines, 13,028 sectors, 5,651 monsters,
+33,432 jumps found) was put under a sampling profiler (`--features profile`,
+`tools/dev/profile.py`; the machine has no perf) to find what in her thinking grows with
+the size of a level when it needn't. Not to make Sunder play at speed. First its maps had
+to load at all: they're built with extended nodes (`XNOD`), read since that day.
+
+Every one of these gave the same play (parity the same on all 24 runs, the Sunder runs the
+same to the kill), so each is a cost and nothing else:
+
+| what | was | now |
+|---|---|---|
+| the jump check's setting up of each try | every sector's heights listed and turned to fixed point, per try | the sectors the jump moves |
+| the jump simulator's gathering of lines | "taken already?" by searching those taken | a mark a line |
+| a level's jump checks | made again at every start | kept by level and build (`checks_rs_*`) |
+| "can her box stand here" | the heights as seen listed and compared, per spot | listed once a tic |
+| finding the poly under a point | the BSP walked from the root | from the lowest node over that 64-unit square (`NodeGrid`) |
+| looks at walls not seen yet | retaken at each listing | kept while the seen heights hold (`Looks`) |
+| a probe of the simulator at given heights | every sector's heights turned to fixed point, per probe | shared between probes at the same heights |
+| a flood or path search | every sector's heights boxed before it began | a sector's when first asked for; shared at each edge |
+| "is this spot in a pocket" | the known ground measured for each spot; the pocket's inside gone through at each step of its growing | measured once per known ground; its edge and its neighbours kept |
+| the monsters' health, tic to tic | a map built and searched each tic | a sorted list |
+| a jump's key | text put together for every jump at every route | once, when the jumps are set |
+| the level's things she knows of | the poly under every thing found at each asking | each thing's sector found once |
+| taking a tic's view in | every subsector and sector in view put into sets, per line | each once, by a flag |
+
+Sunder MAP15, charmed with the chaingun: from the command to the first tic 4 min 30 s, then
+1 min 40 s the first time a build sees the level and 5 s after; play from 23 tics a second
+to about 90. MAP12 from 101 to 164, MAP05 from 117 to 204. DOOM II MAP29, fifteen game
+minutes: thinking 9.4 s to 7.3 s.
+
+What the profiler shows left, none of it a mistake of this kind: her own view each tic (a
+walk of the BSP in front of her, a quarter of her thinking where the view is long); the
+floods and path searches themselves; the engine (a third of the time on MAP12, with 4,890
+monsters awake). Two things seen and left: the hashed maps (`det::HashMap`) use the standard
+library's slow, safe hash, some 5% of her thinking, and a faster one would change the order
+some of them are gone through in, so not a change that changes nothing; and the fight makes
+a map of every monster in the level each tic (`note_deaths`), 5% on Sunder and nothing on a
+level of a few hundred.
