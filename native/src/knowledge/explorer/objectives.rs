@@ -203,7 +203,11 @@ impl Explorer {
         let (reach, states_all, _) = view.saturate(here, &states, keys, &[], &actions);
         self.stats.saturate_secs += t_sat.elapsed().as_secs_f64();
         let lap = crate::debug::lap("explorer.reach", t_sat);
-        if crate::debug::on().reach == Some(obs.tic) {
+        // (EVIL_DEBUG_REACH=<tic>: the first time it's worked out at or after that tic)
+        static DUMPED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if crate::debug::on().reach.is_some_and(|t| obs.tic >= t)
+            && !DUMPED.swap(true, std::sync::atomic::Ordering::Relaxed)
+        {
             let sectors: BTreeSet<usize> = reach.iter().map(|&p| nav.sector_of_poly(p)).collect();
             self.log.push(format!(
                 "tic {}: reach from poly {here} (sector {}): {} polys, sectors {sectors:?}",
