@@ -159,6 +159,21 @@ pub struct Node {
 }
 
 impl Node {
+    /// The child every one of `corners` goes to, if it's the same one for all with something
+    /// to spare (a millionth of a unit off the line: far more than the arithmetic's own error),
+    /// so that any point among them goes there too (`NodeGrid`).
+    pub fn child_of_all(&self, corners: [Point; 4]) -> Option<u32> {
+        let spare = 1e-6 * (self.dx.abs() + self.dy.abs());
+        let side = |(x, y): Point| self.dx * (y - self.y) - self.dy * (x - self.x);
+        if corners.iter().all(|&c| side(c) < -spare) {
+            Some(self.front)
+        } else if corners.iter().all(|&c| side(c) > spare) {
+            Some(self.back)
+        } else {
+            None
+        }
+    }
+
     /// The child on the side of the partition line that (x, y) is on.
     pub fn child_toward(&self, x: f64, y: f64) -> u32 {
         if self.dx * (y - self.y) - self.dy * (x - self.x) < 0.0 {
@@ -166,6 +181,98 @@ impl Node {
         } else {
             self.back
         }
+    }
+}
+
+/// Where a search down the BSP for a point may begin: for each square of a grid over the map,
+/// the lowest node (or the subsector) that the whole square lies under. Every point of the
+/// square goes the same way at each node above it, so a search from there ends where a search
+/// from the root does, some thirty nodes sooner on a big map. (By the profiler the search
+/// from the root was the costliest single thing in her thinking on DOOM II's own maps, and
+/// a quarter of the jump check's time on Sunder's.)
+#[derive(Clone, Debug, Default)]
+pub struct NodeGrid {
+    x0: i32,
+    y0: i32,
+    cell: i32,
+    columns: usize,
+    rows: usize,
+    start: Vec<u32>,
+}
+
+impl NodeGrid {
+    /// The grid for the map's nodes. `whole(node, corners)`: the child all four corners of a
+    /// square go to at that node, if they all go to the same one, and surely (a side test
+    /// that's exact in whole numbers; one in floating point with something to spare).
+    pub fn build(m: &MapData, mut whole: impl FnMut(usize, [Point; 4]) -> Option<u32>) -> NodeGrid {
+        let Some(root) = m.nodes.len().checked_sub(1) else {
+            return NodeGrid::default();
+        };
+        let (mut lo, mut hi) = (
+            (f64::INFINITY, f64::INFINITY),
+            (f64::NEG_INFINITY, f64::NEG_INFINITY),
+        );
+        for v in &m.vertexes {
+            lo = (lo.0.min(v.x), lo.1.min(v.y));
+            hi = (hi.0.max(v.x), hi.1.max(v.y));
+        }
+        if !(lo.0 <= hi.0 && lo.1 <= hi.1) {
+            return NodeGrid::default();
+        }
+        let (x0, y0) = (lo.0.floor() as i32, lo.1.floor() as i32);
+        let (wide, high) = (hi.0.ceil() as i32 - x0 + 1, hi.1.ceil() as i32 - y0 + 1);
+        // (squares of 64, or as much bigger as keeps a huge map's grid to a few megabytes)
+        let mut cell = 64;
+        while (i64::from(wide) / i64::from(cell) + 1) * (i64::from(high) / i64::from(cell) + 1)
+            > 1 << 20
+        {
+            cell *= 2;
+        }
+        let (columns, rows) = ((wide / cell + 1) as usize, (high / cell + 1) as usize);
+        let mut start = Vec::with_capacity(columns * rows);
+        for row in 0..rows {
+            for column in 0..columns {
+                let (x, y) = (
+                    f64::from(x0 + column as i32 * cell),
+                    f64::from(y0 + row as i32 * cell),
+                );
+                let side = f64::from(cell);
+                let corners = [(x, y), (x + side, y), (x, y + side), (x + side, y + side)];
+                let mut at = root as u32;
+                while at & NF_SUBSECTOR == 0 {
+                    match whole(at as usize, corners) {
+                        Some(child) => at = child,
+                        None => break,
+                    }
+                }
+                start.push(at);
+            }
+        }
+        NodeGrid {
+            x0,
+            y0,
+            cell,
+            columns,
+            rows,
+            start,
+        }
+    }
+
+    /// Where to begin for the point at (x, y) (whole map units, rounded down): None off the
+    /// grid, where the search is from the root.
+    pub fn start(&self, x: i64, y: i64) -> Option<u32> {
+        if self.cell == 0 {
+            return None;
+        }
+        let (dx, dy) = (x - i64::from(self.x0), y - i64::from(self.y0));
+        if dx < 0 || dy < 0 {
+            return None;
+        }
+        let (column, row) = (
+            (dx / i64::from(self.cell)) as usize,
+            (dy / i64::from(self.cell)) as usize,
+        );
+        (column < self.columns && row < self.rows).then(|| self.start[row * self.columns + column])
     }
 }
 

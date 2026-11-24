@@ -25,7 +25,7 @@
 
 use super::JumpLab;
 use crate::geom::{cells, Point};
-use crate::map::{Blockmap, MapData, NF_SUBSECTOR};
+use crate::map::{Blockmap, MapData, NodeGrid, NF_SUBSECTOR};
 use std::sync::OnceLock;
 
 pub type Fixed = i64;
@@ -266,6 +266,18 @@ struct SimNode {
     children: [u32; 2],
 }
 
+impl SimNode {
+    /// R_PointInSubsector's step: the child on the point's side of the node's line.
+    fn child_toward(&self, x: Fixed, y: Fixed) -> u32 {
+        self.children[usize::from(dmul_scale32_positive(
+            y - self.y,
+            self.dx,
+            self.x - x,
+            self.dy,
+        ))]
+    }
+}
+
 /// The blockmap in fixed point.
 struct Blocks {
     x: Fixed,
@@ -299,6 +311,8 @@ impl Blocks {
 pub struct World {
     lines: Vec<SimLine>,
     nodes: Vec<SimNode>,
+    /// where a search of the nodes for a point may begin (`sector_at`)
+    node_grid: NodeGrid,
     /// per subsector: its sector
     subsector_sectors: Vec<usize>,
     blocks: Option<Blocks>,
@@ -330,7 +344,7 @@ impl World {
                 }
             })
             .collect();
-        let nodes = m
+        let nodes: Vec<SimNode> = m
             .nodes
             .iter()
             .map(|n| SimNode {
@@ -341,6 +355,16 @@ impl World {
                 children: [n.front, n.back],
             })
             .collect();
+        // (the game's own side test, in its whole numbers: exact, so four corners that agree
+        // speak for all between them)
+        let node_grid = NodeGrid::build(m, |i, corners| {
+            let n = &nodes[i];
+            let mut sides = corners
+                .iter()
+                .map(|&(x, y)| n.child_toward(to_fixed(x), to_fixed(y)));
+            let first = sides.next()?;
+            sides.all(|c| c == first).then_some(first)
+        });
         let things = lab
             .obstacle_grid
             .iter()
@@ -361,6 +385,7 @@ impl World {
         World {
             lines,
             nodes,
+            node_grid,
             subsector_sectors: subsector_sectors(m),
             blocks: m.blockmap.as_ref().map(Blocks::new),
             things,
@@ -856,10 +881,13 @@ impl<'a> PlayerSim<'a> {
                 .poly_at((to_units(x), to_units(y)))
                 .map(|p| self.lab.mesh.poly(p).sector);
         };
-        let mut child = last as u32;
+        let mut child = self
+            .world
+            .node_grid
+            .start(x >> 16, y >> 16)
+            .unwrap_or(last as u32);
         while child & NF_SUBSECTOR == 0 {
-            let n = &nodes[child as usize];
-            child = n.children[usize::from(dmul_scale32_positive(y - n.y, n.dx, n.x - x, n.dy))];
+            child = nodes[child as usize].child_toward(x, y);
         }
         self.world
             .subsector_sectors

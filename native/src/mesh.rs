@@ -6,7 +6,7 @@
 
 use crate::det::{HashMap, HashSet};
 use crate::geom::{cells, Cell, Point};
-use crate::map::{MapData, Node, NF_SUBSECTOR};
+use crate::map::{MapData, Node, NodeGrid, NF_SUBSECTOR};
 use std::fmt;
 
 const EPS: f64 = 0.01;
@@ -262,6 +262,8 @@ pub struct Mesh {
     /// cell -> the linedefs crossing it
     pub line_grid: HashMap<Cell, Vec<usize>>,
     nodes: Vec<Node>,
+    /// where a search of the nodes for a point may begin (`poly_at`)
+    node_grid: NodeGrid,
 }
 
 impl Mesh {
@@ -283,6 +285,7 @@ impl Mesh {
             pieces: HashMap::default(),
             line_grid,
             nodes: m.nodes.clone(),
+            node_grid: NodeGrid::build(m, |n, corners| m.nodes[n].child_of_all(corners)),
         };
         mesh.build_polys(m)?;
         if !obstacles.is_empty() {
@@ -683,7 +686,10 @@ impl Mesh {
         let Some(last) = self.nodes.len().checked_sub(1) else {
             return self.polys.first().and_then(|p| p.as_ref()).map(|_| 0);
         };
-        let mut child = self.nodes[last].child_toward(x, y);
+        let mut child = self
+            .node_grid
+            .start(x.floor() as i64, y.floor() as i64)
+            .unwrap_or(last as u32);
         while child & NF_SUBSECTOR == 0 {
             child = self.nodes[child as usize].child_toward(x, y);
         }
