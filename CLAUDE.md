@@ -40,7 +40,6 @@ Read these first. They hold for you as for any contributor:
 - **Everything Evil reads is terse** and in the second person. Her context is precious.
 - **Realism:** the fight and the exploring go by what she has seen, heard and learned. Don't add
   an omniscient shortcut without saying so and measuring what it buys.
-- **Held out:** don't test or tune on TNT or Plutonia.
 - **No subagents or worktree helpers** without the maintainer's OK.
 
 ## Where the fight's code is

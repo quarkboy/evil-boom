@@ -4300,3 +4300,11 @@ back is a few polys off as a rule. MAP14, a level of pits and moats, still spend
 choice here, on the places that do have no way back. What else a choice costs on E2M7:
 the walls weighed for secrets (3.4 ms, every wall mapped, each time she knows more), the
 routes (2.4), the spots to see unseen walls from (1.3).
+
+## TNT and Plutonia no longer held out (2026-11-24)
+
+The maintainer's word, with 0.9 released: the two were kept back as final exams till there
+was something to be satisfied with, and are now worked on like DOOM and DOOM II. The rule is
+gone from CLAUDE.md, CONTRIBUTING.md and TESTING.md. What's said of them above ("held out",
+"stays held out of tuning") was so when written. The three-lives test itself is unchanged:
+DOOM and DOOM II, so its numbers stay comparable with those before.

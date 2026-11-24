@@ -34,8 +34,8 @@ code; [docs/TESTING.md](docs/TESTING.md) has the commands.
   See [docs/TESTING.md](docs/TESTING.md).  The score is quite random.  A change that fixes one bit of stuck issue can lower score because it causes the bot to take a different route with a lower survivability rate in other levels, even if it's the "correct" choice.
 - **Several seeds** wherever randomness matters: any fight, shot barrels. Runs without monsters
   or barrels don't depend on the seed.
-- **TNT and Plutonia are held out.** Develop and tune on DOOM and DOOM II only; the other two
-  check that it generalises.  Note, this is an internal rule, so you can test how you want, but I have been leaving those two wads as kind of "final exams" and not scoring them on purpose until I had something I was satisfied with.
+- **TNT and Plutonia are worked on too**, as DOOM and DOOM II are. (They were held out as
+  "final exams" till the first release, 0.9, and not developed or tuned on before it.)
 
 ## Code
 

@@ -231,7 +231,9 @@ artificial to decide by.
 Testing Evil's control layer without Neuro (a mock server, a language model stand-in, Gary) is
 in [NEURO.md](NEURO.md).
 
-## Held out
+## TNT and Plutonia
 
-Don't tune on TNT: Evilution or The Plutonia Experiment. They're kept back as unseen maps, to
-check that what she learned on DOOM and DOOM II holds elsewhere.
+TNT: Evilution and The Plutonia Experiment were held out till the first release (0.9): kept
+back as unseen maps, to check that what she learned on DOOM and DOOM II held elsewhere. Since
+2026-11-24 they're worked on like the other two. The three-lives test is still DOOM and
+DOOM II (`tools/lives/run.sh`); a run of the other two is another test, named for what it is.
