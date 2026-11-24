@@ -284,6 +284,9 @@ pub struct Navigator {
     core: RefCell<view::Core>,
     /// sight with heights, as a shot sees (`sight`): built when first asked for
     los: std::cell::OnceCell<crate::los::LineOfSight>,
+    /// what the jumps were found for, hashed (`jumps::cache_key`): the name their checks are
+    /// kept under too
+    jumps_key: String,
 }
 
 impl Navigator {
@@ -418,8 +421,10 @@ impl Navigator {
             caches: RefCell::new(Caches::default()),
             core: RefCell::new(core),
             los: std::cell::OnceCell::new(),
+            jumps_key: String::new(),
         };
-        let found = jumps::find_jumps_cached(&nav);
+        let (found, key) = jumps::find_jumps_cached(&nav);
+        nav.jumps_key = key;
         nav.set_jumps(found);
         Ok(nav)
     }

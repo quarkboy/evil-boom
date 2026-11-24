@@ -120,7 +120,7 @@ fn cache_key(nav: &Navigator, options: &[Vec<Heights>]) -> String {
 
 /// The jumps across the map's gaps (the finder: JumpLab::find_jumps). Sectors a trigger can
 /// move may take any of their heights; the moved ones a jump needs are its `requires`.
-pub(super) fn find_jumps_cached(nav: &Navigator) -> Vec<Jump> {
+pub(super) fn find_jumps_cached(nav: &Navigator) -> (Vec<Jump>, String) {
     let mut options: Vec<Vec<Heights>> = nav.movers.initial.iter().map(|&h| vec![h]).collect();
     for t in &nav.triggers {
         for (s, hs) in &t.effects {
@@ -129,9 +129,10 @@ pub(super) fn find_jumps_cached(nav: &Navigator) -> Vec<Jump> {
             }
         }
     }
+    let key = cache_key(nav, &options);
     let path = crate::config::out_dir()
         .join("navcache")
-        .join(format!("jumps_rs_{}.json", cache_key(nav, &options)));
+        .join(format!("jumps_rs_{key}.json"));
     let from = |c: Cached| Jump {
         rising: c.rising,
         src_polys: c.src.into_iter().collect(),
@@ -155,7 +156,7 @@ pub(super) fn find_jumps_cached(nav: &Navigator) -> Vec<Jump> {
         .ok()
         .and_then(|t| serde_json::from_str::<Vec<Cached>>(&t).ok())
     {
-        return cached.into_iter().map(from).collect();
+        return (cached.into_iter().map(from).collect(), key);
     }
     let moving: crate::det::HashSet<usize> = nav
         .triggers
@@ -255,14 +256,39 @@ pub(super) fn find_jumps_cached(nav: &Navigator) -> Vec<Jump> {
     // this time then went another way than the same run on jumps kept from last time, by a
     // jump's last bit. Every run reads them now, the first as the rest)
     let Ok(text) = serde_json::to_string(&out) else {
-        return out.into_iter().map(from).collect();
+        return (out.into_iter().map(from).collect(), key);
     };
     let _ = std::fs::write(&path, &text);
-    serde_json::from_str::<Vec<Cached>>(&text)
+    let jumps = serde_json::from_str::<Vec<Cached>>(&text)
         .unwrap_or(out)
         .into_iter()
         .map(from)
-        .collect()
+        .collect();
+    (jumps, key)
+}
+
+/// The simulator's findings on a level's jumps, as kept: each jump's verdict (`check_jumps`)
+/// and how sure each kept one is (`robustness`).
+#[derive(Default, serde::Serialize, serde::Deserialize)]
+struct Checked {
+    verdicts: Vec<String>,
+    sure: Vec<f64>,
+}
+
+/// Where a level's checks are kept: by what its jumps were found for and by the build, since
+/// the checks are the simulator's own doing and a change to it changes them. Nowhere for a
+/// build with changes not committed (two such builds have one name), nor when a jump's
+/// check is being printed.
+fn checks_path(key: &str) -> Option<std::path::PathBuf> {
+    let build = crate::config::COMMIT;
+    if build.ends_with("-dirty") || crate::debug::on().jumps_into.is_some() {
+        return None;
+    }
+    Some(
+        crate::config::out_dir()
+            .join("navcache")
+            .join(format!("checks_rs_{key}_{build}.json")),
+    )
 }
 
 /// The speed a run from standing has after `length`, pushed forward and `side` sideways (the
@@ -283,8 +309,25 @@ impl Navigator {
     /// is. One that comes in too fast to stop on its landing is tried from shorter run-ups
     /// ("ok~x,y": it sticks from there); "soft+N": coasting from N past the takeoff.
     pub fn keep_verified(&mut self) -> JumpChecks {
-        let lab: Vec<LabJump> = self.jumps.iter().map(lab_jump).collect();
-        let verdicts = self.jump_lab.check_jumps(&lab);
+        // (the checks as kept, if this build has checked this level before: every start of a
+        // level ran each of its jumps through the simulator again, half a second on DOOM II's
+        // maps and minutes on a map of thirty thousand jumps, for the same findings)
+        let path = checks_path(&self.jumps_key);
+        let mut kept_checks: Checked = path
+            .as_ref()
+            .and_then(|p| std::fs::read_to_string(p).ok())
+            .and_then(|t| serde_json::from_str(&t).ok())
+            .unwrap_or_default();
+        let mut fresh = false;
+        if kept_checks.verdicts.len() != self.jumps.len() {
+            let lab: Vec<LabJump> = self.jumps.iter().map(lab_jump).collect();
+            kept_checks = Checked {
+                verdicts: self.jump_lab.check_jumps(&lab),
+                sure: Vec::new(),
+            };
+            fresh = true;
+        }
+        let verdicts = kept_checks.verdicts.clone();
         let mut results: Vec<String> = Vec::with_capacity(verdicts.len());
         let mut jumps: Vec<Jump> = Vec::with_capacity(verdicts.len());
         for (j, r) in self.jumps.iter().zip(verdicts) {
@@ -376,12 +419,32 @@ impl Navigator {
         let tried: Vec<usize> = (0..keep.len())
             .filter(|&i| keep[i].1 != UNVERIFIED)
             .collect();
-        let scores = self.jump_lab.robustness(
-            &tried
-                .iter()
-                .map(|&i| lab_jump(&keep[i].0))
-                .collect::<Vec<_>>(),
-        );
+        if kept_checks.sure.len() != tried.len() {
+            kept_checks.sure = self.jump_lab.robustness(
+                &tried
+                    .iter()
+                    .map(|&i| lab_jump(&keep[i].0))
+                    .collect::<Vec<_>>(),
+            );
+            fresh = true;
+        }
+        if let (true, Some(path)) = (fresh, &path)
+            && let Ok(text) = serde_json::to_string(&kept_checks)
+        {
+            if let Some(dir) = path.parent() {
+                let _ = std::fs::create_dir_all(dir);
+                // (one build's checks a level: an older build's go, or the folder grows by
+                // every level for every commit tried)
+                let of_level = format!("checks_rs_{}_", self.jumps_key);
+                for old in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+                    if old.file_name().to_string_lossy().starts_with(&of_level) {
+                        let _ = std::fs::remove_file(old.path());
+                    }
+                }
+            }
+            let _ = std::fs::write(path, text);
+        }
+        let scores = kept_checks.sure;
         let mut sure = vec![0.5; keep.len()];
         for (&i, s) in tried.iter().zip(scores) {
             sure[i] = s;
