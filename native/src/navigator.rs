@@ -260,6 +260,9 @@ pub struct Navigator {
     pub triggers: Vec<TriggerLine>,
     pub teleports: Vec<Teleport>,
     pub jumps: Vec<Jump>,
+    /// each jump's key (`Jump::key`), made when the jumps are set: a string put together from
+    /// six numbers, asked for of every jump at every route looked for once one's been missed
+    pub jump_keys: Vec<String>,
     /// per poly: its teleports, then its jumps
     pub tele_from: Vec<Vec<TeleEdge>>,
     /// per portal: does the box fit through somewhere
@@ -408,6 +411,7 @@ impl Navigator {
             triggers,
             teleports,
             jumps: Vec::new(),
+            jump_keys: Vec::new(),
             tele_from: Vec::new(),
             portal_fits: w.fits,
             fit: Rc::new(w.fit),
@@ -462,6 +466,7 @@ impl Navigator {
                     && !undoes(j)
             })
             .collect();
+        self.jump_keys = self.jumps.iter().map(Jump::key).collect();
         let mut tele_from: Vec<Vec<TeleEdge>> = vec![Vec::new(); self.mesh.polys.len()];
         for (i, tp) in self.teleports.iter().enumerate() {
             for &p in &tp.src_polys {

@@ -452,23 +452,24 @@ impl Explorer {
             .jumps
             .iter()
             .enumerate()
-            .filter(|(_, j)| {
+            .filter(|&(i, j)| {
                 if j.strafe && !self.strafing_allowed {
                     return true;
                 }
                 if !by_key {
                     return false;
                 }
-                let key = j.key();
-                missed.get(&key).copied().unwrap_or(0) >= limit
-                    || lapsing.is_some_and(|l| l.contains(&key))
+                // (the key as made when the jumps were set, not put together again here)
+                let key = &self.nav.jump_keys[i];
+                missed.get(key).copied().unwrap_or(0) >= limit
+                    || lapsing.is_some_and(|l| l.contains(key))
                     || (knocked
                         && self
                             .knocked_jumps
-                            .get(&key)
+                            .get(key)
                             .is_some_and(|&till| self.clock < till))
-                    || self.unsafe_jumps.contains(&key)
-                    || self.wedge_jumps.contains(&key)
+                    || self.unsafe_jumps.contains(key)
+                    || self.wedge_jumps.contains(key)
             })
             .map(|(i, _)| i)
             .collect()
