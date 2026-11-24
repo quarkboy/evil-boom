@@ -26,6 +26,7 @@
 use super::JumpLab;
 use crate::geom::{cells, Point};
 use crate::map::{Blockmap, MapData, NodeGrid, NF_SUBSECTOR};
+use std::rc::Rc;
 use std::sync::OnceLock;
 
 pub type Fixed = i64;
@@ -472,7 +473,7 @@ pub struct PlayerSim<'a> {
     lab: &'a JumpLab,
     world: &'a World,
     /// per sector: (floor, ceiling) now
-    pub heights: Vec<(Fixed, Fixed)>,
+    pub heights: Rc<Vec<(Fixed, Fixed)>>,
     /// the sectors whose heights aren't the map's own (None: not known, any may be)
     pub(super) moved: Option<Vec<usize>>,
     pub x: Fixed,
@@ -500,10 +501,37 @@ impl<'a> PlayerSim<'a> {
     }
 
     pub(super) fn with_heights(lab: &'a JumpLab, world: &'a World, heights: &[(f64, f64)]) -> Self {
-        let heights = heights
-            .iter()
-            .map(|&(f, c)| (to_fixed(f), to_fixed(c)))
-            .collect();
+        // (the last lists asked with and what they came to in the game's numbers: a probe is
+        // made for one question about one spot, thousands a tic at the same heights, and each
+        // was turning every sector's pair over again. The lists are compared whole)
+        /// A list of heights and what it comes to in the game's numbers.
+        type Turned = (Vec<(f64, f64)>, Rc<Vec<(Fixed, Fixed)>>);
+        thread_local! {
+            // (the last few: the map's own heights and hers as seen are asked with in turn)
+            static LAST: std::cell::RefCell<Vec<Turned>> = const { std::cell::RefCell::new(Vec::new()) };
+        }
+        let heights = LAST.with(|last| {
+            let mut last = last.borrow_mut();
+            if let Some(i) = last.iter().position(|(of, _)| of == heights) {
+                let hit = last.remove(i);
+                last.insert(0, hit);
+            } else {
+                last.truncate(2);
+                last.insert(
+                    0,
+                    (
+                        heights.to_vec(),
+                        Rc::new(
+                            heights
+                                .iter()
+                                .map(|&(f, c)| (to_fixed(f), to_fixed(c)))
+                                .collect(),
+                        ),
+                    ),
+                );
+            }
+            Rc::clone(&last[0].1)
+        });
         PlayerSim {
             lab,
             world,

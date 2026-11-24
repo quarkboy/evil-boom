@@ -494,12 +494,16 @@ impl JumpLab {
         };
         match sim.moved.take() {
             Some(moved) => {
+                let heights = std::rc::Rc::make_mut(&mut sim.heights);
                 for s in moved {
-                    sim.heights[s] = fixed(self.initial[s]);
+                    heights[s] = fixed(self.initial[s]);
                 }
             }
-            None => sim.heights = self.initial.iter().copied().map(fixed).collect(),
+            None => {
+                sim.heights = std::rc::Rc::new(self.initial.iter().copied().map(fixed).collect());
+            }
         }
+        let heights = std::rc::Rc::make_mut(&mut sim.heights);
         let mut moved = Vec::new();
         for &(s, h) in &j.requires {
             let init = self.initial[s];
@@ -513,14 +517,14 @@ impl JumpLab {
             {
                 for (ts, hs) in t {
                     if let Some(first) = hs.first() {
-                        sim.heights[*ts] = fixed((first.floor, first.ceiling));
+                        heights[*ts] = fixed((first.floor, first.ceiling));
                         moved.push(*ts);
                     }
                 }
             }
         }
         for &(s, h) in &j.requires {
-            sim.heights[s] = fixed((h.floor, h.ceiling));
+            heights[s] = fixed((h.floor, h.ceiling));
             moved.push(s);
         }
         sim.moved = Some(moved);
