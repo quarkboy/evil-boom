@@ -449,8 +449,8 @@ impl Explorer {
             }
             let seen: crate::navigator::States = self
                 .as_seen()
-                .into_iter()
-                .map(|(floor, ceiling)| vec![crate::nav::Heights { floor, ceiling }])
+                .iter()
+                .map(|&(floor, ceiling)| vec![crate::nav::Heights { floor, ceiling }])
                 .collect();
             let ground = self
                 .nav

@@ -8,6 +8,7 @@ use crate::domain::Observation;
 use crate::geom::{dist, Point};
 use crate::navigator::{MAX_STEP, PICKUP_BELOW, PLAYER_HEIGHT, PLAYER_RADIUS};
 use std::collections::BTreeSet;
+use std::rc::Rc;
 use std::sync::OnceLock;
 
 /// a pickup's box and hers overlap this near (20 + 16), either way
@@ -97,7 +98,20 @@ impl Explorer {
         // At the heights she last saw, not the map's starting ones: a door opened since, a floor
         // risen.
         let heights = self.as_seen();
-        self.standable_at(q, play, &heights)
+        // (the same list as last asked with: nothing to compare. Asked of every piece of
+        // floor she can get to, each time she lists what she could do)
+        let same = self
+            .standable_cache
+            .borrow()
+            .from
+            .as_ref()
+            .is_some_and(|f| Rc::ptr_eq(f, &heights));
+        if same {
+            return self.stands_cached(q, play, &heights);
+        }
+        let ok = self.standable_at(q, play, &heights);
+        self.standable_cache.borrow_mut().from = Some(heights);
+        ok
     }
 
     /// `standable` with sector `s` where a line she knows the effect of leaves it (each such
@@ -106,7 +120,7 @@ impl Explorer {
         let k = &self.knowledge;
         let seen = self.as_seen();
         let probe_at = |h: crate::nav::Heights| {
-            let mut heights = seen.clone();
+            let mut heights = (*seen).clone();
             heights[s] = (h.floor, h.ceiling);
             let probe = self.nav.jump_lab.at_heights(&heights);
             self.stands_with(q, &heights, &probe)
@@ -123,12 +137,21 @@ impl Explorer {
     /// it's asked of every poly she can get to for each list of what she could do, with the
     /// same answers each time.
     pub(super) fn standable_at(&self, q: Point, play: bool, heights: &[(f64, f64)]) -> bool {
-        let mut cache = self.standable_cache.borrow_mut();
-        if cache.heights != heights {
-            cache.heights.clear();
-            cache.heights.extend_from_slice(heights);
-            cache.answers.clear();
+        {
+            let mut cache = self.standable_cache.borrow_mut();
+            if cache.heights != heights {
+                cache.heights.clear();
+                cache.heights.extend_from_slice(heights);
+                cache.answers.clear();
+                cache.from = None;
+            }
         }
+        self.stands_cached(q, play, heights)
+    }
+
+    /// `standable_at`, the answers kept being for these heights already.
+    fn stands_cached(&self, q: Point, play: bool, heights: &[(f64, f64)]) -> bool {
+        let mut cache = self.standable_cache.borrow_mut();
         let key = (q.0.to_bits(), q.1.to_bits(), play);
         if let Some(&ok) = cache.answers.get(&key) {
             return ok;
@@ -140,16 +163,28 @@ impl Explorer {
     }
 
     /// Each sector as she last saw it (floor, ceiling); the starting heights where she hasn't.
-    pub(super) fn as_seen(&self) -> Vec<(f64, f64)> {
+    /// (Made once for the knowledge's tic and life: what she's seen changes only as she
+    /// takes a tic in, or starts the level again.)
+    pub(super) fn as_seen(&self) -> Rc<Vec<(f64, f64)>> {
         let k = &self.knowledge;
-        self.nav
-            .movers
-            .initial
-            .iter()
-            .enumerate()
-            .map(|(s, &h)| k.seen_heights.get(&s).copied().unwrap_or(h))
-            .map(|h| (h.floor, h.ceiling))
-            .collect()
+        let key = (self.now(), k.lives);
+        if let Some((of, seen)) = &*self.seen_now.borrow()
+            && *of == key
+        {
+            return Rc::clone(seen);
+        }
+        let seen: Rc<Vec<(f64, f64)>> = Rc::new(
+            self.nav
+                .movers
+                .initial
+                .iter()
+                .enumerate()
+                .map(|(s, &h)| k.seen_heights.get(&s).copied().unwrap_or(h))
+                .map(|h| (h.floor, h.ceiling))
+                .collect(),
+        );
+        *self.seen_now.borrow_mut() = Some((key, Rc::clone(&seen)));
+        seen
     }
 
     /// Where to stand to pick up a thing at `item`: there if the box can stand there, else the

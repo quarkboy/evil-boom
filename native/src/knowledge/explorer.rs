@@ -712,6 +712,9 @@ pub struct Explorer {
     secret_suspects: Option<(u64, Vec<Suspect>)>,
     /// what standable() found, at the heights then (see `standable_at`)
     standable_cache: std::cell::RefCell<StandableCache>,
+    /// each sector as she last saw it, as of the knowledge's tic and life it was made for
+    /// (`as_seen`): made once a tic, not for each of the thousands of spots asked about in it
+    seen_now: std::cell::RefCell<Option<SeenNow>>,
     /// the most plan steps a route is searched for in (`drive budget`)
     pub plan_expansions: usize,
     /// times the budget's been halved, and the tic a search last used it up
@@ -937,10 +940,16 @@ pub struct RouteStats {
 /// A wall she suspects: (score, line, where to stand, the wall's middle).
 type Suspect = (f64, usize, Point, Point);
 
+/// The heights as she's seen them, and the knowledge's tic and life they're of.
+type SeenNow = ((i64, i32), Rc<Vec<(f64, f64)>>);
+
 /// standable()'s answers at a set of heights: the heights, and by (x, y, play) bits.
 #[derive(Default)]
 struct StandableCache {
     heights: Vec<(f64, f64)>,
+    /// the list of heights as she's seen them that `heights` was last found the same as
+    /// (`Explorer::seen_now`): asked with that very list again, they needn't be compared
+    from: Option<Rc<Vec<(f64, f64)>>>,
     answers: crate::det::HashMap<(u64, u64, bool), bool>,
 }
 
@@ -1000,6 +1009,7 @@ impl Explorer {
             signature_kept: None,
             refused_now: (i64::MIN, BTreeSet::new()),
             standable_cache: std::cell::RefCell::new(StandableCache::default()),
+            seen_now: std::cell::RefCell::new(None),
             suspects: None,
             secret_suspects: None,
             plan_expansions: PLAN_EXPANSIONS,
