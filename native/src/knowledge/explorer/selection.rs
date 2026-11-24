@@ -290,6 +290,7 @@ impl Explorer {
     /// 10. switches and walls from a floor that hurts, the health margin lifted
     ///     (`with_harm_allowed`);
     /// 11. a repeatable switch at hand that she knows, pressed again (`known_switches_again`).
+    /// 12. the floor that hurts walked across where she hasn't been (`floors_waded_across`).
     ///
     /// With nothing at all, she stands, and where she can get to is noted as a trap.
     pub(super) fn next(&mut self, obs: &Observation, hooks: &mut dyn Hooks) {
@@ -316,6 +317,7 @@ impl Explorer {
         self.harm_allowed = false;
         self.harm_ways_only = false;
         self.wade_switches = false;
+        self.wade_floors = false;
         self.known_again = false;
         self.from_dead_end = false;
         self.resort_wanted = None;
@@ -399,6 +401,9 @@ impl Explorer {
         }
         if !found {
             found = self.known_switches_again(obs, hooks);
+        }
+        if !found {
+            found = self.floors_waded_across(obs, hooks);
         }
         if !found {
             found = self.way_on_whatever(obs, hooks);
@@ -560,6 +565,30 @@ impl Explorer {
             ));
         } else {
             self.wade_switches = false;
+        }
+        found
+    }
+
+    /// Nothing at all else: the floor that hurts, walked across where she hasn't been. What
+    /// only walking sets off is found by walking, and a floor that hurts is otherwise never
+    /// walked for the look of it. (Memento Mori MAP27: shut in a nukage hall whose way out
+    /// is a door that a line across the hall's far end opens. Every wall pressed, then
+    /// "nothing left to do", and stood there.)
+    fn floors_waded_across(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
+        if !self.may(Resort::Harm) {
+            return false;
+        }
+        self.wade_floors = true;
+        self.harm_allowed = true;
+        let found = self.safe_then_risky(obs, hooks);
+        if found {
+            self.log.push(format!(
+                "tic {}: nothing else to do: across the floor that hurts, for what walking it sets off",
+                obs.tic
+            ));
+        } else {
+            self.wade_floors = false;
+            self.harm_allowed = false;
         }
         found
     }

@@ -1226,8 +1226,8 @@ impl Explorer {
         let mut nearest: Vec<(usize, f64, usize)> = Vec::new();
         for &pi in reach {
             let poly = mesh.poly(pi);
-            if k.visited.contains(&pi) || k.damaging(poly.sector) {
-                continue; // (not wading through nukage just to look)
+            if k.visited.contains(&pi) || (k.damaging(poly.sector) && !self.wade_floors) {
+                continue; // (not wading through nukage just to look, while there's anything else)
             }
             if !self.standable(poly.center, false) || self.by_trip_line(poly.center) {
                 // Not a strip too narrow for the box (by a shut door, beside a teleport pad): no way to it
