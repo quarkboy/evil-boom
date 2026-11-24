@@ -122,6 +122,12 @@ over. `Player::force_target` does the same for a target, from code.
 - `watch --log full|brief|off`: how much of `out/watch/live.log` is written. Full (the fight's,
   the explorer's and the follower's lines too) unless told from a checkout; brief from a
   release, where the newest 20 dated copies are kept. Tracing needs full.
+- `EVIL_PROFILE=FILE`, in a build with the profiler (`cargo build --release --features profile
+  --target-dir ../out/prof`): the whole run sampled 499 times a second of her processor time,
+  setting up included, and the stacks written to FILE. `python3 tools/dev/profile.py FILE`
+  prints the functions by the time under them and by the time in themselves; `--under NAME`
+  for only what's under one (`--under Explorer::next`), `--top N`. Fewer samples come back
+  than were due (about half on a long run): the shares hold, the seconds are low.
 - `EVIL_DEBUG_SLOW=MS` (watch): the parts of a tic that took MS milliseconds or more, to
   stderr ("slow tic 18725: director.ranked 41.2, director.events 41.5, neuro.tic 43.0"): which
   of her thinking held the frame. The parts are named where they're timed (`debug::timed`).

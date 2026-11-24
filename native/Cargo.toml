@@ -28,6 +28,9 @@ default = ["viewer"]
 # the `evil-boom watch` window (the engine's SDL) and the score's (minifb: Windows, X11); off
 # for a headless build
 viewer = ["dep:minifb", "dep:font8x8", "dep:png", "dep:fontdue"]
+# a sampling profiler built in (`EVIL_PROFILE=FILE`: the stacks sampled, folded, for
+# tools/dev/profile.py). Off unless asked for: `--features profile`
+profile = ["dep:pprof"]
 
 [dependencies]
 libloading = "0.8"
@@ -46,6 +49,7 @@ png = { version = "0.17", optional = true }
 # (the stream console's web page and API, evil-boom console: plain HTTP, small and threaded)
 tiny_http = { version = "0.12", default-features = false }
 fontdue = { version = "0.9.5", optional = true }
+pprof = { version = "0.15", optional = true, default-features = false }
 
 # Three profiles (docs/BUILDING.md, "Build profiles"):
 #

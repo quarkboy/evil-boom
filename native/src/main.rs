@@ -1376,7 +1376,46 @@ fn help_on(topic: &str) -> ExitCode {
     }
 }
 
+/// `EVIL_PROFILE=FILE` (a build with `--features profile`): the whole run sampled, 500 times
+/// a second, and the stacks written to FILE folded (a line a stack, outermost first, and how
+/// often it was seen), for `tools/dev/profile.py`.
+#[cfg(feature = "profile")]
 fn main() -> ExitCode {
+    let Some(to) = std::env::var_os("EVIL_PROFILE") else {
+        return run();
+    };
+    let guard = pprof::ProfilerGuardBuilder::default()
+        .frequency(499)
+        .build()
+        .expect("the profiler starts");
+    let code = run();
+    match guard.report().build() {
+        Ok(report) => {
+            let mut out = String::new();
+            for (frames, count) in &report.data {
+                let stack: Vec<String> = frames
+                    .frames
+                    .iter()
+                    .rev()
+                    .flat_map(|f| f.iter().rev().map(pprof::Symbol::name))
+                    .collect();
+                out.push_str(&format!("{} {count}\n", stack.join(";")));
+            }
+            if let Err(e) = std::fs::write(&to, out) {
+                eprintln!("EVIL_PROFILE: {e}");
+            }
+        }
+        Err(e) => eprintln!("EVIL_PROFILE: {e}"),
+    }
+    code
+}
+
+#[cfg(not(feature = "profile"))]
+fn main() -> ExitCode {
+    run()
+}
+
+fn run() -> ExitCode {
     let args = match evilboom::config::take_pwads(std::env::args().skip(1).collect()) {
         Ok(args) => args,
         Err(e) => {
