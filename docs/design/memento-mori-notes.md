@@ -1,7 +1,8 @@
 # Memento Mori, level by level (working notes)
 
-> **Status:** paused 2026-11-24 at the maintainer's word, to be picked up again; on the branch
-> `memento-mori`, not pushed, nothing of it on `main` or on the three-lives test yet (2026-11-23 on). The maintainer's
+> **Status:** paused 2026-11-24 at the maintainer's word, to be picked up again. What's here
+> was taken to `main` that day (the branch `memento-mori` fast-forwarded in, at 6c11143),
+> after the three-lives test below; the teleporter rule left out. The maintainer's
 > brief: custom-WAD compatibility, starting with Memento Mori (`wads/mm_allup/MM.WAD`), every
 > level from a pistol start (the WAD is made for that), all four skills, to find what stops her
 > finishing: switches she doesn't take for switches, and the way levels are built. The
@@ -62,7 +63,8 @@ out (929dfbd); MAP15 of Memento Mori goes back to 3 seeds of 8 till there's a na
 rule. What's left is exits -0.009 (s.e. 0.010), run for run, with deaths and time level
 and nothing stood: within the noise of the test, leaning a little under. By level, more:
 MAP06 +2, MAP18 +2, E2M5, MAP10, MAP26; less, one each: E1M9, E2M2, E2M7, E3M7, E4M7, E4M9,
-MAP12, MAP19, MAP22, MAP28, MAP30, MAP32. Not yet taken to `main`.
+MAP12, MAP19, MAP22, MAP28, MAP30, MAP32. Taken to `main` as it stood, at the maintainer's word;
+its rows are the baseline now (`out/lives/base.rows`).
 
 **To pick up from:** MAP09 (the platform switch, a risky jump dropped with "no route"; the
 stairs lowered twice), MAP12 (the pit's rim: the way planned clear of a rim's ends),
