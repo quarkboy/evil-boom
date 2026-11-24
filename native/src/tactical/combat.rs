@@ -357,7 +357,7 @@ pub struct Combat {
     /// what she's put into each monster, as she'd reckon it: the rounds gone from the gun up while
     /// it was her target, at what such a shot does landing at that range (never its health)
     put_in: BTreeMap<i32, f64>,
-    health_was: BTreeMap<i32, i32>,
+    health_was: Vec<(i32, i32)>,
     /// what she's seen each monster lose (hits landing in her sight, hers or another's), by id:
     /// its health as she reckons it is its kind's less this
     seen_hurt: BTreeMap<i32, i32>,
@@ -517,7 +517,7 @@ impl Combat {
             dealt: 0.0,
             ammo_was: Vec::new(),
             put_in: BTreeMap::new(),
-            health_was: BTreeMap::new(),
+            health_was: Vec::new(),
             seen_hurt: BTreeMap::new(),
             movers: Movers {
                 ceilings: Vec::new(),

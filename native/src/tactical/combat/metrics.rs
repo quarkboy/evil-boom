@@ -131,7 +131,15 @@ impl Combat {
     /// shots that hurt nothing with a monster in sight.
     pub(super) fn note_health_lost(&mut self, obs: &Observation) {
         let pos = obs.pos();
-        let mut now: BTreeMap<i32, i32> = BTreeMap::new();
+        // (by id, in order: a list searched by halving. Every monster of the level is gone
+        // through each tic, and on a level of thousands a map of them built and searched
+        // each tic was a tenth of her thinking)
+        let had = |list: &[(i32, i32)], id: i32| {
+            list.binary_search_by_key(&id, |&(i, _)| i)
+                .ok()
+                .map(|at| list[at].1)
+        };
+        let mut now: Vec<(i32, i32)> = Vec::with_capacity(self.health_was.len());
         let mut hurt_any = false;
         for t in obs
             .things
@@ -139,7 +147,7 @@ impl Combat {
             .flatten()
             .filter(|t| monster(t.name).is_some())
         {
-            if let Some(&h) = self.health_was.get(&t.id) {
+            if let Some(h) = had(&self.health_was, t.id) {
                 // Seen: in her sight the tic before, the hit landing in front of her.
                 if t.health < h && self.visible.iter().any(|v| v.id == t.id) {
                     *self.seen_hurt.entry(t.id).or_insert(0) += h - t.health.max(0);
@@ -151,13 +159,15 @@ impl Combat {
                         f64::from(h - t.health.max(0));
                 }
             }
-            now.insert(t.id, t.health);
+            now.push((t.id, t.health));
         }
+        now.sort_unstable_by_key(|&(id, _)| id);
+        now.dedup_by_key(|&mut (id, _)| id);
         // One killed is gone from the list, and that counts as hurt.
         hurt_any |= self
-            .health_was
-            .keys()
-            .any(|id| !now.contains_key(id) && self.visible.iter().any(|v| v.id == *id));
+            .visible
+            .iter()
+            .any(|v| had(&self.health_was, v.id).is_some() && had(&now, v.id).is_none());
         // A bullet or a shell gone this tic, a monster in sight, and nothing hurt by it.
         if self.trigger.shot_out.is_some_and(|(_, t)| t == obs.tic)
             && !self.visible.is_empty()
@@ -216,8 +226,8 @@ impl Combat {
         self.dealt += self
             .health_was
             .iter()
-            .filter(|(id, _)| !now.contains_key(id))
-            .map(|(_, &h)| f64::from(h.max(0)))
+            .filter(|&&(id, _)| had(&now, id).is_none())
+            .map(|&(_, h)| f64::from(h.max(0)))
             .sum::<f64>();
         self.health_was = now;
     }
