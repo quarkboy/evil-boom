@@ -4454,3 +4454,21 @@ Open, from the E4M9 run: with plasma going into a ledge's lip she flips every ti
 "stepping for a shot (its way blocked)" and "shooting on the way", neither done; the
 give-ups do fire (21 times) but each is a rest, and she goes at the same Demon again.
 The flip is the first thing to trace.
+
+## The plasma step, and a doorway on a grid boundary (2026-11-24)
+
+- **Stepping for plasma** (E4M9's hour): the spot she steps to is kept and gone to, where
+  it was looked for again from each step and lost a unit on; and the step has the clock
+  every other step for a shot has. That run out at 1011 s. Three-lives: exits 294 -> 295;
+  E4M9 no longer stands the hour, and two other runs do that didn't (DOOM II MAP28: imps
+  spawned faster than she clears them; MAP06: out of ammo before a Baron), each another
+  loop met by a run gone another way. Both for the fight's list.
+- **TNT MAP10**: nothing of its switches and keys. A plain doorway past the first stairs
+  had no portal: the two polys' shared edge lies on a boundary of the grid that edges are
+  sorted into for joining, one at y 639.9999999999999 and one at 640, so they were in
+  different cells and never tried against each other. A second pass joins such pairs,
+  after the rest (the portals there were keep their numbers). Levels that gain portals:
+  DOOM II MAP30; TNT MAP07, 08, 10, 19, 21, 24, 25, 31; Plutonia MAP09, 12, 17, 21, 26.
+  MAP10: the planner from "not reachable even in principle" to a whole plan; the eight
+  runs 0 out -> 4 (all four on skill 1; the four on skill 2 died in the first minutes).
+  Three-lives: all 544 runs the same.

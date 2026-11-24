@@ -584,6 +584,65 @@ impl Mesh {
             seen.insert((pa.min(pb), pa.max(pb)));
             self.add_portal(m, pa, pb, o1, o2);
         }
+        // (then, for polys not joined yet: edges that lie one each side of a boundary of the
+        // grid. An edge a split left a hair off, at y 639.9999999999999 where its neighbour's
+        // is at 640, is in the cells below the boundary and the other in those above, and the
+        // two were never tried against each other. TNT MAP10: the doorway from the room at
+        // the top of the first stairs, floor both sides and no portal; everything past it,
+        // three quarters of the level, "not reachable even in principle". The same as
+        // `lines_on_edge` has it for a line on such a boundary. After the rest, so the
+        // portals there were keep their numbers.)
+        let mut near_order: Vec<Cell> = Vec::new();
+        let mut near_grid: HashMap<Cell, Vec<(usize, Point, Point)>> = HashMap::default();
+        for (i, poly) in self.live_polys() {
+            for (p, q) in poly.edges() {
+                if (p.0 - q.0).hypot(p.1 - q.1) < 1.0 {
+                    continue;
+                }
+                for c in crate::geom::cells_around(p, q, EDGE_NEAR) {
+                    near_grid
+                        .entry(c)
+                        .or_insert_with(|| {
+                            near_order.push(c);
+                            Vec::new()
+                        })
+                        .push((i, p, q));
+                }
+            }
+        }
+        let mut late: Vec<(usize, usize, Point, Point)> = Vec::new();
+        let mut late_at: HashMap<(usize, usize), usize> = HashMap::default();
+        for c in &near_order {
+            let bucket = &near_grid[c];
+            for (i, &(pa, a1, a2)) in bucket.iter().enumerate() {
+                for &(pb, b1, b2) in &bucket[i + 1..] {
+                    let key = (pa.min(pb), pa.max(pb));
+                    if pa == pb || seen.contains(&key) {
+                        continue;
+                    }
+                    let Some((o1, o2)) = shared_segment(a1, a2, b1, b2) else {
+                        continue;
+                    };
+                    let long = (o1.0 - o2.0).hypot(o1.1 - o2.1);
+                    match late_at.get(&key) {
+                        Some(&n) => {
+                            let (_, _, q1, q2) = late[n];
+                            if long > (q1.0 - q2.0).hypot(q1.1 - q2.1) + EPS {
+                                late[n] = (pa, pb, o1, o2);
+                            }
+                        }
+                        None => {
+                            late_at.insert(key, late.len());
+                            late.push((pa, pb, o1, o2));
+                        }
+                    }
+                }
+            }
+        }
+        for (pa, pb, o1, o2) in late {
+            seen.insert((pa.min(pb), pa.max(pb)));
+            self.add_portal(m, pa, pb, o1, o2);
+        }
         // (then, for polys of one sector not joined yet: edges of open floor, no line of the
         // map along either, that lean a little apart; see `leaning_segment`)
         for c in &order {
