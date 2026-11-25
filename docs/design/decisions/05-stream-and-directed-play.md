@@ -4513,3 +4513,21 @@ With the first alone, MAP14's eight runs went 4 stood the hour, 4 died -> 5 stoo
 3 died (one run that charged in and died on the row's floor now waits there instead); the
 three-lives test every run the same. A stall for a death: not committed, by the rule that
 stalls are worse. To go in with the second.
+
+## TNT MAP22: off a floor that hurts, to a spot she'd be off it at (2026-11-25)
+
+Charmed, an hour of real time in life 3 went on one choice made every tic: "get off the floor
+that hurts", to the centre of the nearest poly that doesn't hurt. The floor was a small
+octagonal pool (sector 2) inside a ring 8 wide (sector 3); the ring's poly centre lay 1 past
+the pool's edge, 7 from her. The walk counts a goal within 10 as reached, so she "arrived"
+still in the pool, the visit wasn't made, and the same goal came up again.
+
+- **The rule:** the spot to get off to is the nearest poly centre more than the walk's slack
+  (11) clear of the floor she's on, so stopping short of it is off that floor; none such,
+  the nearest as before. Asking 16 (a body's width) sent her to farther spots than needed:
+  one exit fewer (Doom II MAP06, a spot 12 clear passed over for one 111 off).
+- **Measured:** charmed MAP22 from 1,196 s of real time to 57 s, the loop gone (96 choices of
+  it for 100,000). MAP22's eight runs: 0 out either way; the four stuck at 119 sectors on the
+  loop now die further on or stall in the crate-lift pocket (2 stuck for 4). Three-lives:
+  exits 295 -> 295, no exit moved; stood the hour 2 -> 1 (MAP28 s3 seed 205498993, now a
+  death); deaths 3 more.

@@ -36,6 +36,9 @@ const TAP_AMMO: [&str; 7] = [
 const THRESHOLD_IN: f64 = 8.0;
 /// How far over a line never walked over she makes for.
 const SEAM_IN: f64 = 32.0;
+/// How far clear of a floor that hurts a spot to get off it to is: past the walk's slack in
+/// arriving (10), so that stopping short of it is off that floor too.
+const OFF_CLEAR: f64 = 11.0;
 
 /// the expert's run: no goal this near a walk-over exit line (she'd slide over)
 const EXIT_MARGIN: f64 = 64.0;
@@ -1395,18 +1398,39 @@ impl Explorer {
         if meant && !risky {
             return Vec::new();
         }
-        let mesh = &self.nav.mesh;
+        let (mesh, m) = (&self.nav.mesh, &self.nav.map);
         let pos = obs.pos();
-        let best = reach
+        let mut near: Vec<(f64, usize)> = reach
             .iter()
             .copied()
             .filter(|&p| {
                 !self.knowledge.damaging(mesh.poly(p).sector)
                     && self.standable(mesh.poly(p).center, false)
             })
-            .min_by(|&a, &b| {
-                dist(mesh.poly(a).center, pos).total_cmp(&dist(mesh.poly(b).center, pos))
-            });
+            .map(|p| (dist(mesh.poly(p).center, pos), p))
+            .collect();
+        near.sort_by(|a, b| a.0.total_cmp(&b.0));
+        // A spot clear of the floor she's on by more than the walk's slack, so that coming
+        // within that of it is off it: the centre of a ring round a pool, 1 past its edge, she'd
+        // stop short of in the pool (TNT MAP22's sector 2, picked 100,000 times over).
+        let on = self.nav.poly_at(pos).map(|p| self.nav.sector_of_poly(p));
+        let edges: Vec<(Point, Point)> = (0..m.linedefs.len())
+            .filter(|&li| {
+                let (f, b) = m.sides(li);
+                on.is_some() && (f == on || b == on)
+            })
+            .map(|li| m.line_seg(li))
+            .collect();
+        let clear = |c: Point| {
+            edges
+                .iter()
+                .all(|&(a, b)| dist(c, crate::geom::closest_point(c, a, b)) >= OFF_CLEAR)
+        };
+        let best = near
+            .iter()
+            .find(|&&(_, p)| clear(mesh.poly(p).center))
+            .or(near.first())
+            .map(|&(_, p)| p);
         best.map(|p| {
             let mut o = Objective::new(
                 Kind::Visit,
