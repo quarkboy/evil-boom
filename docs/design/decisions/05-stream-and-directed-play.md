@@ -4472,3 +4472,21 @@ The flip is the first thing to trace.
   MAP10: the planner from "not reachable even in principle" to a whole plan; the eight
   runs 0 out -> 4 (all four on skill 1; the four on skill 2 died in the first minutes).
   Three-lives: all 544 runs the same.
+
+## TNT MAP09 again: the blue card's wait, and a lift line walked too soon (2026-11-24)
+
+The maintainer asked why she waited so long for the blue card once its barrels were gone,
+and why she was stranded on the first life.
+
+- **The wait** was "no way back": the jump to the card, fallen short, lands in a pit of
+  crates whose way out is a lift she can't know of till she's in it (the maintainer, in
+  the game). Right by what she knows; she takes it as risky when nothing else is left. On
+  the way, the path fitter was found keeping clear of every barrel the level began with,
+  blown up or not: it now skips those she knows are gone.
+- **The stranding**: she rode a lift up to a secret ledge and stepped off over the lift's
+  own repeatable walk-over line while the lift was still finishing its rise. The game
+  ignores a lift line while its lift moves; she saw nothing move and put the line down as
+  doing nothing. It's the only way off the ledge. A repeatable walk-over line whose working
+  she never saw now gets another go when nothing else is left, as repeatable switches and
+  doors already did (`pressed_again`), under the same limits. MAP09, 16 runs: out 1 -> 5,
+  stood the hour 2 -> 1. Three-lives: all but two runs the same, exits 295 -> 295.

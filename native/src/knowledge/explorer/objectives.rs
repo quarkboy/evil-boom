@@ -738,7 +738,11 @@ impl Explorer {
     /// once there's nothing else, each by what it works (a door she can open again and again
     /// among them: pressed as it stood open, by a monster come through it, it only shut, and
     /// she's none the wiser what's behind it); and those whose effect she has put
-    /// down to them on timing alone, unsure, are pressed again and watched, once a life.
+    /// down to them on timing alone, unsure, are pressed again and watched, once a life. And
+    /// a repeatable walk-over line the same: walked over while what it works was busy, the
+    /// game ignored it, and she'd put it down as doing nothing. (TNT MAP09: the lift up into a
+    /// secret ledge, its line walked as the lift was still finishing its rise; the line is
+    /// the only way down again, and with it "tried", nothing left to do there.)
     fn pressed_again(
         &self,
         obs: &Observation,
@@ -796,7 +800,10 @@ impl Explorer {
             let twin = !pressed.contains(&li);
             let Some(t) = by_line.get(&li) else { continue };
             if !k.mapped.contains(&li)
-                || !matches!(t.info.trigger, Trigger::SR | Trigger::GR | Trigger::DR)
+                || !matches!(
+                    t.info.trigger,
+                    Trigger::SR | Trigger::GR | Trigger::DR | Trigger::WR
+                )
             {
                 continue;
             }
@@ -841,11 +848,13 @@ impl Explorer {
                 Kind::Switch,
                 nav.activation_point(t, pos, reach),
                 format!(
-                    "try {} again (line {li}{})",
-                    if t.info.category.is_door() {
-                        "door"
+                    "{} again (line {li}{})",
+                    if t.info.trigger.walked() {
+                        "step over the line"
+                    } else if t.info.category.is_door() {
+                        "try door"
                     } else {
-                        "switch"
+                        "try switch"
                     },
                     if unsure { ", unsure what it does" } else { "" }
                 ),
