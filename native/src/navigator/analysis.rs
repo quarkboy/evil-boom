@@ -393,6 +393,21 @@ impl<'a> Analysis<'a> {
                 Trigger::W1 | Trigger::WR => {
                     let mut a = crossing.get(&li).cloned().unwrap_or_default();
                     a.extend(touching_any.get(&li).into_iter().flatten().copied());
+                    // A line drawn across open floor that the nodes never split it by: no poly
+                    // has an edge along it, but walking over it sets it off all the same. Set
+                    // off from the polys it runs through. (TNT MAP27: the exit, a square of
+                    // walk-over exit lines with one sector both sides round where the last
+                    // teleporter puts her; to the planner "not reachable even in principle")
+                    if a.is_empty() {
+                        let (p1, p2) = m.line_seg(li);
+                        let length = dist(p1, p2);
+                        let steps = (length / 8.0).ceil().max(1.0) as usize;
+                        for k in 0..=steps {
+                            let t = k as f64 / steps as f64;
+                            let at = (p1.0 + (p2.0 - p1.0) * t, p1.1 + (p2.1 - p1.1) * t);
+                            a.extend(mesh.poly_inside(at));
+                        }
+                    }
                     a
                 }
                 _ => self.gun_activators(li, touching_any.get(&li).cloned().unwrap_or_default()),
