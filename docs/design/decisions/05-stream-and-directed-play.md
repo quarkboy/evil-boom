@@ -4490,3 +4490,26 @@ and why she was stranded on the first life.
   she never saw now gets another go when nothing else is left, as repeatable switches and
   doors already did (`pressed_again`), under the same limits. MAP09, 16 runs: out 1 -> 5,
   stood the hour 2 -> 1. Three-lives: all but two runs the same, exits 295 -> 295.
+
+## TNT MAP14: a row of crushers, parked (2026-11-25)
+
+Charmed, she gets all three keys (the red card at 784 s) and is stopped on the way back to
+the exit by the hallway of eight crushers (sectors 72, 76, 77, 75, 73, 74, 59, 71), each set
+going by the line before it: a wave a few tics apart, running at about her pace (the
+walkthrough: run through at full speed). Two things stop her:
+
+- **The row is judged a crusher at a time.** She's let into one only with the next on its
+  way up too, so she goes in, meets the third coming down and backs out. Timing the whole
+  row as she'd run it (`row_through`, kept as out/patches/1125-crusher-row-timing.patch)
+  finds the moment each cycle when all eight are open, and she takes it.
+- **The way into the row is a jump** off a lift onto a 16-wide strip at the first crusher's
+  edge. She decides to go from where she waits; the walk to the run-up, the line-up and the
+  jump take some 55 tics, and by the time she lands the timing is stale and she backs out.
+  Timing the crossing from the jump's landing (the jump waiting at its run-up for the row)
+  would mend it; left, as a matter of how jumps and crushers meet, near the maintainer's
+  "macro strategy" line.
+
+With the first alone, MAP14's eight runs went 4 stood the hour, 4 died -> 5 stood the hour,
+3 died (one run that charged in and died on the row's floor now waits there instead); the
+three-lives test every run the same. A stall for a death: not committed, by the rule that
+stalls are worse. To go in with the second.
