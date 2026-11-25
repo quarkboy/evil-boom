@@ -17,7 +17,7 @@
 mod analysis;
 mod jumps;
 mod view;
-mod widths;
+pub(crate) mod widths;
 
 pub use jumps::{JumpChecks, JUMP_DOUBT, JUMP_RISK};
 pub use view::{Leg, Path, PathNote, Plan, Restriction, Route, View};

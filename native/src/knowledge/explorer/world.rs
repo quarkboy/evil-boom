@@ -4,7 +4,7 @@
 //! Constructing the navigable world from learned heights, triggers and exclusions.
 
 use super::{Explorer, ViewKey, JUMP_MISSES, STUCK_TIMES};
-use crate::geom::Point;
+use crate::geom::{dist, Point};
 use crate::knowledge::model::How;
 use crate::movers::cycles_back;
 use crate::nav::Heights;
@@ -357,7 +357,25 @@ impl Explorer {
                 .iter()
                 .map(|(&s, &hit)| (s, hit != 0))
                 .collect(),
+            gone_barrels: self.gone_barrels().len(),
         }
+    }
+
+    /// The barrels the level started with, in places she has seen, that aren't standing now:
+    /// gone up. (As `barrels_on_landing` has them: the map's, where she knows of them, and the
+    /// game's word for which still stand.)
+    pub(super) fn gone_barrels(&self) -> Vec<Point> {
+        use crate::domain::BARREL_RADIUS;
+        let k = &self.knowledge;
+        let Some(standing) = k.last.as_ref().and_then(|o| o.barrels.as_ref()) else {
+            return Vec::new();
+        };
+        k.known_things()
+            .iter()
+            .filter(|t| t.kind == crate::things::BARREL)
+            .map(|t| (t.x, t.y))
+            .filter(|&p| !standing.iter().any(|&b| dist(b, p) < 2.0 * BARREL_RADIUS))
+            .collect()
     }
 
     fn build_view(&self, fresh: bool) -> View {
@@ -423,6 +441,11 @@ impl Explorer {
                 teleports,
                 spent: spent_teleports,
                 spent_walks: self.spent_walks(fresh),
+                gone_barrels: if fresh {
+                    Vec::new()
+                } else {
+                    self.gone_barrels()
+                },
             },
             triggers,
             keys_at,

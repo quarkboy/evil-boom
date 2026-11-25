@@ -454,6 +454,8 @@ pub struct Known {
     pub spent: HashSet<usize>,
     /// (poly, teleport index) edges not to take
     pub banned: HashSet<(usize, usize)>,
+    /// the edges of solid things she knows are gone (barrels blown up): not kept clear of
+    pub gone: HashSet<crate::geom::SegKey>,
 }
 
 impl NavCore {
@@ -514,6 +516,7 @@ impl NavCore {
         teleports: Option<HashSet<usize>>,
         spent: HashSet<usize>,
         banned: HashSet<(usize, usize)>,
+        gone: HashSet<crate::geom::SegKey>,
     ) {
         self.known = polys.map(|ps| {
             let mut known = vec![false; self.mesh.polys.len()];
@@ -527,6 +530,7 @@ impl NavCore {
                 teleports: teleports.unwrap_or_default(),
                 spent,
                 banned,
+                gone,
             }
         });
     }

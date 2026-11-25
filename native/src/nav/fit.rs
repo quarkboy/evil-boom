@@ -1096,6 +1096,15 @@ impl Fitter<'_> {
                 }
             }
             for &e in nav.obstacle_grid.get(&c).into_iter().flatten() {
+                // (not a barrel she knows has gone up: kept clear of, the barrels a level
+                // started with fenced in floor long after they were blown)
+                if nav
+                    .known
+                    .as_ref()
+                    .is_some_and(|k| k.gone.contains(&seg_key(e)))
+                {
+                    continue;
+                }
                 if seen_edges.insert(seg_key(e)) {
                     out.push(e);
                 }

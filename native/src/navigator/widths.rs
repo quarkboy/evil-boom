@@ -49,6 +49,18 @@ pub(super) fn obstacle_grid(m: &MapData, skill: i32, shootable: bool) -> HashMap
     out
 }
 
+/// The box edges a barrel standing at `p` has in `obstacle_grid`.
+pub(crate) fn barrel_edges(p: Point) -> impl Iterator<Item = Seg> {
+    let r = solid_radius(crate::things::BARREL).unwrap_or(0.0);
+    let c = [
+        (p.0 - r, p.1 - r),
+        (p.0 + r, p.1 - r),
+        (p.0 + r, p.1 + r),
+        (p.0 - r, p.1 + r),
+    ];
+    (0..4).map(move |i| (c[i], c[(i + 1) % 4]))
+}
+
 fn moving_sectors(triggers: &[TriggerLine]) -> BTreeSet<usize> {
     triggers
         .iter()

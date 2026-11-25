@@ -981,6 +981,8 @@ struct ViewKey {
     missed_jumps_in: bool,
     /// the floors seen to change, and whether each hurts now: what a way costs goes by them
     changed_floors: Vec<(usize, bool)>,
+    /// barrels she knows are gone
+    gone_barrels: usize,
 }
 
 impl Explorer {

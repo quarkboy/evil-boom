@@ -309,6 +309,8 @@ pub struct Restriction {
     pub spent: BTreeSet<usize>,
     /// once-only walk-over lines she has set off this life: they do nothing again
     pub spent_walks: BTreeSet<usize>,
+    /// where barrels the level started with stood that she knows are gone (blown up)
+    pub gone_barrels: Vec<Point>,
 }
 
 /// The navigator as she knows the level.
@@ -754,8 +756,13 @@ impl View {
                     Some(r.teleports.iter().copied().collect()),
                     r.spent.iter().copied().collect(),
                     banned,
+                    r.gone_barrels
+                        .iter()
+                        .flat_map(|&p| crate::navigator::widths::barrel_edges(p))
+                        .map(crate::geom::seg_key)
+                        .collect(),
                 ),
-                None => nav.restrict(None, None, HashSet::default(), banned),
+                None => nav.restrict(None, None, HashSet::default(), banned, HashSet::default()),
             }
             core.caches = PlanCaches::default();
             core.owner = self.id;
