@@ -4558,3 +4558,25 @@ another way into fights: E1M5's line 162, E3M3, MAP06, MAP28).
   NUKAGE1 like the pool, so nothing she can see says there's a way off; the drop is refused
   (`DropOntoHarm`) until `with_harm_allowed`, after every round of wall-tries, which on a map
   this size is the rest of the hour.
+
+## TNT MAP22: no standing on in the nukage for a mover that isn't coming (2026-11-25)
+
+Tried, the pool drop of the last entry ahead of the walls (`drops_onto_harm`, kept as
+out/patches/1125-early-harm-drop.patch): she dropped in at 388 s, pressed the pool's lift
+switch (line 1151) and stood waiting for its lift in the nukage, 2 a second, till the 15 s
+cap; twice dead on that spot. All eight runs died at 143 sectors (skill 1 had reached 318):
+not committed.
+
+The wait: on a floor that hurts, a mover standing still is given up on after half a
+second (the 2026-11-09 rule's sequel), but only by planning again; with no other way from
+there, nothing ended the step, and she stood on to the 15 s cap.
+
+- **The rule:** on a floor that hurts, a mover still with no other way from where she stands
+  ends the step (`MoverSlow`), for the explorer to choose again; only once it has stood still
+  past a lift's pause at the bottom (3 s, plus 1): the first version gave up at once on a
+  lift down and about to come back (sector 13).
+- **Measured:** three-lives every run the same. MAP22's eight: skill 1 3 stuck + 1 died ->
+  4 stuck (the one that died at 3,222 s at the pool's edge, 318 sectors, now stands there to
+  the hour); skill 2 unchanged. With the pool drop on top she no longer dies waiting; she
+  fails over and over on the pool's second lift (sector 233, travelling between the pool and
+  256), the plan wanting it at 256 with her at -256: next.

@@ -647,6 +647,24 @@ impl RouteFollower {
                 self.missed.push(jump);
                 return Some(self.fail(obs, Trouble::LiftNotComing(sector)));
             }
+            // (nor stood on in the burn with no other way from here: the step's over, for the
+            // explorer to choose again. Left to the 15 s below, she waited in TNT MAP22's
+            // nukage pool for a lift standing still, 2 a second, and died there twice. Once
+            // still past a lift's pause at the bottom (3 s): one down and about to come back
+            // up was given up on at once, TNT MAP22's sector 13)
+            /// still this long, a lift isn't pausing to come back (tics)
+            const PAUSED: i64 = 4 * 35;
+            if hopeless && obs.tic - self.mover_still_since >= PAUSED {
+                let cs = nav.sector_of_poly(cur);
+                return Some(self.fail(
+                    obs,
+                    Trouble::MoverSlow(
+                        sector,
+                        fmt_live(Some(live[cs])),
+                        fmt_live(Some(live[sector])),
+                    ),
+                ));
+            }
         }
         if waited > 15 * 35 {
             if !self.replan(obs, &format!("sector {sector} not opening"), false) {
