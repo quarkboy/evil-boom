@@ -571,12 +571,13 @@ impl Knowledge {
 
     /// Is the line a side of something she knows moves (a sector some line she's learned
     /// moves) that stands as a wall now? Having watched a block of wall go down and come
-    /// back, a player presses it.
+    /// back, a player presses it. `from_front`: a wall from its front only, the side a press
+    /// works from, a drop from its top not counting against it (the last resort's).
     /// (Memento Mori MAP12: a lift stowed in a room's ceiling, floor to ceiling a wall on
     /// every side, brought down once by the line across the room's door as she came in. It
     /// went back up while she looked at where it led, the door had shut behind her, and its
     /// own faces, which call it, were walls to her: stranded.)
-    pub fn on_a_mover(&self, li: usize) -> bool {
+    pub fn on_a_mover(&self, li: usize, from_front: bool) -> bool {
         let (Some(front), Some(back)) = self.nav.map.sides(li) else {
             return false;
         };
@@ -592,7 +593,7 @@ impl Knowledge {
         };
         let (f, b) = (at(front), at(back));
         !crate::nav::can_cross(f, b)
-            && !crate::nav::can_cross(b, f)
+            && (from_front || !crate::nav::can_cross(b, f))
             && self
                 .learned
                 .values()

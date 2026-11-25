@@ -656,7 +656,7 @@ impl Explorer {
             Some(o)
         };
         let mut found: Vec<(usize, Objective)> = k
-            .interactables()
+            .untried_lines(self.lift_faces)
             .into_iter()
             .filter_map(|li| to_try(li).map(|o| (li, o)))
             .collect();

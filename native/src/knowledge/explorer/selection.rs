@@ -372,6 +372,7 @@ impl Explorer {
         self.wade_floors = false;
         self.dead_ends_whatever = false;
         self.known_again = false;
+        self.lift_faces = false;
         self.from_dead_end = false;
         self.resort_wanted = None;
         self.short_legs.clear();
@@ -401,6 +402,9 @@ impl Explorer {
         }
         if !found {
             found = self.pads_come_out_on(obs, hooks);
+        }
+        if !found {
+            found = self.lift_faces(obs, hooks);
         }
         if !found && perceive && self.suspecting == Suspecting::No {
             found = self.suspect_walls(obs, hooks);
@@ -812,6 +816,26 @@ impl Explorer {
     /// floor she set going not there yet, and a press into that is ignored, or sets it going
     /// back (E1M5 again: the pillar's switch pressed a second after itself, her on the pillar
     /// coming down; run after run that got out, stranded).
+    /// Nothing ordinary left: the face of a lift she has watched go down and come back,
+    /// pressed from the floor below, though she could drop off its top (a crate in the
+    /// middle of a room is no wall from above). A better bet than a wall she only suspects;
+    /// offered with the rest, a press that took her another way cost 4 exits of the test's
+    /// 544 runs, all to fights. (TNT MAP22's sector 99: dropped off it into the pocket it
+    /// stands over, its face the one way out, she was stranded for the hour.)
+    fn lift_faces(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
+        self.lift_faces = true;
+        let found = self.safe_then_risky(obs, hooks);
+        if found {
+            self.log.push(format!(
+                "tic {}: nothing else to do: the face of a lift she's seen move",
+                obs.tic
+            ));
+        } else {
+            self.lift_faces = false;
+        }
+        found
+    }
+
     fn known_switches_again(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
         /// stood with nothing to do this long first (tics)
         const STOOD: i64 = 3 * 35;

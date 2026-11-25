@@ -781,6 +781,8 @@ pub struct Explorer {
     /// this choice is down to the last resort of all: the switches she knows, pressed again
     /// (`known_switches_again`)
     known_again: bool,
+    /// this pass, the faces of lifts she's seen move pressed from below too (`lift_faces`)
+    lift_faces: bool,
     /// with nothing at all left to do: a way on taken whatever it's reckoned to cost her
     /// (`way_on_whatever`)
     harm_whatever: bool,
@@ -1048,6 +1050,7 @@ impl Explorer {
             suited: false,
             pressed_knowing: BTreeMap::new(),
             known_again: false,
+            lift_faces: false,
             harm_whatever: false,
             harm_anything: false,
             wade_floors: false,

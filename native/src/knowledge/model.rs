@@ -581,6 +581,13 @@ impl Knowledge {
     /// Mapped lines she can tell are switches or use-doors (or gun targets), not used yet. A
     /// gun target is told by its look, or by a face unlike the walls either side of it.
     pub fn interactables(&self) -> Vec<usize> {
+        self.untried_lines(false)
+    }
+
+    /// As `interactables`, and with them the faces of what she has seen move that are a wall
+    /// only from the side they're pressed from (`on_a_mover`'s `from_front`): the last
+    /// resort's (`Explorer::lift_faces`).
+    pub fn untried_lines(&self, faces_from_front: bool) -> Vec<usize> {
         let used: BTreeSet<Mechanism> = self
             .fired
             .iter()
@@ -601,7 +608,7 @@ impl Knowledge {
                             || self.door_shaped(li)
                             || (i.trigger.used() && self.before_a_door(li))
                             || (i.trigger.used() && self.under_a_key(li))
-                            || (i.trigger.used() && self.on_a_mover(li))
+                            || (i.trigger.used() && self.on_a_mover(li, faces_from_front))
                             || self.in_the_way.contains(&li)
                             || self.locked.contains(&li)
                             || (i.trigger.shot() && self.odd(li).0))

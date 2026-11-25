@@ -4531,3 +4531,30 @@ still in the pool, the visit wasn't made, and the same goal came up again.
   loop now die further on or stall in the crate-lift pocket (2 stuck for 4). Three-lives:
   exits 295 -> 295, no exit moved; stood the hour 2 -> 1 (MAP28 s3 seed 205498993, now a
   death); deaths 3 more.
+
+## TNT MAP22: the face of a lift she's seen move, as a last resort (2026-11-25)
+
+Next in MAP22: a pocket at the east end of the first room (sector 16), shut in by crates 32
+and 64 high with 24-wide gaps, a pit 256 deep, and lift 99, a plain crate (CRATWIDE all
+round) 128 up that she rides down and drops off. The way out is its south face (line 600,
+SR lift). She had watched that crate go down and come back (line 1896 lowers it), and a
+player would press it; she never did: "nothing left to do", stranded for the hour.
+
+`on_a_mover` offers the side of something she's learned moves only when it's a wall both
+ways, and from the crate's top she can drop into the pocket. A use works from a line's front
+only, so a wall from the front is what matters. Offered with every other objective, that
+cost 4 exits of the three-lives test's 544 (presses of sensible lift faces that took runs
+another way into fights: E1M5's line 162, E3M3, MAP06, MAP28).
+
+- **The rule:** a new last resort (`lift_faces`), after the known ways on and before walls she
+  only suspects: with nothing ordinary left, the faces of what she's seen move that are a wall
+  from their front are offered too. `interactables` (in the summary of what she knows) is
+  unchanged.
+- **Measured:** MAP22's eight runs: stuck 2 -> 3, died 6 -> 5, but every skill-1 run now
+  out of the pocket to 318 of 403 sectors (from 119-143); the three stuck stand at the next
+  thing, the drop into the nukage pool (below). Three-lives: every run the same.
+- **Next, the pool:** the way on is a drop into a nukage pool (sector 210) and a walk along an
+  L-shaped strip (sector 395) to a hidden walk-over line. The strip is safe but floored in
+  NUKAGE1 like the pool, so nothing she can see says there's a way off; the drop is refused
+  (`DropOntoHarm`) until `with_harm_allowed`, after every round of wall-tries, which on a map
+  this size is the rest of the hour.
