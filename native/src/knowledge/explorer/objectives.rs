@@ -1504,7 +1504,7 @@ impl Explorer {
             .things
             .iter()
             .flatten()
-            .filter(|t| self.spares.contains(&t.id))
+            .filter(|t| self.spares.contains(&t.id) && !self.knowledge.left_lying(obs, t))
         {
             if !self
                 .nav

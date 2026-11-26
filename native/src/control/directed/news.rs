@@ -248,7 +248,7 @@ impl Director {
             matches!(
                 t.category,
                 "Weapon" | "Ammo" | "Health" | "Armor" | "Key" | "Powerup"
-            )
+            ) && !x.knowledge.left_lying(obs, t)
         }) {
             if !x
                 .nav

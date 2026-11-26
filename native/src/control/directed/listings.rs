@@ -107,6 +107,8 @@ impl Director {
                         )
                     })
                     .filter(|t| nav.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p)))
+                    // (co-op: a gun she has, left lying for the others, is nothing of hers)
+                    .filter(|t| !agent.x().knowledge.left_lying(obs, t))
                     .map(|t| Entry {
                         id: format!(
                             "{}-t{}",

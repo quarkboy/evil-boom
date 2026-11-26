@@ -412,12 +412,17 @@ impl Director {
         let what = self.tag(&id, obs);
         // (a pickup the game won't give her now: said, not walked to. End to end, a dozen
         // trips to shells, shotguns and green armor, each ending "couldn't pick it up")
-        if let Some(why) = id
+        let thing = id
             .strip_prefix("item-t")
             .and_then(|n| n.parse::<i32>().ok())
-            .and_then(|n| obs.things.iter().flatten().find(|t| t.id == n))
-            .and_then(|t| Self::cant_take(t.name, obs))
-        {
+            .and_then(|n| obs.things.iter().flatten().find(|t| t.id == n));
+        // (co-op: a gun she has stays where the level put it, and gives her nothing)
+        if thing.is_some_and(|t| agent.x().knowledge.left_lying(obs, t)) {
+            return Err(format!(
+                "{what}: you have it. In co-op it stays for the others and gives you nothing."
+            ));
+        }
+        if let Some(why) = thing.and_then(|t| Self::cant_take(t.name, obs)) {
             return Err(format!("{what}: you can't pick it up now: {why}."));
         }
         // (a barrel stopped her on the way there, and nothing's changed: said, not walked again)
