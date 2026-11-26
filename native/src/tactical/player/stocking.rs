@@ -132,6 +132,9 @@ impl Fight {
             out.push(o);
         }
         for t in obs.things.iter().flatten() {
+            if self.left_lying(obs, t) {
+                continue; // (co-op: a gun she has, which isn't to be had again)
+            }
             let Some(p) = x.nav.poly_at((t.x, t.y)) else {
                 continue;
             };

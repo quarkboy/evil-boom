@@ -607,6 +607,7 @@ fn seats(nav: &Rc<Navigator>, map_name: &str, o: &WatchOptions) -> Result<Vec<Se
             let mut agent = Agent::new(nav, knowledge, o.fight, false, o.lives, Rc::clone(&tune));
             if let Some(p) = agent.player_mut() {
                 p.set_going_on(going_on);
+                p.set_coop();
             }
             if o.keys {
                 agent.keys_only();

@@ -99,6 +99,9 @@ struct Fight {
     /// the game goes on to another level after this one (an episode played through): what
     /// she'd take with her is had before the exit (`stock`)
     going_on: bool,
+    /// a co-op game (`watch --players`): where the level puts things down (a gun put down
+    /// stays there when picked up, and one she has already can't be: `left_lying`)
+    coop: Option<BTreeSet<(i32, i32)>>,
     /// the numbers she judges by (the fight's are the same)
     tune: Rc<Tuning>,
     /// what the hooks had to say (logged once the explorer's done)
@@ -381,6 +384,7 @@ impl Player {
             fight: Fight {
                 combat: Combat::new(nav, Rc::clone(&tune)),
                 going_on: false,
+                coop: None,
                 tune: Rc::clone(&tune),
                 pending_log: Vec::new(),
                 offered: BTreeSet::new(),
@@ -526,6 +530,14 @@ impl Player {
 
     pub fn set_going_on(&mut self, on: bool) {
         self.fight.going_on = on;
+    }
+
+    /// A co-op game: the guns the level puts down stay there for the others (`Fight::left_lying`).
+    pub fn set_coop(&mut self) {
+        let spots = (self.explorer.nav.map.things.iter())
+            .map(|m| (m.x.round() as i32, m.y.round() as i32))
+            .collect();
+        self.fight.coop = Some(spots);
     }
 
     pub fn going_on(&self) -> bool {
@@ -1313,6 +1325,17 @@ impl Player {
 }
 
 impl Fight {
+    /// A co-op game's gun she has already, lying where the level put it: it stays there for the
+    /// others, and walking over it gives her nothing (a monster's dropped gun gives its ammo and
+    /// goes, as alone). Placed, by lying where a thing of the map's does.
+    fn left_lying(&self, obs: &Observation, t: &crate::domain::Thing) -> bool {
+        self.coop.as_ref().is_some_and(|spots| {
+            crate::bestiary::weapon_item(t.name).is_some()
+                && !Self::new_gun(obs, t.name)
+                && spots.contains(&(t.x.round() as i32, t.y.round() as i32))
+        })
+    }
+
     /// The way to p (as the crow flies) isn't past anything about that she can't take on: a run
     /// for the invulnerability doesn't go straight through what it's for. Till it has moved off
     /// the line, she keeps clear.
@@ -1755,7 +1778,16 @@ impl Hooks for Fight {
 
     fn gone(&mut self, obs: &Observation, obj: &Objective) -> bool {
         match obj.kind {
-            Kind::Item => obj.thing.is_none_or(|t| !self.present.contains(&t)),
+            // (in co-op a gun the level put down stays when it's hers: had, it's done with)
+            Kind::Item => obj.thing.is_none_or(|t| {
+                !self.present.contains(&t)
+                    || obs
+                        .things
+                        .iter()
+                        .flatten()
+                        .find(|x| x.id == t)
+                        .is_some_and(|x| self.left_lying(obs, x))
+            }),
             Kind::Hunt => obj
                 .thing
                 .is_none_or(|t| !self.combat.remaining().iter().any(|s| s.id == t)),
