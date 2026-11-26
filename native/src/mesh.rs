@@ -485,6 +485,52 @@ impl Mesh {
     }
 
     /// Linedefs collinear with and overlapping the segment p-q, ascending.
+    /// Two edges near enough to be joined but apart, parallel, with a line along one and not the
+    /// other that has a shut door on a side: the door between them (TNT MAP21: the
+    /// strip by the vine door, its two halves 2 apart with the door between, were joined
+    /// across it, and a way back through the shut door had no door on it).
+    fn sliver_between(&self, m: &MapData, a1: Point, a2: Point, b1: Point, b2: Point) -> bool {
+        let d = (a2.0 - a1.0, a2.1 - a1.1);
+        let length = d.0.hypot(d.1);
+        if length < 1e-6 {
+            return false;
+        }
+        /// apart by less than this, two edges are one split a hair off another (BSP edges
+        /// along one line lie up to a unit off each other)
+        const SLIVER_GAP: f64 = 1.5;
+        // (and the two parallel, the same gap at both ends: edges that lean apart are the
+        // wedge between two of the node builder's partitions, `leaning_segment`)
+        let (g1, g2) = (cross(a1, d, b1) / length, cross(a1, d, b2) / length);
+        let gap = g1.abs().min(g2.abs());
+        if gap < SLIVER_GAP || (g1 - g2).abs() > 0.5 {
+            return false;
+        }
+        let e = (b2.0 - b1.0, b2.1 - b1.1);
+        let elength = e.0.hypot(e.1);
+        if elength < 1e-6 {
+            return false;
+        }
+        // (a line along an edge: both its ends nearer its line than half the gap)
+        let along = |p: Point, d: Point, n: f64, li: usize| {
+            let (v1, v2) = m.line_seg(li);
+            (cross(p, d, v1) / n).abs() < gap / 2.0 && (cross(p, d, v2) / n).abs() < gap / 2.0
+        };
+        let mut lines = self.lines_on_edge(m, a1, a2);
+        lines.extend(self.lines_on_edge(m, b1, b2));
+        // (and what's between shut, a door: a trim or a step strip between is walked across,
+        // and may have no poly of its own to walk it by)
+        let shut = |li: usize| {
+            let (f, b) = m.sides(li);
+            [f, b]
+                .into_iter()
+                .flatten()
+                .any(|s| m.sectors[s].ceiling <= m.sectors[s].floor)
+        };
+        lines
+            .into_iter()
+            .any(|li| along(a1, d, length, li) != along(b1, e, elength, li) && shut(li))
+    }
+
     fn lines_on_edge(&self, m: &MapData, p: Point, q: Point) -> Vec<usize> {
         // (the cells a little round it: an edge a split left a hair off its line, along a
         // line that lies on a boundary of the grid, is in the cells one side of the boundary
@@ -563,6 +609,9 @@ impl Mesh {
                     let Some((o1, o2)) = shared_segment(a1, a2, b1, b2) else {
                         continue;
                     };
+                    if self.sliver_between(m, a1, a2, b1, b2) {
+                        continue;
+                    }
                     let key = (pa.min(pb), pa.max(pb));
                     let long = (o1.0 - o2.0).hypot(o1.1 - o2.1);
                     match at.get(&key) {
@@ -623,6 +672,9 @@ impl Mesh {
                     let Some((o1, o2)) = shared_segment(a1, a2, b1, b2) else {
                         continue;
                     };
+                    if self.sliver_between(m, a1, a2, b1, b2) {
+                        continue;
+                    }
                     let long = (o1.0 - o2.0).hypot(o1.1 - o2.1);
                     match late_at.get(&key) {
                         Some(&n) => {

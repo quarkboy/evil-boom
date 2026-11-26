@@ -4629,3 +4629,14 @@ checked it in the game).
   293). Flagged, none do.
 - **Measured:** MAP21's reach for the planner 193 -> 273 of 330 sectors, and a 30-step plan
   where there was none; three-lives every run the same.
+- **And no portal across the door.** The strip's two halves (sector 80, on each side of the
+  2-deep door) were joined straight across it by the near-edge pass (`shared_segment`, 3 units
+  of slack): the way back out had no door on it, and she walked into it shut. Now two polys
+  aren't joined there when the edges are 1.5 or more apart, parallel, and a line runs along
+  one and not the other with a shut sector (ceiling at its floor, a door) on a side
+  (`sliver_between`). Tried wider first: any gap with a line along one edge only took joins
+  on E1M5 (BSP edges along one line lie up to a unit apart: 7 exits lost) and on DOOM II
+  MAP19 (leaning edges); with any sector between, not only a shut one, TNT MAP09 and MAP20
+  lost an exit each and stalled three more (a trim strip with no poly of its own walked
+  across). Portals: MAP21 -8, MAP09 -4, none on the IWAD maps tried; three-lives every run
+  the same, MAP09's eight runs the same.
