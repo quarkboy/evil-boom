@@ -4671,3 +4671,23 @@ door before them (three keys, three keyed switches) was found.
   before. The route keeps its goal, for the exit it stands for.
 - **Measured:** MAP28's omniscient follow exits in 105 s (14 steps). Its eight runs the same
   (5 out: exploring found its way without the plan). Three-lives every run the same.
+
+## TNT MAP16: a teleport line grazed is no trip (2026-11-25)
+
+Two of MAP16's eight runs stood the hour at 306 of 369 sectors, the exit never seen. Traced:
+at 4.6 minutes she took the teleporter into the blue skull's closet and stood on its pad, the
+key a step away, with "no route" to it; she wandered out by the other teleporter, and the key
+was "no route" for 50 minutes, till a fight knocked her through the same teleporter again.
+The pad is ringed by teleport lines, and the way off it to the key passes the corner where two
+meet: the path fitting refuses a path whose box grazes a line that sets something off (a
+trip: kept for exit pads, "a path over the corner of an exit pad is held back"), and the
+search, with no poly between to ban and try again, had none. A teleport goes off only when her
+middle crosses it from the front; here it doesn't cross it at all (0.3 past its end).
+
+- **The rule:** a teleport line is a trip to a path only crossed from its front by her middle
+  (`front_trips`); exit lines, set off from either side, as before. Tried first: only a way
+  wholly behind the line let through; the way's far end lay past the line's own line, and it
+  changed nothing.
+- **Measured:** MAP16's eight: exits 4 -> 7, stalls 2 -> 0, those out 33-50 min (were 38-58).
+  Three-lives: exits 294 -> 292 (E4M7 -2: deaths, a fight and floors gone differently; one
+  faster); E4M7 on 16 runs of eight fresh seeds, skills 3 and 4: 8 -> 10 out, stalls 0 for 0.

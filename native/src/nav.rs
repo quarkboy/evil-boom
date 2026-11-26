@@ -271,6 +271,8 @@ pub struct NavFacts {
     /// lines that set something off walked over, a path mustn't so much as graze unless it means
     /// to cross them: teleports, and exits (a pad's edges can all be exits)
     pub trip_lines: HashSet<usize>,
+    /// ...those of them that go off only crossed from the front (teleports)
+    pub front_trips: HashSet<usize>,
     /// lines of sectors that shut by themselves (not to be counted as crossed)
     pub shutting: HashSet<usize>,
     /// cell -> one-sided walls (and the like) there
@@ -426,6 +428,7 @@ pub struct NavCore {
     pub walls: HashSet<usize>,
     pub drops: HashSet<usize>,
     pub trip_lines: HashSet<usize>,
+    pub front_trips: HashSet<usize>,
     pub shutting: HashSet<usize>,
     pub static_grid: HashMap<Cell, Vec<Seg>>,
     pub obstacle_grid: HashMap<Cell, Vec<Seg>>,
@@ -478,6 +481,7 @@ impl NavCore {
             walls,
             drops,
             trip_lines,
+            front_trips,
             shutting,
             static_grid,
             obstacle_grid,
@@ -495,6 +499,7 @@ impl NavCore {
             walls,
             drops,
             trip_lines,
+            front_trips,
             shutting,
             static_grid,
             obstacle_grid,

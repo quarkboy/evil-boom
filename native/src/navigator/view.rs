@@ -139,6 +139,7 @@ impl Core {
                 .into_iter()
                 .chain(exit_walk_lines(&n.map))
                 .collect(),
+            front_trips: teleport_lines(&n.map).into_iter().collect(),
             shutting: shutting_lines(&n.map, &n.triggers).into_iter().collect(),
             static_grid: n.static_wall_grid.clone(),
             obstacle_grid: n.obstacle_grid.clone(),

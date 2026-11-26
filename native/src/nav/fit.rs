@@ -351,6 +351,19 @@ struct Fitter<'a> {
 }
 
 impl Fitter<'_> {
+    /// Does the way a-b leave teleport line `li` alone? A teleport goes off only when her middle
+    /// crosses it from its front: grazed, or crossed from behind, it does nothing. (TNT MAP16: off the pad in the blue
+    /// skull's closet, by the pad's corner where its two lines meet; "no path" to the key a
+    /// step away, and the key left there for 50 minutes)
+    fn misses_teleport(&self, li: usize, a: Point, b: Point) -> bool {
+        if !self.nav.front_trips.contains(&li) {
+            return false;
+        }
+        let (v1, v2) = self.nav.map.line_seg(li);
+        let side = |p: Point| (v2.0 - v1.0) * (p.1 - v1.1) - (v2.1 - v1.1) * (p.0 - v1.0);
+        !(side(a) < 0.0 && crate::geom::segments_cross(a, b, v1, v2))
+    }
+
     fn heights(&mut self, s: usize) -> std::rc::Rc<Vec<Heights>> {
         self.st.heights(s)
     }
@@ -745,7 +758,9 @@ impl Fitter<'_> {
                     // corner of an exit pad is held back, as a squeeze past a wall)
                     let trips = hits.iter().any(|e| {
                         self.nav.seg_lines.get(e).is_some_and(|li| {
-                            self.nav.trip_lines.contains(li) && !self.exempt.contains(li)
+                            self.nav.trip_lines.contains(li)
+                                && !self.exempt.contains(li)
+                                && !self.misses_teleport(*li, a, b)
                         })
                     });
                     // (and past shut sectors only, even where the box fits with no room to spare: a
