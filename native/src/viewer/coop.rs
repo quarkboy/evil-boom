@@ -553,7 +553,7 @@ impl Coop {
                     self.write_logs();
                 }
             }
-            self.report(start);
+            self.report(start, false);
             if !self.engine.exited() || !self.next_level(o)? {
                 return Ok(());
             }
@@ -587,11 +587,14 @@ impl Coop {
         }
     }
 
-    fn report(&mut self, start: Instant) {
+    /// The level's end told, and each one's part in it (`stopped`: the window shut mid-level).
+    fn report(&mut self, start: Instant, stopped: bool) {
         self.level_over();
         let secs = (self.engine.tic - self.began) as f64 / TICRATE;
         let outcome = if self.engine.exited() {
             "EXITED"
+        } else if stopped {
+            "STOPPED"
         } else {
             "TIMEOUT"
         };
@@ -704,10 +707,14 @@ impl Coop {
                 }
                 self.tic();
                 owed -= 1.0;
+                // (each one's log as it goes: a window shut mid-level leaves what led up to it)
+                if self.engine.tic % (5 * 35) == 0 {
+                    self.write_logs();
+                }
             }
             if self.engine.exited() {
                 if !reported {
-                    self.report(real);
+                    self.report(real, false);
                     reported = true;
                 }
                 if self.next_level(o)? {
@@ -746,6 +753,10 @@ impl Coop {
                     break;
                 }
             }
+        }
+        // (shut mid-level: where things stood, the frags too, and each one's log)
+        if !reported {
+            self.report(real, true);
         }
         Ok(())
     }
