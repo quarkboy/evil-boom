@@ -595,6 +595,10 @@ impl Session {
             self.link
                 .context(&BRIEFING.replace(" (doom_policy instinct)", ""), true);
         }
+        // (co-op: who she is in the game, and that the others are players)
+        if let Some(t) = &self.director.team {
+            self.link.context(&t.brief(), true);
+        }
         self.briefed = true;
         self.briefed_at = tic;
         self.told_chars = 0;
@@ -1185,6 +1189,16 @@ impl Session {
         // (the game's own not hers here: going on is the screen's)
         let wanted = OFF_LEVEL.iter().copied().filter(|&a| a != "doom_game");
         self.sync_actions(wanted.collect(), &mut log);
+        log
+    }
+
+    /// (co-op) Dead a moment, to be born again where she started: what the director's been
+    /// told passed on, her actions left as they are (they're hers again in a second or two;
+    /// anything she sends meanwhile is answered then).
+    pub fn dead(&mut self, tic: i64) -> Vec<String> {
+        self.clock(tic);
+        let mut log = Vec::new();
+        self.tell_news(tic, false, &mut log);
         log
     }
 

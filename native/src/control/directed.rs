@@ -40,6 +40,7 @@ mod powers;
 mod restart;
 mod situation;
 mod tactics;
+pub mod team;
 mod view;
 mod why;
 
@@ -48,6 +49,7 @@ pub use events::{Event, Weight};
 pub use look::{Listing, Pick};
 pub use moments::{skill_name, Level};
 pub use policy::{help_for as policy_help_for, Policy};
+pub use team::{Mate, Team};
 
 /// Her standing settings the stream can lock, so they're not hers to change (`--lock`, the
 /// console): `doom_policy`'s, then `doom_goal`'s.
@@ -468,6 +470,9 @@ pub struct Director {
     names: BTreeMap<String, String>,
     places: Option<Places>,
     pub reports: Vec<Report>,
+    /// (co-op) the others in the game (`team.rs`), and her status's line of them
+    pub team: Option<Team>,
+    team_line: String,
     /// what's been told already: exits, switches and doors, items, monsters (ids), the health
     /// mark passed, keys and weapons held, dead
     told_exits: std::collections::BTreeSet<String>,
@@ -851,8 +856,17 @@ impl Director {
             Some(None) => "; Ultra Instinct on".to_string(),
             None => String::new(),
         };
+        let team = if self.team_line.is_empty() {
+            String::new()
+        } else {
+            format!("; {}", self.team_line)
+        };
         // (short: what Evil reads costs her context)
-        format!("{}; {}; {doing}{plan}{ultra}", kit(obs), self.tally.line())
+        format!(
+            "{}; {}; {doing}{plan}{ultra}{team}",
+            kit(obs),
+            self.tally.line()
+        )
     }
 
     /// What in her status she'd act on, to tell whether it's changed: health and armor by tens,
@@ -1407,7 +1421,7 @@ fn weapon_name(slot: i32, obs: &Observation) -> &'static str {
     }
 }
 
-fn key_name(k: crate::specials::Key) -> &'static str {
+pub fn key_name(k: crate::specials::Key) -> &'static str {
     use crate::specials::Key;
     match k {
         Key::BlueCard => "blue keycard",

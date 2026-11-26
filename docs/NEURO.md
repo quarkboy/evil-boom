@@ -168,6 +168,31 @@ next aloud (`directed.next_silent` false); a force that isn't silent doesn't sen
 Gary whose force schema takes `silent` (one line in its `src/lib/api/v1/spec.ts`) needs
 nothing.
 
+### Co-op: a Neuro each
+
+```sh
+tools/neuro/garys.sh 2
+evil-boom watch doom2 MAP01 --players 2 --fight 3 --mortal --neuro ws://127.0.0.1:8000 --tuning config/gary.json
+```
+
+`--players N` with `--neuro URL` gives each player her own Neuro: player 1 on URL's port, player
+2 on the next, and so on (or a comma-separated URL for each). Each session is the single-player
+one, her own link, director, actions and context. On top of that she's told:
+
+- **who she is in the game** with the rules: "Co-op: you're player 1 (green) of 2. The others
+  are players like you; their status is in yours. Your bullets hurt them."
+- **where the others are** in her status: "team: player 2 (indigo) in area-14 NW 323, health 100,
+  fighting". Area ids are the same in every player's names, since they're built from the map.
+- **what they do that a player would say aloud**, as moments: a death, a key taken.
+- **her own death and rebirth:** her death as in single-player, then "You're back at your start
+  with a pistol. The level's as it was." There's no restart of the level and no `doom_game`. The
+  game is the watch's: one level, or `--episode`.
+
+Headless, a co-op game directed by Neuro runs at real speed, and each player's log is written as
+it goes (every 5 s). `tools/neuro/garys.sh N` starts a Gary for each player. Player K's profile,
+`evil-boom-pK` on port 7999+K, is made on first use as a copy of `evil-boom`'s, with only the
+port and the name shown changed (*Evil Neuro K*). Not in a deathmatch yet.
+
 Gary's diagnostics ask for `additionalProperties: false` on every schema. Ours follow the SDK's
 specification instead, which lists `additionalProperties` among the keywords Neuro may not
 handle well, and mend or drop unknown fields.

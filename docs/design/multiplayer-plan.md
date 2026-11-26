@@ -283,3 +283,21 @@ status bars show Doom's own FRAG box (`ST_EvilView` counts it for the player dra
 - **First matches** (headless): MAP01 4 players no monsters, 10-9-7-3 in 121 s; with UV monsters,
   10-8-8-5 in 109 s; E1M1 2 players, 10-8 in 420 s; MAP07 3 players altdeath, 10-9-7 in 345 s.
   The co-op test is unchanged by it (main-a796-1126 = dm-coop2-1126, run for run).
+
+## Neuro in co-op, a first pass (2026-11-26)
+
+Each player is directed by her own Neuro (`--players N --neuro URL`: ports counted up from
+URL's, or a URL each), tested against a Gary each (`tools/neuro/garys.sh N`, GLM 5.3 in all).
+As section 3 planned, `Session` is self-contained, so the co-op watch holds one per seat and
+keeps it from level to level. What was new:
+
+- **The director's `team`** (`control/directed/team.rs`): the others as she'd know them,
+  given by the watch each tic. That's a line in her status (where each is, area id, bearing and
+  distance, health, fighting), moments for a death or a key taken, and her own rebirth told.
+  The brief names her ("player 1 (green) of 2").
+- **Not yet:** the co-op actions (`doom_follow`, `doom_regroup`, `doom_cover`, an item left
+  for another), questions that are everyone's, and a switch another hit, told her. The bot
+  already shares what each learns; the model doesn't hear of it. Deathmatch with Neuro is
+  refused for now.
+- **Pacing:** headless with Neuro runs at real speed (it's on the model's clock); the window
+  always has.

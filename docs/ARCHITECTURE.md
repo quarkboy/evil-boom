@@ -116,7 +116,8 @@ and replanning when the world doesn't match the plan.
 - `sweep`, `score`, `play`, `replay`: headless runs, the one-death score (retired: see
   TESTING.md), recording and replaying runs.
 - `viewer/`: the watch window (`minifb`), the stream layout, Doom's own screens; `viewer/coop`,
-  a co-op game of up to four bots, every view at once (`watch --players N`).  The bots are not aware of each other yet.
+  a co-op or deathmatch game of up to four bots, every view at once (`watch --players N`), each
+  directed by her own Neuro with `--neuro`.
 - `console/`: the stream console, a web page that supervises a `watch` child process
   ([CONSOLE.md](CONSOLE.md)).
 - `arena`, `drive`, `survey`: fights set up for development, driving by hand, the secret survey.
@@ -140,7 +141,7 @@ produce exactly the same runs.
 | what she knows and learns | `knowledge/model/perception.rs`, `learning.rs` |
 | how a line special behaves | `specials.rs`, `movers.rs` |
 | a Neuro action | `neuro/session.rs` (its schema), `control/directed/` (what it does) |
-| what she's told | `control/directed/moments.rs`, `kills.rs`, `events.rs`, `why.rs` |
+| what she's told | `control/directed/moments.rs`, `kills.rs`, `events.rs`, `why.rs`; in co-op, of the others: `team.rs` |
 | the engine boundary | `dsda/evil_api.c` and `native/src/dsda.rs` together (and `EVIL_ABI` in both, when a call or a struct changes) |
 | what a tic's observation or controls hold | `domain.rs` |
 | a run's options, or what every way of running her shares | `run.rs` (the sweep, the watcher and the ultra instinct's runner are each over it) |

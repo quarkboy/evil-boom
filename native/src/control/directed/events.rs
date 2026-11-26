@@ -138,6 +138,12 @@ pub enum Event {
     GameOffer,
     GameOver,
     Restarted,
+
+    // Co-op.
+    /// something another player's done (a death, a key, a switch, a way out)
+    Team,
+    /// born again at her start, the level going on
+    Reborn,
 }
 
 impl Event {
@@ -184,7 +190,8 @@ impl Event {
             | E::Plan
             | E::HeldFire
             | E::UltraOver
-            | E::LevelStart => Weight::Moment,
+            | E::LevelStart
+            | E::Team => Weight::Moment,
             E::Outcome
             | E::Replaced
             | E::Asked
@@ -207,7 +214,8 @@ impl Event {
             | E::GameOffer
             | E::GameOver
             | E::Ultra
-            | E::Restarted => Weight::Urgent,
+            | E::Restarted
+            | E::Reborn => Weight::Urgent,
         }
     }
 }

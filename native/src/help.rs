@@ -108,8 +108,7 @@ The game:
   --episode-lives N       her lives for all of it, not each level's (with --mortal)
   --players N             a co-op game of N players (2 to 4), each a bot of her own, every
                           one's view on screen (Doom's co-op: rebirth at the start, friendly
-                          fire). They don't know of each other yet. Each one's log in
-                          out/watch/coop/ when a level ends
+                          fire). Each one's log in out/watch/coop/ when a level ends
   --deathmatch            with --players: Doom's deathmatch instead (random starts, weapons
                           stay, respawns); --altdeath for its second kind (everything comes
                           back). Monsters in with --fight N, none without
@@ -154,7 +153,9 @@ The music (see evil-boom help music):
   --soundfont NAME|opl    the MIDI synth: a SoundFont in soundfonts/, or the OPL synth
 
 Directed play:
-  --neuro URL             directed by Neuro (or neuro-mock) over its WebSocket, ws://HOST:PORT
+  --neuro URL             directed by Neuro (or neuro-mock) over its WebSocket, ws://HOST:PORT.
+                          With --players N (co-op): one Neuro each, on URL's port and the
+                          ones after it (8000, 8001, ...), or URL,URL,... one each
   --gpt [CONFIG]          directed by a language model, run in this program
                           (config/neuro-gpt.json unless named)
   --directed FILE         orders read from FILE as lines are added to it; answers in FILE.out

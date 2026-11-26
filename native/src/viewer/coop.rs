@@ -11,9 +11,14 @@
 //! at `--frags N` (20 unless told; 0: no limit) or `--minutes M` (10; 0: none): the level's
 //! ended there, and Doom's own tally of frags comes up. Monsters in or not, as `--fight` says.
 //!
-//! Each player is an `Agent` as a single-player watch has one, with what she's seen and learned
-//! her own: nothing's shared, and none of them knows the others are there yet (their bodies
-//! aren't among the things she's given: not a monster, not something in her way). Doom's own
+//! Each player is an `Agent` as a single-player watch has one. In co-op what each learns of the
+//! level is shared, each knows where the others are (`Observation::mates`: given way to, not
+//! shot through), and jobs are left to whoever took them up first.
+//!
+//! Directed (`--neuro URL`, co-op only): each player has a Neuro of her own, a `Session` as a
+//! single-player watch has, on URL's port and the ones after it (or a URL each). Her director
+//! is told of the others (`control/directed/team.rs`): where each is, a death, a key. Headless,
+//! it's played at the game's own pace, each one's log written as it goes. Doom's own
 //! co-op rules play: each at their own start, the things only a netgame has, keys and weapons
 //! left lying for the others, a death a rebirth at the start with a pistol (she presses on a
 //! second later, and goes on knowing what she knew), and one of them out by the exit ends the
@@ -38,6 +43,7 @@ use crate::engine::{Engine, Options};
 use crate::knowledge::model::Knowledge;
 use crate::map::{MapData, ML_DONTDRAW};
 use crate::navigator::Navigator;
+use crate::neuro::session::Session;
 use crate::play::Agent;
 use crate::tactical::tuning::Tuning;
 use crate::wad::Wad;
@@ -76,6 +82,9 @@ struct Seat {
     idle_since: Option<i64>,
     /// her view as last drawn: (width, height, palette indices, the palette)
     frame: Option<(usize, usize, Vec<u8>, usize)>,
+    /// (directed) the hits on her since her director was last told, and the keys she had
+    hits: Vec<crate::dsda::Hit>,
+    keys_had: crate::specials::Keys,
 }
 
 struct Coop {
@@ -85,6 +94,8 @@ struct Coop {
     map_name: String,
     engine: Engine,
     seats: Vec<Seat>,
+    /// (co-op directed by Neuro) each player's own link, kept from level to level
+    neuro: Vec<Session>,
     /// PLAYPAL's palettes, made ours (brightened as the watch's are)
     palettes: Vec<Vec<u32>>,
     /// the tic the level began at (its time is from here)
@@ -107,8 +118,12 @@ struct Coop {
 pub fn watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(), String> {
     let unsupported = [
         (
-            o.directed.is_some() || o.neuro.is_some() || o.gpt.is_some(),
-            "directed play",
+            o.directed.is_some() || o.gpt.is_some(),
+            "a directed script or the GPT stand-in (--neuro is)",
+        ),
+        (
+            o.neuro.is_some() && o.deathmatch > 0,
+            "Neuro in a deathmatch",
         ),
         (o.control.is_some(), "the stream console (--control)"),
         (o.present, "--present"),
@@ -182,6 +197,17 @@ impl Coop {
                 }
             );
         }
+        let mut neuro = Vec::new();
+        if let Some(spec) = o.neuro.as_deref() {
+            let clocks = Tuning::from(o.tuning.as_deref())?.directed.clone();
+            for (i, url) in neuro_urls(spec, o.players)?.iter().enumerate() {
+                let mut n = Session::new(url, &clocks);
+                n.set_locked(&o.locked);
+                n.set_choices(&no_game());
+                println!("player {}: directed by Neuro at {url}", i + 1);
+                neuro.push(n);
+            }
+        }
         let palettes = palettes(&w).iter().map(|p| brightened(p)).collect();
         let began = engine.tic;
         Ok(Coop {
@@ -191,6 +217,7 @@ impl Coop {
             map_name,
             engine,
             seats,
+            neuro,
             palettes,
             began,
             seed: o.seed,
@@ -223,11 +250,34 @@ impl Coop {
                 s.agent.x_mut().claimed = going[..i].iter().flatten().copied().collect();
             }
         }
+        // (directed: each where she was last tic, for the others' directors)
+        let players = self.seats.len();
+        let mates: Vec<crate::control::directed::Mate> = if self.neuro.is_empty() {
+            Vec::new()
+        } else {
+            self.seats
+                .iter()
+                .enumerate()
+                .filter_map(|(j, s)| {
+                    let obs = s.obs.as_ref()?;
+                    Some(crate::control::directed::Mate {
+                        player: j,
+                        pos: obs.pos(),
+                        alive: s.dead_since.is_none(),
+                        health: obs.health.unwrap_or(0.0) as i32,
+                        fighting: self.neuro[j].director.now.fighting(),
+                    })
+                })
+                .collect()
+        };
+        // (what each has done the others are told of: who, what)
+        let mut news: Vec<(usize, String)> = Vec::new();
         let mut cs = Vec::with_capacity(self.seats.len());
         for (i, s) in self.seats.iter_mut().enumerate() {
             self.engine.as_player(i);
             let tic = self.engine.tic;
             if self.engine.dead() {
+                let newly = s.dead_since.is_none();
                 let since = *s.dead_since.get_or_insert_with(|| {
                     s.deaths += 1;
                     s.agent
@@ -236,6 +286,14 @@ impl Coop {
                         .push(format!("tic {tic}: died (death {})", s.deaths));
                     tic
                 });
+                if let Some(n) = self.neuro.get_mut(i) {
+                    if newly {
+                        n.director.died(tic, false, &std::mem::take(&mut s.hits));
+                        news.push((i, format!("{} died.", who(i))));
+                    }
+                    let said = n.dead(tic);
+                    s.agent.x_mut().log.extend(said);
+                }
                 // (the use key, pressed and let go: Doom wants it pressed again for each go)
                 let press = tic - since >= REBIRTH_WAIT && (tic - since) % 2 == 0;
                 cs.push(Controls {
@@ -253,6 +311,10 @@ impl Coop {
                     .x_mut()
                     .log
                     .push(format!("tic {tic}: born again at the start"));
+                if let Some(n) = self.neuro.get_mut(i) {
+                    n.director.reborn(tic);
+                    crate::control::directed::Director::take_over(&mut s.agent);
+                }
             }
             // (a deathmatch: nothing left to do a while, the level walked round again, for whoever's
             // about and whatever's back)
@@ -271,14 +333,58 @@ impl Coop {
             let obs = self.engine.observe();
             s.secrets_seen =
                 crate::run::secret_found(&self.engine, &mut s.agent, &obs, s.secrets_seen);
+            if let Some(n) = self.neuro.get_mut(i) {
+                let keys = obs.keys.unwrap_or_default();
+                for k in keys.iter().filter(|&k| !s.keys_had.has(k)) {
+                    news.push((
+                        i,
+                        format!(
+                            "{} got the {}.",
+                            who(i),
+                            crate::control::directed::key_name(k)
+                        ),
+                    ));
+                }
+                s.keys_had = keys;
+                let d = &mut n.director;
+                d.tally = crate::control::directed::Tally::of(self.engine.tally());
+                d.level = crate::control::directed::Level {
+                    map: self.map_name.clone(),
+                    title: self.engine.level_title(),
+                    skill: self.engine.skill(),
+                };
+                d.restart_allowed = false;
+                d.hits = std::mem::take(&mut s.hits);
+                d.gibbed = self.engine.gibbed();
+                let team = crate::control::directed::Team {
+                    me: i,
+                    players,
+                    mates: mates.iter().filter(|m| m.player != i).cloned().collect(),
+                };
+                d.set_team(&s.agent, &obs, team);
+                let said = n.tic(&mut s.agent, &obs);
+                s.agent.x_mut().log.extend(said);
+            }
             let c = s.agent.act(&obs, s.controls.as_ref());
             s.obs = Some(obs);
             cs.push(c);
         }
+        let tic = self.engine.tic;
+        for (from, text) in news {
+            for (j, n) in self.neuro.iter_mut().enumerate() {
+                if j != from {
+                    n.director.mate_news(tic, text.clone());
+                }
+            }
+        }
         self.engine.step_all(&cs);
+        let directed = !self.neuro.is_empty();
         for (i, s) in self.seats.iter_mut().enumerate() {
             self.engine.as_player(i);
             for h in self.engine.take_hits() {
+                if directed {
+                    s.hits.push(h);
+                }
                 let armor = if h.armor > 0 {
                     format!(" (and {} armor)", h.armor)
                 } else {
@@ -404,6 +510,9 @@ impl Coop {
         }
         self.engine.as_player(0);
         let deaths: Vec<i32> = self.seats.iter().map(|s| s.deaths).collect();
+        for n in &mut self.neuro {
+            n.director.new_map();
+        }
         self.seats = seats(&nav, &next, o)?;
         for (s, d) in self.seats.iter_mut().zip(deaths) {
             s.deaths = d;
@@ -418,10 +527,28 @@ impl Coop {
     /// the time's up), each player's part in it.
     fn headless(&mut self, o: &WatchOptions) -> Result<(), String> {
         let start = Instant::now();
+        // (directed by Neuro: at the game's own pace, she being on the clock; or as asked)
+        let paced = o.paced || !self.neuro.is_empty();
+        let speed = if o.paced && o.speed > 0.0 {
+            o.speed
+        } else {
+            1.0
+        };
+        let (clock, tic0) = (Instant::now(), self.engine.tic);
         loop {
             let cap = (o.max_seconds * TICRATE) as i64;
             while !self.engine.exited() && self.engine.tic - self.began < cap {
                 self.tic();
+                if paced {
+                    let due = (self.engine.tic - tic0) as f64 / (TICRATE * speed);
+                    let ahead = due - clock.elapsed().as_secs_f64();
+                    if ahead > 0.0 {
+                        std::thread::sleep(std::time::Duration::from_secs_f64(ahead));
+                    }
+                }
+                if !self.neuro.is_empty() && self.engine.tic % (5 * 35) == 0 {
+                    self.write_logs();
+                }
             }
             self.report(start);
             if !self.engine.exited() || !self.next_level(o)? {
@@ -430,7 +557,35 @@ impl Coop {
         }
     }
 
+    /// The level's over (out by its exit, or the time's up): whoever directs each told.
+    fn level_over(&mut self) {
+        let tic = self.engine.tic;
+        let exited = self.engine.exited();
+        for (n, s) in self.neuro.iter_mut().zip(self.seats.iter_mut()) {
+            if exited {
+                n.director.level_done();
+            }
+            let said = n.between(tic);
+            s.agent.x_mut().log.extend(said);
+        }
+    }
+
+    /// Each one's log, to read afterwards (or follow: written as it goes when she's directed):
+    /// out/watch/coop/MAP[-sSEED]-pN.log.
+    fn write_logs(&self) {
+        let dir = crate::config::out_dir().join("watch").join("coop");
+        let _ = std::fs::create_dir_all(&dir);
+        for (i, s) in self.seats.iter().enumerate() {
+            let seed = self.seed.map_or_else(String::new, |s| format!("-s{s}"));
+            let path = dir.join(format!("{}{seed}-p{}.log", self.map_name, i + 1));
+            if let Err(e) = std::fs::write(&path, s.agent.x().log.join("\n") + "\n") {
+                println!("{}: {e}", path.display());
+            }
+        }
+    }
+
     fn report(&mut self, start: Instant) {
+        self.level_over();
         let secs = (self.engine.tic - self.began) as f64 / TICRATE;
         let outcome = if self.engine.exited() {
             "EXITED"
@@ -486,16 +641,7 @@ impl Coop {
             );
         }
         self.engine.as_player(0);
-        // (each one's log, to read afterwards: out/watch/coop/MAP[-sSEED]-pN.log)
-        let dir = crate::config::out_dir().join("watch").join("coop");
-        let _ = std::fs::create_dir_all(&dir);
-        for (i, s) in self.seats.iter().enumerate() {
-            let seed = self.seed.map_or_else(String::new, |s| format!("-s{s}"));
-            let path = dir.join(format!("{}{seed}-p{}.log", self.map_name, i + 1));
-            if let Err(e) = std::fs::write(&path, s.agent.x().log.join("\n") + "\n") {
-                println!("{}: {e}", path.display());
-            }
-        }
+        self.write_logs();
     }
 
     fn kind(&self) -> &'static str {
@@ -828,6 +974,9 @@ fn seats(nav: &Rc<Navigator>, map_name: &str, o: &WatchOptions) -> Result<Vec<Se
             if o.keys {
                 agent.keys_only();
             }
+            if o.neuro.is_some() {
+                crate::control::directed::Director::take_over(&mut agent);
+            }
             Seat {
                 agent,
                 controls: None,
@@ -838,6 +987,8 @@ fn seats(nav: &Rc<Navigator>, map_name: &str, o: &WatchOptions) -> Result<Vec<Se
                 told: 0,
                 idle_since: None,
                 frame: None,
+                hits: Vec::new(),
+                keys_had: crate::specials::Keys::default(),
             }
         })
         .collect())
@@ -846,4 +997,44 @@ fn seats(nav: &Rc<Navigator>, map_name: &str, o: &WatchOptions) -> Result<Vec<Se
 /// s cut to `width` characters.
 fn clip(s: &str, width: usize) -> String {
     s.chars().take(width).collect()
+}
+
+/// "player 2 (indigo)"
+fn who(i: usize) -> String {
+    crate::control::directed::team::who(i)
+}
+
+/// No game of hers to start, nor a level to go on to or begin again: the co-op game's the
+/// watch's.
+fn no_game() -> crate::control::game::Choices {
+    crate::control::game::Choices {
+        maps: Vec::new(),
+        skills: Vec::new(),
+        single: false,
+        continuous: false,
+        start: false,
+        next: false,
+        restart: false,
+    }
+}
+
+/// Each player's Neuro: as many URLs as players, comma-separated; or one, the others on the
+/// ports after its (ws://127.0.0.1:8000: player 2 on 8001, ...).
+fn neuro_urls(spec: &str, players: usize) -> Result<Vec<String>, String> {
+    let urls: Vec<String> = spec.split(',').map(|u| u.trim().to_string()).collect();
+    if urls.len() == players {
+        return Ok(urls);
+    }
+    let [one] = &urls[..] else {
+        return Err(format!(
+            "--neuro: one URL, or one for each of the {players} players"
+        ));
+    };
+    let (head, port) = one
+        .rsplit_once(':')
+        .and_then(|(h, p)| Some((h, p.trim_end_matches('/').parse::<u32>().ok()?)))
+        .ok_or("--neuro: a URL ending in its port (ws://127.0.0.1:8000)")?;
+    Ok((0..players as u32)
+        .map(|k| format!("{head}:{}", port + k))
+        .collect())
 }
