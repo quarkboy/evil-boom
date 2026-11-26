@@ -203,6 +203,9 @@ impl Coop {
             for (i, url) in neuro_urls(spec, o.players)?.iter().enumerate() {
                 let mut n = Session::new(url, &clocks);
                 n.set_locked(&o.locked);
+                if o.instinct_off {
+                    n.set_instinct(false);
+                }
                 n.set_choices(&no_game());
                 println!("player {}: directed by Neuro at {url}", i + 1);
                 neuro.push(n);

@@ -150,6 +150,8 @@ pub struct WatchOptions {
     /// settings not hers to change (`--lock`; of `neuro::session::LOCKABLE`): each stays as
     /// it is ("instinct": on) and is out of her actions
     pub locked: Vec<String>,
+    /// (`--instinct off`) she waits for each action from the start, instinct off
+    pub instinct_off: bool,
     /// the window's size, vsync, full screen
     pub window: crate::dsda::WindowSpec,
     /// the game drawn at this size (width, height); none: its own (640x480)
@@ -648,6 +650,9 @@ fn first_watch(
     let clocks = Tuning::from(o.tuning.as_deref())?.directed.clone();
     if let Some(f) = watch.feed.as_mut() {
         f.director.set_clocks(&clocks);
+        if o.instinct_off {
+            f.director.idle_auto = None;
+        }
     }
     watch.neuro = o
         .neuro
@@ -655,6 +660,9 @@ fn first_watch(
         .map(|url| crate::neuro::session::Session::new(url, &clocks));
     if let Some(n) = watch.neuro.as_mut() {
         n.set_locked(&o.locked);
+        if o.instinct_off {
+            n.set_instinct(false);
+        }
     }
     Ok((w, watch))
 }

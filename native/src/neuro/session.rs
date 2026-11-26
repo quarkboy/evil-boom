@@ -576,6 +576,11 @@ impl Session {
         self.locked = new;
     }
 
+    /// Instinct on or off from the start (`--instinct`): hers to change unless it's locked too.
+    pub fn set_instinct(&mut self, on: bool) {
+        self.director.idle_auto = on.then_some(crate::control::directed::IDLE_AUTO);
+    }
+
     /// The settings not hers to change now.
     pub fn locked(&self) -> Vec<String> {
         self.locked.iter().map(ToString::to_string).collect()

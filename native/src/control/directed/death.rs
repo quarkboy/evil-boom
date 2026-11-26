@@ -38,8 +38,12 @@ pub fn hurt_by(h: &Hit) -> String {
         (Some("ExplosiveBarrel"), Some(s)) if s != "ExplosiveBarrel" && s != "DoomPlayer" => {
             format!("a barrel {} set off", one(s))
         }
+        // (a player's, not hers: another in the game, as only a co-op or deathmatch game has)
+        (Some("ExplosiveBarrel"), Some("DoomPlayer")) => "a barrel another player set off".into(),
         (Some("ExplosiveBarrel"), _) => "a barrel".into(),
         (Some(t), _) if h.own => format!("your own {}", called(t)),
+        (Some("DoomPlayer"), _) | (None, Some("DoomPlayer")) => "another player's shot".into(),
+        (Some(t), Some("DoomPlayer")) => format!("another player's {}", called(t)),
         (Some(t), Some(s)) if t != s => format!("{}'s {}", one(s), called(t)),
         (Some(t), _) => one(t),
         (None, Some(s)) => one(s),

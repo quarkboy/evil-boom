@@ -973,6 +973,7 @@ fn watch_options(
         choices: None,
         lives_shared: false,
         locked: Vec::new(),
+        instinct_off: false,
         window: evilboom::dsda::WindowSpec::default(),
         render: None,
         soundfont: evilboom::config::default_soundfont(),
@@ -1023,6 +1024,13 @@ fn watch_options(
                     .and_then(|v| v.parse().ok())
                     .ok_or("--episode-lives N (her lives for all the levels played on through)")?;
                 w.lives_shared = true;
+            }
+            "--instinct" => {
+                w.instinct_off = match it.next().map(String::as_str) {
+                    Some("off") => true,
+                    Some("on") => false,
+                    _ => return Err("--instinct on|off".into()),
+                };
             }
             "--lock" => {
                 let all = evilboom::control::directed::LOCKABLE;
