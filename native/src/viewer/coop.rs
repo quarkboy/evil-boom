@@ -306,7 +306,8 @@ impl Coop {
                 s.controls = None;
                 continue;
             }
-            if s.dead_since.take().is_some() {
+            let reborn = s.dead_since.take().is_some();
+            if reborn {
                 // (born again at her start: the level goes on as it is, she knowing what she
                 // knew of it)
                 s.agent.reborn();
@@ -314,8 +315,7 @@ impl Coop {
                     .x_mut()
                     .log
                     .push(format!("tic {tic}: born again at the start"));
-                if let Some(n) = self.neuro.get_mut(i) {
-                    n.director.reborn(tic);
+                if self.neuro.get(i).is_some() {
                     crate::control::directed::Director::take_over(&mut s.agent);
                 }
             }
@@ -337,6 +337,11 @@ impl Coop {
             s.secrets_seen =
                 crate::run::secret_found(&self.engine, &mut s.agent, &obs, s.secrets_seen);
             if let Some(n) = self.neuro.get_mut(i) {
+                // (told as she's back, what she had and can take again: her last look alive,
+                // `s.obs`, says what that was)
+                if reborn {
+                    n.director.reborn(&s.agent, &obs, s.obs.as_ref());
+                }
                 let keys = obs.keys.unwrap_or_default();
                 for k in keys.iter().filter(|&k| !s.keys_had.has(k)) {
                     news.push((

@@ -56,6 +56,18 @@ pub(super) struct Kills {
     told_all_dead: bool,
 }
 
+impl Kills {
+    /// (co-op) Born again with the level going on: the dead already told stay told (else
+    /// every corpse in sight is news again, "61 killed at once"); what was under way is over.
+    pub(super) fn reborn(self) -> Kills {
+        Kills {
+            told: self.told,
+            told_all_dead: self.told_all_dead,
+            ..Kills::default()
+        }
+    }
+}
+
 /// Deaths and barrels going off together.
 struct Burst {
     last: i64,
