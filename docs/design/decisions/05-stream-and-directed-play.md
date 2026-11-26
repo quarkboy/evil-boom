@@ -4640,3 +4640,10 @@ checked it in the game).
   lost an exit each and stalled three more (a trim strip with no poly of its own walked
   across). Portals: MAP21 -8, MAP09 -4, none on the IWAD maps tried; three-lives every run
   the same, MAP09's eight runs the same.
+- **And the slow lift out of the pit, ridden.** On the lift (sector 180, a perpetual lift 16 s
+  from the pit's floor to the landing at 0), she waited at the edge for the landing (181,
+  which never moves), and at 5 s it was "not coming". Now while the floor she's on carries
+  her toward the one across, she waits it out, up to 40 s. Tried wider first, both halves
+  each worse: waiting on whichever side can move (30 runs that changed: 6 exits fewer), and
+  waiting for any mover coming toward the height wanted (11 fewer); together 295 -> 279.
+  Measured, riding only: exits 295 -> 294 (s.e. 0.008; MAP22 +2, MAP15 -3), stalls 1 for 1.

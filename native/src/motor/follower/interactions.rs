@@ -608,6 +608,21 @@ impl RouteFollower {
             self.wait_tic = Some(obs.tic - waited.min(4 * 35)); // (keeps "waited" short)
             return Some(self.motion.hold(obs, want, Some(look)));
         }
+        // Nor while the floor she's on carries her to the one across: riding a lift, whoever set
+        // it going, up to a limit (TNT MAP21: a slow lift going round by itself, 16 s up out of
+        // a pit, given up at 5 s with her on it and on her way)
+        /// the longest ride waited out to the floor across (tics)
+        const RIDE_WAIT: i64 = 40 * 35;
+        let mine = nav.sector_of_poly(cur);
+        let riding = mine != sector
+            && obs.z.is_some_and(|z| (z - live[mine].floor).abs() < 1.0)
+            && self.prev_live.get(mine).is_some_and(|was| {
+                let target = live[sector].floor;
+                (live[mine].floor - target).abs() < (was.floor - target).abs() - 0.01
+            });
+        if riding && !opener && waited < RIDE_WAIT {
+            return Some(self.motion.hold(obs, want, Some(look)));
+        }
         // (on a floor that hurts, a mover standing still with nothing on its way and nothing to
         // press isn't waited for the few seconds: each costs her health, and nothing she does
         // there moves it. A nukage room's door a walk-over line opens, crossed again while it
