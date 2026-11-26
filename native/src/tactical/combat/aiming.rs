@@ -208,9 +208,18 @@ impl Combat {
             ax += vx * tof;
             ay += vy * tof;
         }
-        let aim = heading(pos, (ax, ay));
         let info = mon(t.name);
-        let tolerance = 1.5f64.max((info.radius * 0.7).atan2(d.max(1.0)).to_degrees());
+        // (a bullet at the point across it that a shot gets to: its middle, or its side out
+        // from behind something; the turn's leeway what's left of it that side)
+        let line = w.hitscan.then(|| self.line_to(obs, t, None)).flatten();
+        let off = line.map_or(0.0, |p| dist(p, (t.x, t.y)));
+        if let Some(p) = line {
+            (ax, ay) = p;
+        }
+        let aim = heading(pos, (ax, ay));
+        let leeway = (info.radius * 0.7 - off).max(info.radius * 0.15);
+        let tolerance =
+            (if off > 0.0 { 0.5 } else { 1.5f64 }).max(leeway.atan2(d.max(1.0)).to_degrees());
         let on = norm(aim - obs.angle).abs() < tolerance;
         // A missile gun's rounds gone at one standing where it is and it none the worse: they aren't getting there,
         // whatever the reckoning says. (`projectile_reaches` goes by the missile's middle, on
@@ -363,15 +372,47 @@ impl Combat {
     }
 
     /// Would a shot at t get to it, as Doom aims one (not too steep, nothing in the way); else out
-    /// level, past it unless it's level with her.
+    /// level, past it unless it's level with her. Anywhere across it: `line_to`.
     pub fn can_hit(&mut self, obs: &Observation, t: &Thing, height: Option<f64>) -> bool {
+        self.line_to(obs, t, height).is_some()
+    }
+
+    /// Where on t a shot gets to (as `can_hit`): its middle, or with that behind something, a
+    /// point across its width a bullet still hits (Doom's shot hits whatever's box it crosses: the
+    /// edge of a spider mastermind standing half behind a pillar). The nearest the middle first;
+    /// None: nowhere.
+    pub(super) fn line_to(
+        &mut self,
+        obs: &Observation,
+        t: &Thing,
+        height: Option<f64>,
+    ) -> Option<Point> {
+        /// across its width, these shares of its radius either side (inside its edge: the box
+        /// is as narrow as its radius seen square on)
+        const ACROSS: [f64; 4] = [0.5, -0.5, 0.8, -0.8];
+        /// narrower than this, the middle only
+        const WIDE: f64 = 20.0;
         let h = height.unwrap_or_else(|| mon(t.name).height);
         self.refresh_tic_cache(obs);
         let key = (t.id, h.to_bits());
         if let Some(&v) = self.hit_cache.get(&key) {
             return v;
         }
-        let v = self.shot_clear(obs, (t.x, t.y), t.z, h);
+        let at = (t.x, t.y);
+        let mut v = self.shot_clear(obs, at, t.z, h).then_some(at);
+        let r = mon(t.name).radius;
+        let pos = obs.pos();
+        let d = dist(pos, at).max(1.0);
+        if v.is_none() && r >= WIDE {
+            let side = (-(at.1 - pos.1) / d, (at.0 - pos.0) / d);
+            for f in ACROSS {
+                let p = (at.0 + side.0 * f * r, at.1 + side.1 * f * r);
+                if self.shot_clear(obs, p, t.z, h) {
+                    v = Some(p);
+                    break;
+                }
+            }
+        }
         self.hit_cache.insert(key, v);
         v
     }

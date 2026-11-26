@@ -169,12 +169,32 @@ impl Combat {
             Some(1..=3) => 5.6,
             _ => 0.0,
         };
+        // (a missile's own width, and its time on the way: a teammate walking across its line in
+        // the second a plasma ball takes over a big room is hit. Its radius, and its speed a tic)
+        let missile = match obs.weapon {
+            Some(5) => Some((11.0, 20.0)),
+            Some(6 | 7) => Some((13.0, 25.0)),
+            _ => None,
+        };
+        let in_line = |p: Point, d: f64, body: f64| {
+            let bearing = (p.1 - pos.1).atan2(p.0 - pos.0).to_degrees();
+            let off = norm(bearing - facing).abs();
+            let width = (body / d.max(1.0)).atan().to_degrees();
+            off <= spread + width && d < to_target + body
+        };
         let in_the_way = obs.mates.iter().filter(|m| m.alive).any(|m| {
             let d = dist(pos, m.pos());
             let bearing = (m.y - pos.1).atan2(m.x - pos.0).to_degrees();
             let off = norm(bearing - facing).abs();
-            let width = (BODY / d.max(1.0)).atan().to_degrees();
-            let line = off <= spread + width && d < to_target + BODY;
+            let line = match missile {
+                None => in_line(m.pos(), d, BODY),
+                Some((radius, speed)) => {
+                    let flight = d / speed;
+                    let then = (m.x + m.vx * flight, m.y + m.vy * flight);
+                    in_line(m.pos(), d, BODY + radius)
+                        || in_line(then, dist(pos, then), BODY + radius)
+                }
+            };
             let blast = match obs.weapon {
                 Some(5) => target.is_some_and(|t| dist(t, m.pos()) < BLAST) || d < BLAST,
                 Some(7) => off <= SPRAY.0 && d < SPRAY.1,

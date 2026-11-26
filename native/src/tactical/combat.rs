@@ -316,7 +316,7 @@ pub struct Combat {
     infight: BTreeMap<i32, i32>,
     heights_tic: Option<i64>,
     heights_now: Vec<(f64, f64)>,
-    hit_cache: BTreeMap<(i32, u64), bool>,
+    hit_cache: BTreeMap<(i32, u64), Option<Point>>,
     /// the missiles she's getting out of the way of, and the way
     dodge: Dodging,
     /// where the route's taking her mid-fight (an errand: health, a gun, ammo), for dodging
