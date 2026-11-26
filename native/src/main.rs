@@ -342,6 +342,7 @@ fn sector(wad: &str, map: &str, sectors: &[String]) -> Result<(), String> {
                 speed: 0.0,
                 requires: j.requires.clone(),
                 strafe: j.strafe,
+                ledge: j.ledge,
             })
             .collect();
         for (j, verdict) in into.iter().zip(nav.jump_lab.check_jumps(&lab)) {

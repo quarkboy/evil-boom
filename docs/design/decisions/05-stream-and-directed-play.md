@@ -4608,3 +4608,24 @@ look again; on skill 1, seed 854202743, new ground over the nukage (21 at full h
 - Patches: out/patches/1125-new-ground-solo.patch, 1125-rechecks-after-risky-ways.patch.
 - **Not modelled:** skill 1 halves every hit she takes, floors' too (`damage_factor`), and
   the reckoning counts them whole. Skill 1 only, which the three-lives test doesn't play.
+
+## TNT MAP21: up a chair onto a ledge too thin for her centre (2026-11-25)
+
+The planner had no route at all: the yellow skull's pillar comes down from the underground, whose
+only way in is through a vine cage (sector 82, a DR door) at the top of a strip 60 up (sector 80,
+12 deep before the door). The way up is a chair (sectors 79, 78, 77: floors 16, 24, 40); the
+chair's back is 18 from the strip. Her box goes over both, so she steps up 20 onto the strip and
+stands there, her centre over the room's floor below, and opens the door (the maintainer, who
+checked it in the game).
+
+- **The rule:** a climb run in the simulator that stops, standing more than a step above where
+  it began, with her centre over a lower floor, is a climb onto the ledge under her box (the
+  game keeps her on the highest floor under it). Its takeoff is 8 short of where she stops,
+  and the check counts it landed by the box over the ledge at its height. Flagged as such
+  (`Jump::ledge`); only flagged jumps are checked that way. Ledge climbs take only the places
+  no ordinary climb took.
+- **First go**, landing tested by the box for any jump with its landing point outside its
+  landing poly: the verdicts of old jumps on E4M5, MAP12 and MAP14 changed too (exits 295 ->
+  293). Flagged, none do.
+- **Measured:** MAP21's reach for the planner 193 -> 273 of 330 sectors, and a 30-step plan
+  where there was none; three-lives every run the same.

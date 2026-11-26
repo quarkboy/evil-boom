@@ -169,6 +169,8 @@ pub struct Jump {
     pub sure: f64,
     /// run strafing, the faster (jumps::Jump::strafe)
     pub strafe: bool,
+    /// onto a ledge too thin for her centre (jumps::Jump::ledge)
+    pub ledge: bool,
 }
 
 impl Jump {

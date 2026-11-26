@@ -36,6 +36,9 @@ pub struct Jump {
     pub requires: Vec<(usize, Heights)>,
     /// run strafing (forward and sideways at once, faced STRAFE_FACING off the way), the faster
     pub strafe: bool,
+    /// a climb onto a ledge too thin for her centre: landed is her box on it (`dest` is over
+    /// the floor below, where she stands)
+    pub ledge: bool,
 }
 
 impl Jump {
@@ -57,6 +60,7 @@ impl Jump {
             speed,
             requires,
             strafe: false,
+            ledge: false,
         }
     }
 
@@ -105,7 +109,7 @@ pub const STRAFE_SIDE: f64 = 40.0;
 pub const STRAFE_FACING: f64 = 38.659_808_254_090_09;
 
 /// Bumped whenever the finder's results could change (it keys Python's jump cache).
-pub const FINDER_VERSION: u32 = 37;
+pub const FINDER_VERSION: u32 = 43;
 
 /// `walks`: begun this far to the side of the stretch's start (units), a try each
 const WALK_SIDES: [f64; 5] = [0.0, 3.0, -3.0, 6.0, -6.0];

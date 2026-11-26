@@ -578,6 +578,9 @@ impl JumpLab {
         let mut touched: Option<usize> = None;
         let mut crossed = false;
         let mut lowest = f64::INFINITY;
+        // (a climb onto a ledge too thin for her centre, which hangs over the floor below:
+        // landed on it is the box over it at its height, `ledge_under`)
+        let ledge = j.ledge;
         for i in 0..6 * TICRATE {
             let o = sim.pos();
             motion.observe(o);
@@ -585,7 +588,13 @@ impl JumpLab {
                 return (Flight::Missed, last);
             }
             last = o;
-            let here = self.mesh.poly_at(o).map(|p| self.mesh.poly(p).sector);
+            let here = if ledge {
+                self.ledge_at(o, sim.z_units())
+                    .or_else(|| self.mesh.poly_at(o))
+                    .map(|p| self.mesh.poly(p).sector)
+            } else {
+                self.mesh.poly_at(o).map(|p| self.mesh.poly(p).sector)
+            };
             // only past the takeoff: the landing sector can be the run-up's own, across a gap
             let past = (o.0 - j.takeoff.0) * ux + (o.1 - j.takeoff.1) * uy > 0.0;
             crossed = crossed || (past && here == Some(want));

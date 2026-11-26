@@ -13,6 +13,8 @@ use crate::det::HashSet;
 use crate::domain::MAX_MOVE;
 use crate::geom::{dist, Point, MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS};
 
+/// a climb onto a ledge too thin for her centre takes off this far short of where she stops
+const LEDGE_SHORT: f64 = 8.0;
 /// degrees off the face's normal
 const CLIMB_ANGLES: [f64; 3] = [0.0, -30.0, 30.0];
 /// run-ups tried, longest first (the first the box can stand at)
@@ -40,6 +42,7 @@ impl JumpLab {
         let mut sim = PlayerSim::new(self, self.world());
         let mut found: HashSet<(usize, usize)> = HashSet::default();
         let mut out = Vec::new();
+        let mut ledges: Vec<((usize, usize), Jump)> = Vec::new();
         for portal in &mesh.portals {
             if portal
                 .linedef
@@ -79,6 +82,12 @@ impl JumpLab {
                             continue;
                         };
                         let key = (j.src_polys[0], mesh.poly(j.dest_poly).sector);
+                        // (onto a ledge too thin for her centre: only where no climb stood on
+                        // takes that place, after the rest)
+                        if j.ledge {
+                            ledges.push((key, j));
+                            continue;
+                        }
                         // (by the planner's own test of a portal, the ledges beside it too: a stair
                         // of crates smaller than she is has portals the box "fits" by their
                         // width alone, and none it gets through with the next crate up standing
@@ -95,6 +104,16 @@ impl JumpLab {
                         found.insert(key);
                     }
                 }
+            }
+        }
+        for (key, j) in ledges {
+            let fits = |pi: usize, frm: usize| {
+                fits_from
+                    .get(pi)
+                    .is_some_and(|f| f[usize::from(mesh.portals[pi].a != frm)])
+            };
+            if found.insert(key) && !self.walks_to(key.0, key.1, &fits) {
+                out.push(j);
             }
         }
         out
@@ -136,6 +155,41 @@ impl JumpLab {
             }
         }
         false
+    }
+
+    /// Standing still at `pos` more than a step above `floor` with her centre over lower floor:
+    /// the poly of the ledge under her box that holds her up, if any.
+    fn ledge_under(&self, sim: &PlayerSim<'_>, pos: Point, floor: f64) -> Option<usize> {
+        let mesh = &self.mesh;
+        let z = sim.floorz_units();
+        let centre = mesh.poly_at(pos)?;
+        if !sim.on_floor()
+            || z <= floor + MAX_STEP
+            || self.initial[mesh.poly(centre).sector].0 >= z - 0.5
+        {
+            return None;
+        }
+        self.ledge_at(pos, z)
+    }
+
+    /// A poly under her box at `pos` (not under her centre) whose floor is at `z`, as the
+    /// map starts.
+    pub(super) fn ledge_at(&self, pos: Point, z: f64) -> Option<usize> {
+        let mesh = &self.mesh;
+        let r = PLAYER_RADIUS - 1.0;
+        [
+            (-r, -r),
+            (r, -r),
+            (r, r),
+            (-r, r),
+            (0.0, -r),
+            (0.0, r),
+            (-r, 0.0),
+            (r, 0.0),
+        ]
+        .iter()
+        .filter_map(|(dx, dy)| mesh.poly_at((pos.0 + dx, pos.1 + dy)))
+        .find(|&q| (self.initial[mesh.poly(q).sector].0 - z).abs() < 0.5)
     }
 
     /// Running at the face through `takeoff` along `d` from the first run-up the box can stand
@@ -201,7 +255,16 @@ impl JumpLab {
             let (vx, vy) = sim.velocity();
             speed = f64::max(speed, vx.hypot(vy));
             if vx.hypot(vy) < 0.1 && speed > 1.0 {
-                return None; // (stopped against it)
+                // (stopped against it; but stopped up on a ledge too thin for her centre, the
+                // box over it and the centre over the floor below, she stands there: the game
+                // keeps her on the highest floor under the box. TNT MAP21: up a chair to the
+                // strip in front of the vine door, pressed from there)
+                // (taking off a little short of where she stops: she never gets to the face)
+                let short = (pos.0 - d.0 * LEDGE_SHORT, pos.1 - d.1 * LEDGE_SHORT);
+                return self.ledge_under(sim, pos, floor).map(|q| Jump {
+                    ledge: true,
+                    ..Jump::new(src, q, pos, runup, short, speed, Vec::new())
+                });
             }
             let p = mesh.poly_at(pos)?;
             let high = self.initial[mesh.poly(p).sector].0;
