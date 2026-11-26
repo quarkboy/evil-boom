@@ -210,6 +210,9 @@ pub struct Knowledge {
     /// a co-op game: once-only lines the other players have told her they set off (used up
     /// for her too: not to be tried)
     pub mates_used: BTreeSet<usize>,
+    /// a co-op game: a gun the level put down stays there when picked up, and one she has
+    /// already gives her nothing (`left_lying`)
+    pub coop: bool,
     /// trigger id -> sectors whose effect she knows
     pub learned: BTreeMap<usize, BTreeSet<usize>>,
     /// teleport line used -> where it took her
@@ -416,6 +419,7 @@ impl Knowledge {
             seen_heights: BTreeMap::new(),
             first_heights: BTreeMap::new(),
             seen_tic: BTreeMap::new(),
+            coop: false,
             mates_used: BTreeSet::new(),
             fired: Vec::new(),
             learned: BTreeMap::new(),
@@ -634,6 +638,22 @@ impl Knowledge {
                 self.traps.push(t.clone());
             }
         }
+    }
+
+    /// A co-op game's gun she has already, lying where the level put it: it stays there for the
+    /// others and gives her nothing, not even its ammo (`Fight::left_lying` is the fight's own).
+    pub fn left_lying(&self, obs: &Observation, t: &crate::domain::Thing) -> bool {
+        let Some(slot) = crate::bestiary::weapon_item(t.name).filter(|_| self.coop) else {
+            return false;
+        };
+        let has = match t.name {
+            "SuperShotgun" => obs.super_shotgun == Some(true),
+            "Chainsaw" => obs.chainsaw == Some(true),
+            _ => obs.weapons.as_ref().is_some_and(|w| w.contains(&slot)),
+        };
+        has && self.nav.map.things.iter().any(|m| {
+            m.x.round() as i32 == t.x.round() as i32 && m.y.round() as i32 == t.y.round() as i32
+        })
     }
 
     /// A line that works once only (W1, S1, G1, D1).

@@ -542,7 +542,7 @@ impl Explorer {
                 .things
                 .iter()
                 .flatten()
-                .filter(|t| TAP_AMMO.contains(&t.name))
+                .filter(|t| TAP_AMMO.contains(&t.name) && !k.left_lying(obs, t))
             {
                 if !nav.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p)) {
                     continue;
