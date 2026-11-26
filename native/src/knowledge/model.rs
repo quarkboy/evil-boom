@@ -207,6 +207,9 @@ pub struct Knowledge {
     /// sector -> the last tic it was in view
     pub seen_tic: BTreeMap<usize, i64>,
     pub fired: Vec<Fired>,
+    /// a co-op game: once-only lines the other players have told her they set off (used up
+    /// for her too: not to be tried)
+    pub mates_used: BTreeSet<usize>,
     /// trigger id -> sectors whose effect she knows
     pub learned: BTreeMap<usize, BTreeSet<usize>>,
     /// teleport line used -> where it took her
@@ -413,6 +416,7 @@ impl Knowledge {
             seen_heights: BTreeMap::new(),
             first_heights: BTreeMap::new(),
             seen_tic: BTreeMap::new(),
+            mates_used: BTreeSet::new(),
             fired: Vec::new(),
             learned: BTreeMap::new(),
             teleports: BTreeMap::new(),
@@ -587,12 +591,24 @@ impl Knowledge {
     /// As `interactables`, and with them the faces of what she has seen move that are a wall
     /// only from the side they're pressed from (`on_a_mover`'s `from_front`): the last
     /// resort's (`Explorer::lift_faces`).
+    /// A line that works once only (W1, S1, G1, D1).
+    pub fn once_only(&self, li: usize) -> bool {
+        use crate::specials::Trigger;
+        self.info.get(&li).is_some_and(|t| {
+            matches!(
+                t.trigger,
+                Trigger::W1 | Trigger::S1 | Trigger::G1 | Trigger::D1
+            )
+        })
+    }
+
     pub fn untried_lines(&self, faces_from_front: bool) -> Vec<usize> {
         let used: BTreeSet<Mechanism> = self
             .fired
             .iter()
             .filter(|f| self.counts(f))
             .map(|f| self.tried_key(f.line))
+            .chain(self.mates_used.iter().map(|&li| self.tried_key(li)))
             .collect();
         self.mapped
             .iter()
@@ -859,6 +875,19 @@ impl Knowledge {
             "--- life {}: the level from the start, knowing what she knew",
             self.lives
         ));
+    }
+
+    /// Born again at her start in a co-op game: the level goes on as it is, and all she knows of
+    /// it holds (heights, lines set off, what's taken). Only what was hers goes: where she stood,
+    /// the suit's time, the floor hurting her. Not a new life of the level's (`lives` as it was:
+    /// what she set off is of this one still).
+    pub fn reborn(&mut self) {
+        self.suit_until = None;
+        self.last = None;
+        self.standing = None;
+        self.hurt_on = None;
+        self.events
+            .push("--- born again at the start: the level as it is".to_string());
     }
 
     /// Where she can plan to go: the parts of the map she's seen into or stood in.

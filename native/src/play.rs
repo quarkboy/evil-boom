@@ -125,6 +125,14 @@ impl Agent {
         }
     }
 
+    /// Dead in a co-op game and born again at her start, the level going on as it is.
+    pub fn reborn(&mut self) {
+        match self {
+            Agent::Plain(x) | Agent::Expert(x, _) => x.reborn(),
+            Agent::Fight(p) => p.reborn(),
+        }
+    }
+
     /// (a level again, asked for by the expert's run, counted: a run played back)
     pub fn used_restart(&mut self) {
         if let Agent::Expert(_, c) = self {

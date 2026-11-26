@@ -151,6 +151,32 @@ pub struct Observation {
     pub hit_sides: Vec<i32>,
     /// the tic of the last such hit, if she's had one
     pub hit_tic: Option<i64>,
+    /// in a co-op game, the other players (as the automap shows them all to each): none alone
+    pub mates: Vec<Mate>,
+    /// in a co-op game, which player she is (0 the first; it settles who gives way)
+    pub me: usize,
+}
+
+/// Another player in a co-op game, as she knows of them (the automap shows every player).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Mate {
+    /// which player (0 the first)
+    pub index: usize,
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+    /// degrees, 0 = east, anticlockwise
+    pub angle: f64,
+    /// moving, per tic
+    pub vx: f64,
+    pub vy: f64,
+    pub alive: bool,
+}
+
+impl Mate {
+    pub fn pos(&self) -> Point {
+        (self.x, self.y)
+    }
 }
 
 impl Observation {

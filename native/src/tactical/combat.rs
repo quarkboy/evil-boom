@@ -576,6 +576,34 @@ impl Combat {
         self.steer.from = None;
     }
 
+    /// Born again at her start in a co-op game: the level as it is, the monsters where she last
+    /// knew them, the dead dead. What goes is what was of her last life's fight: what she was
+    /// shooting, dodging, had in sight.
+    pub fn reborn(&mut self) {
+        self.ammo_was.clear();
+        self.reach_watch.clear();
+        self.lot = Lot::default();
+        self.patience = Patience::default();
+        self.missiles_seen.clear();
+        self.seen_hurt.clear();
+        self.senses.cries_due.clear();
+        self.senses.attacks_heard.clear();
+        self.senses.alert = None;
+        self.visible.clear();
+        self.now.nothing_in_sight();
+        self.tracks.clear();
+        self.invulnerable_until = i64::MIN / 2;
+        self.target = None;
+        self.health = None;
+        self.dodge.missiles.clear();
+        self.dodge.homing_since.clear();
+        self.dodge.shake_spot = None;
+        self.last_pos = None;
+        self.velocity = (0.0, 0.0);
+        self.route_way = None;
+        self.steer.from = None;
+    }
+
     // --- what's about -----------------------------------------------------------------------
 
     pub fn observe(&mut self, obs: &Observation) {

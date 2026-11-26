@@ -231,3 +231,26 @@ and needs a fight she doesn't have yet.
   one at the switch and one shooting.
 - **The score:** co-op and deathmatch get their own reports; the single-player score stays the
   judge of single-player changes.
+
+## Stage 2, a first pass (2026-11-26)
+
+The maintainer's brief: just for fun, make them slightly less dumb, no sweeps. Measured with
+`tools/coop/run.sh` (8 levels, 4 bots, HMP, mortal; out/coop/).
+
+- **Rebirth keeps the world** (`Agent::reborn`): a death in co-op isn't a level begun again. Her
+  knowledge of heights, lines set off and what's dead stays; only what she was doing goes.
+- **Teammates are known** (`Observation::mates`, as Doom's co-op automap shows every player).
+- **Friendly fire** (`Combat::spare_mates`): the trigger let go with a teammate inside the gun's
+  spread short of the target, or near where a rocket or the BFG goes off. Vanilla co-op's
+  friendly fire stays on (the maintainer: funnier).
+- **Giving way** (`Follower::give_way`): stopped half a second with a teammate at her elbow isn't
+  stuck (stuck there often, she gave the way up for the level). The higher-numbered steps off
+  the other's line of travel, the other goes on; four tries, then stuck as usual.
+- **What they tell each other** (`Knowledge::mates_used`): a once-only line a teammate set off is
+  used for her too. Told it was used but not what it did, so with nothing else to do she goes
+  and sees to those switches herself.
+- **Numbers**: before, 8/8 exits, 2600 s, 17 deaths, friendly-fire damage 2857, stuck 1554. After,
+  7/8, deaths 13, friendly fire 1238, stuck 1042 (without the switch sharing, fixes2: 8/8, 2625
+  s, 8 deaths, 744, 786). The miss is MAP07 seed 7: sector 1, lowered first by switch 162 and then
+  raised by the arachnotrons' death, ends at 40, and the mover model waits for 24. Order of
+  events; the sharing only changed which run met it. MAP07 on five other seeds exits in 81-97 s.

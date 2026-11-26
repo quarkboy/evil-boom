@@ -107,6 +107,8 @@ pub struct Unstick {
     pub(super) wedged: i32,
     pub(super) until: i64,
     pub(super) dir: f64,
+    /// given way to another player (a co-op game's) this many times in a row with no progress
+    pub(super) given_way: i32,
 }
 
 /// Where she is on the segment's track.

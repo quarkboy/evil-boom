@@ -60,6 +60,8 @@ struct Seat {
     /// dead since this tic (None: alive)
     dead_since: Option<i64>,
     deaths: i32,
+    /// her lines set off so far that the others have been told of (`tell_used`)
+    told: usize,
     /// her view as last drawn: (width, height, palette indices, the palette)
     frame: Option<(usize, usize, Vec<u8>, usize)>,
 }
@@ -75,6 +77,8 @@ struct Coop {
     palettes: Vec<Vec<u32>>,
     /// the tic the level began at (its time is from here)
     began: i64,
+    /// the game's seed (the logs are named by it)
+    seed: Option<u32>,
     speed: f64,
     paused: bool,
     sound: bool,
@@ -152,6 +156,7 @@ impl Coop {
             seats,
             palettes,
             began,
+            seed: o.seed,
             speed: o.speed,
             paused: false,
             sound,
@@ -187,8 +192,8 @@ impl Coop {
             }
             if s.dead_since.take().is_some() {
                 // (born again at her start: the level goes on as it is, she knowing what she
-                // knew; her head as for a level begun again, for now)
-                s.agent.restart();
+                // knew of it)
+                s.agent.reborn();
                 s.agent
                     .x_mut()
                     .log
@@ -222,6 +227,33 @@ impl Coop {
             }
         }
         self.engine.as_player(0);
+        self.tell_used();
+    }
+
+    /// What each has set off of the level's once-only lines, told the others (as players say
+    /// "I hit the switch"): used up for them too.
+    fn tell_used(&mut self) {
+        let mut said: Vec<(usize, usize)> = Vec::new();
+        for (i, s) in self.seats.iter_mut().enumerate() {
+            let k = &s.agent.x().knowledge;
+            for f in &k.fired[s.told.min(k.fired.len())..] {
+                if k.once_only(f.line) {
+                    said.push((i, f.line));
+                }
+            }
+            s.told = k.fired.len();
+        }
+        for (from, line) in said {
+            for (i, s) in self.seats.iter_mut().enumerate() {
+                if i != from && s.agent.x_mut().knowledge.mates_used.insert(line) {
+                    s.agent.x_mut().log.push(format!(
+                        "tic {}: player {} set off line {line}: used",
+                        self.engine.tic,
+                        from + 1
+                    ));
+                }
+            }
+        }
     }
 
     /// The level's out by its exit: on to the next one (the episode played on), each player
@@ -309,11 +341,12 @@ impl Coop {
             );
         }
         self.engine.as_player(0);
-        // (each one's log, to read afterwards: out/watch/coop/MAP-pN.log)
+        // (each one's log, to read afterwards: out/watch/coop/MAP[-sSEED]-pN.log)
         let dir = crate::config::out_dir().join("watch").join("coop");
         let _ = std::fs::create_dir_all(&dir);
         for (i, s) in self.seats.iter().enumerate() {
-            let path = dir.join(format!("{}-p{}.log", self.map_name, i + 1));
+            let seed = self.seed.map_or_else(String::new, |s| format!("-s{s}"));
+            let path = dir.join(format!("{}{seed}-p{}.log", self.map_name, i + 1));
             if let Err(e) = std::fs::write(&path, s.agent.x().log.join("\n") + "\n") {
                 println!("{}: {e}", path.display());
             }
@@ -619,6 +652,7 @@ fn seats(nav: &Rc<Navigator>, map_name: &str, o: &WatchOptions) -> Result<Vec<Se
                 secrets_seen: 0,
                 dead_since: None,
                 deaths: 0,
+                told: 0,
                 frame: None,
             }
         })

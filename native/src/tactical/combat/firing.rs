@@ -95,6 +95,7 @@ impl Combat {
             c.attack = false;
         }
         self.keep_line(obs, d, &mut c, legs || base.is_none());
+        self.spare_mates(obs, &mut c);
         if d.fire {
             self.tap(obs, &mut c);
         }
@@ -142,6 +143,54 @@ impl Combat {
     /// where she stands has. Between shots her legs are her own: the rest of the gun's cycle is
     /// the time to get behind something. None of this applies when the move is one that can't
     /// wait (a missile coming, an arch-vile's fire).
+    /// A co-op game: the trigger let go with another player where the shot would go: inside the
+    /// gun's spread (and their width) short of what she's shooting at, or for the rocket and the
+    /// BFG, near where it goes off.
+    fn spare_mates(&mut self, obs: &Observation, c: &mut Controls) {
+        /// a player's radius, and a little over for their moving
+        const BODY: f64 = 16.0 + 8.0;
+        /// a rocket's blast reaches this far (128), and a step over
+        const BLAST: f64 = 128.0 + 32.0;
+        /// the BFG's spray: 40 tracers over 90 degrees, 1024 units on from her
+        const SPRAY: (f64, f64) = (45.0, 1024.0);
+        if !c.attack || obs.mates.is_empty() {
+            return;
+        }
+        let pos = obs.pos();
+        let facing = obs.angle - c.turn;
+        let target = self
+            .target
+            .and_then(|id| self.visible.iter().find(|t| t.id == id))
+            .map(|t| (t.x, t.y));
+        let to_target = target.map_or(2048.0, |t| dist(pos, t));
+        // (the spread either side: a bullet's, a shell's pellets; the super shotgun's twice that)
+        let spread = match obs.ready {
+            Some(8) => 11.2,
+            Some(1..=3) => 5.6,
+            _ => 0.0,
+        };
+        let in_the_way = obs.mates.iter().filter(|m| m.alive).any(|m| {
+            let d = dist(pos, m.pos());
+            let bearing = (m.y - pos.1).atan2(m.x - pos.0).to_degrees();
+            let off = norm(bearing - facing).abs();
+            let width = (BODY / d.max(1.0)).atan().to_degrees();
+            let line = off <= spread + width && d < to_target + BODY;
+            let blast = match obs.weapon {
+                Some(5) => target.is_some_and(|t| dist(t, m.pos()) < BLAST) || d < BLAST,
+                Some(7) => off <= SPRAY.0 && d < SPRAY.1,
+                _ => false,
+            };
+            line || blast
+        });
+        if in_the_way {
+            c.attack = false;
+            *self
+                .tally
+                .entry("triggers not pulled: another player in the way".to_string())
+                .or_insert(0.0) += 1.0;
+        }
+    }
+
     pub(super) fn keep_line(
         &mut self,
         obs: &Observation,

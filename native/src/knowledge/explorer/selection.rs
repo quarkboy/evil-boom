@@ -468,6 +468,15 @@ impl Explorer {
         if !found {
             found = self.dead_ends_gone_into(obs, hooks);
         }
+        // (a co-op game: out of things to do, the switches the others said they'd used are tried
+        // after all. She was told they were used, not what they did: what moved is seen there)
+        if !found && !self.knowledge.mates_used.is_empty() {
+            self.knowledge.mates_used.clear();
+            self.log.push(format!(
+                "tic {}: nothing else to do: the switches the others used, seen to herself",
+                obs.tic
+            ));
+        }
         if !found {
             found = self.way_on_whatever(obs, hooks);
         }

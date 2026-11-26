@@ -906,6 +906,40 @@ impl Player {
         self.start_over();
     }
 
+    /// Dead in a co-op game and born again at her start: what killed her noted, as `restart`
+    /// notes it, but the level goes on as it is (no level begun again: `Explorer::reborn`,
+    /// `Combat::reborn`).
+    pub fn reborn(&mut self) {
+        // Dead with something on: noted, so as not to walk into it again the same way. A level
+        // begun again for what's left has nothing on.
+        if let Some(cur) = &self.explorer.current {
+            let d = Death {
+                at: self.last_pos,
+                kind: cur.kind,
+                goal: cur.goal,
+                label: cur.label.clone(),
+                why: self.plight.why(self.fight.tune.deaths.blast_hit),
+                action: self.revealed_by(),
+                charged: 0,
+            };
+            self.explorer.log.push(format!(
+                "  [fight] died at ({:.0}, {:.0}) going for: {} ({})",
+                d.at.0,
+                d.at.1,
+                d.label,
+                d.why.label()
+            ));
+            self.fight.deaths.push(d);
+        }
+        self.explorer.reborn();
+        self.fight.combat.reborn();
+        self.retreat = None;
+        self.fight.combat.baiting = false;
+        self.trail.clear();
+        self.fight.hunted_spots.clear();
+        self.fight.answered.clear();
+    }
+
     /// The level begun again: of the things she remembers lying about, only what lies there at
     /// its start (what the map puts there). What a monster dropped dying isn't there now.
     fn forget_dropped(&mut self) {

@@ -61,6 +61,9 @@ const CARROT_STEPS: [f64; 4] = [72.0, 56.0, 40.0, 28.0];
 /// no progress this long while trying to move: back off and try again
 const STUCK_TICS: i64 = 35;
 
+/// nowhere this long with another player at her elbow: one of them gives way (`give_way`)
+const GIVE_WAY_AFTER: i64 = 17;
+
 const UNSTICK_TICS: i64 = 12;
 
 const UNSTICKS_BEFORE_REPLAN: i32 = 2;
@@ -214,6 +217,7 @@ impl RouteFollower {
         if self.at.along > self.at.furthest + 2.0 {
             if self.at.furthest != f64::NEG_INFINITY {
                 self.unstick.count = 0; // (got past whatever snagged her)
+                self.unstick.given_way = 0;
             }
             self.at.furthest = self.at.along;
             self.progress_tic = obs.tic;
@@ -237,6 +241,11 @@ impl RouteFollower {
             return self.act_at_goal(obs);
         }
         if let Some(c) = self.pinned_under_ceiling(obs) {
+            return c;
+        }
+        if obs.tic - self.progress_tic > GIVE_WAY_AFTER
+            && let Some(c) = self.give_way(obs)
+        {
             return c;
         }
         if obs.tic - self.progress_tic > STUCK_TICS {
@@ -490,6 +499,52 @@ impl RouteFollower {
         }
         self.cross_ready = true;
         None
+    }
+
+    /// A co-op game: nowhere for a while with another player at her elbow. Not stuck, and not
+    /// counted against the way (stuck there often enough, she'd give the way up for the level):
+    /// of the two, the one whose number is higher steps away and the other goes on, the clock
+    /// for being stuck put back for both. After `GIVE_WAY_MOST` in a row with no progress,
+    /// stuck as by anything else. None: she goes on as she was.
+    fn give_way(&mut self, obs: &Observation) -> Option<Controls> {
+        /// two players' radii and a step: at her elbow
+        const NEAR: f64 = 16.0 * 2.0 + 24.0;
+        const GIVE_WAY_TICS: i64 = 20;
+        const GIVE_WAY_MOST: i32 = 4;
+        let pos = obs.pos();
+        let m = obs
+            .mates
+            .iter()
+            .filter(|m| m.alive && dist(pos, m.pos()) < NEAR)
+            .min_by(|a, b| dist(pos, a.pos()).total_cmp(&dist(pos, b.pos())))?;
+        if self.unstick.given_way >= GIVE_WAY_MOST {
+            return None;
+        }
+        self.unstick.given_way += 1;
+        self.progress_tic = obs.tic + GIVE_WAY_TICS;
+        if obs.me < m.index {
+            self.log.add(
+                obs.tic,
+                format!("player {} in the way: hers is the way, on", m.index + 1),
+            );
+            return None;
+        }
+        self.log.add(
+            obs.tic,
+            format!("player {} in the way: giving way", m.index + 1),
+        );
+        self.unstick.until = obs.tic + GIVE_WAY_TICS;
+        // (off the other's line, to the side of it she's on: straight away from them is along
+        // their way, and they follow her into the same spot. Standing, straight away)
+        let away = heading(m.pos(), pos);
+        self.unstick.dir = if m.vx.hypot(m.vy) > 1.0 {
+            let way = m.vy.atan2(m.vx).to_degrees();
+            let side = (pos.0 - m.x) * m.vy - (pos.1 - m.y) * m.vx; // (> 0: on their right)
+            way + if side > 0.0 { -90.0 } else { 90.0 }
+        } else {
+            away
+        };
+        Some(self.unstick(obs))
     }
 
     /// Nowhere for `STUCK_TICS`: back off and try again; after a couple of those (or at once

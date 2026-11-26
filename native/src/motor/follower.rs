@@ -557,6 +557,7 @@ impl RouteFollower {
             crossing_lines: BTreeSet::new(),
             off_since: None,
             unstick: Unstick {
+                given_way: 0,
                 count: 0,
                 wedged: 0,
                 until: -1,

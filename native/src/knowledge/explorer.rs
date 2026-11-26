@@ -1183,6 +1183,42 @@ impl Explorer {
         self.lapsing_jumps.0.clear();
     }
 
+    /// Born again at her start in a co-op game (`restart` is for the level begun again): what
+    /// she was doing is dropped, what she knows of the level and gave up on is kept.
+    pub fn reborn(&mut self) {
+        if let Some(t) = self.trapped.take() {
+            self.log.push(format!(
+                "--- that was a trap ({} polys): not going back in",
+                t.0.len()
+            ));
+            self.knowledge.note(Note::Trap(t.0, t.1));
+        }
+        self.sensed = None;
+        if let Some(k) = self.keys.as_mut() {
+            k.let_go();
+        }
+        self.knowledge.reborn();
+        self.log
+            .push("--- died: born again at the start".to_string());
+        self.current = None;
+        self.follower = None;
+        self.life_began = None;
+        self.health_refused.clear();
+        self.anything_none = None;
+        self.look_until = None;
+        self.glance_until = None;
+        self.heard_n = self.knowledge.heard.len();
+        self.glanced = self.knowledge.fired.len();
+        self.sector = None;
+        self.view = None;
+        self.held_since = None;
+        self.urgent_n = self.knowledge.heard.len();
+        self.panic_tries = 0;
+        self.retried = None;
+        self.stuck_retried = None;
+        self.lapsing_jumps.0.clear();
+    }
+
     /// The game was put back to how it was at `since`, her clock (the ultra instinct): what she
     /// did after that didn't happen (`Knowledge::undone`), and what she was on is begun again.
     pub fn gone_back(&mut self, since: i64, tic: i64) {

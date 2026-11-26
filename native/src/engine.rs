@@ -737,7 +737,33 @@ impl Engine {
             sounds,
             hit_sides: std::mem::take(&mut self.hit_sides),
             hit_tic: self.hit_tic,
+            mates: self.mates(),
+            me: self.me,
         }
+    }
+
+    /// A co-op game's other players, where they are (none alone).
+    fn mates(&self) -> Vec<crate::domain::Mate> {
+        let others: Vec<usize> = (0..self.players).filter(|&j| j != self.me).collect();
+        let mates = others
+            .into_iter()
+            .map(|j| {
+                self.game.as_player(j);
+                let p = self.game.player();
+                crate::domain::Mate {
+                    index: j,
+                    x: p.x,
+                    y: p.y,
+                    z: p.z,
+                    angle: p.angle,
+                    vx: p.momx,
+                    vy: p.momy,
+                    alive: p.playerstate == 0 && p.health > 0,
+                }
+            })
+            .collect();
+        self.game.as_player(self.me);
+        mates
     }
 
     /// The game saved into `slot`, with what this side keeps of it (`Mark`): put back by
