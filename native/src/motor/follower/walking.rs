@@ -113,8 +113,35 @@ impl RouteFollower {
         let track = &seg.track;
         let pos = obs.pos();
         (self.at.index, self.at.along, self.at.off) = track.project(pos, self.at.along, 64.0);
+        // (off the path with no way from here, on a floor rising under her: it's carrying her,
+        // and the way on may be where it stops; held till it does. From the pit there's none. TNT MAP21: onto a
+        // pit raised by a line she'd crossed, before it was up)
+        let under = self
+            .view
+            .nav
+            .poly_at(obs.pos())
+            .map(|p| self.view.nav.sector_of_poly(p));
+        let rising = under.is_some_and(|s| {
+            self.prev_live
+                .get(s)
+                .is_some_and(|was| obs.heights[s].floor > was.floor + 0.01)
+                && obs
+                    .z
+                    .is_some_and(|z| (z - obs.heights[s].floor).abs() < 1.0)
+        });
+        if self.rise_hold && rising {
+            self.progress_tic = obs.tic;
+            return self.motion.hold(obs, (0.0, 0.0), self.look);
+        }
+        self.rise_hold = false;
         if self.lost(obs) {
             if !self.replan(obs, "off course", false) {
+                if rising {
+                    // (no way from here as things are: what the floor's carrying her to may have one)
+                    self.rise_hold = true;
+                    self.progress_tic = obs.tic;
+                    return self.motion.hold(obs, (0.0, 0.0), self.look);
+                }
                 return self.fail(obs, Trouble::OffCourse);
             }
             return self.walk(obs);

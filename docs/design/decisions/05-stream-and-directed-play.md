@@ -4647,3 +4647,12 @@ checked it in the game).
   each worse: waiting on whichever side can move (30 runs that changed: 6 exits fewer), and
   waiting for any mover coming toward the height wanted (11 fewer); together 295 -> 279.
   Measured, riding only: exits 295 -> 294 (s.e. 0.008; MAP22 +2, MAP15 -3), stalls 1 for 1.
+- **And a pit raised under her, waited out.** Further on, a pit (sector 206, -128) raised to the
+  floor round it by lines she'd crossed: walked onto before it was up, she was off the path,
+  with no way from there as things stood, and failed ("off course"). Now off course with no
+  way, on a floor rising under her, she's held till it stops. First, held on any rising floor
+  off the path: MAP25 -1, MAP26 -2, all deaths (stood still in a fight); with no way only,
+  every run the same.
+- **Measured, MAP21 with all four:** skill 1, 0 -> 3 of 4 out (the fourth to 337 of 342
+  sectors by the hour; all four had stood at 134); skill 2, one run to 341 of 342, the other
+  three dead early as before.

@@ -423,6 +423,8 @@ pub struct RouteFollower {
     live: Vec<Heights>,
     /// the heights the tic before (which way a ceiling's going)
     prev_live: Vec<Heights>,
+    /// off course with no way, held while the floor under her rises (`walk`)
+    rise_hold: bool,
     /// since when she's waited at an edge for a floor moving to where the way has it
     moving_wait: Option<i64>,
     /// ceilings coming down: what she's seen of them, and the wait or the crossing in hand
@@ -578,6 +580,7 @@ impl RouteFollower {
             creep: None,
             live: Vec::new(),
             prev_live: Vec::new(),
+            rise_hold: false,
             moving_wait: None,
             crusher: Crushers {
                 wait: None,
