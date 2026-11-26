@@ -105,6 +105,24 @@ pub struct Engine {
     hit_sides: Vec<i32>,
     /// the tic of the last of those (`Observation::hit_tic`)
     hit_tic: Option<i64>,
+    /// a co-op game's players (1: a single-player game), and the one the calls about "the
+    /// player" are about (`as_player`): what this side keeps of each of the others is kept
+    /// here meanwhile, the one's own in the fields above
+    players: usize,
+    me: usize,
+    seats: Vec<Seat>,
+}
+
+/// What this side keeps of a player (the suits, the message, the hits), for each of a co-op
+/// game's players but the one the engine's calls are about just now.
+#[derive(Clone, Debug, Default)]
+struct Seat {
+    suits: i32,
+    ironfeet: i32,
+    message_tic: i32,
+    hits: Vec<crate::dsda::Hit>,
+    hit_sides: Vec<i32>,
+    hit_tic: Option<i64>,
 }
 
 /// What the Rust side of the engine keeps that a saved game doesn't (`Engine::save`).
@@ -224,7 +242,55 @@ impl Engine {
             hits: Vec::new(),
             hit_sides: Vec::new(),
             hit_tic: None,
+            players: 1,
+            me: 0,
+            seats: vec![Seat::default()],
         })
+    }
+
+    /// The players in the games begun from now on (1 to 4): more than one, a co-op game, each
+    /// player a bot of her own (`as_player`, `step_all`). Before `start`.
+    pub fn set_players(&mut self, n: usize) {
+        let n = n.clamp(1, 4);
+        self.as_player(0);
+        self.players = n;
+        self.seats = vec![Seat::default(); n];
+        self.game.set_players(n);
+    }
+
+    pub fn players(&self) -> usize {
+        self.players
+    }
+
+    /// The player the engine's calls are about from now on (`observe`, `dead`, `loadout`,
+    /// `take_hits`, `set_god`, ...): 0, the first, unless told.
+    pub fn as_player(&mut self, i: usize) {
+        if i == self.me || i >= self.players {
+            return;
+        }
+        let mine = Seat {
+            suits: self.suits,
+            ironfeet: self.ironfeet,
+            message_tic: self.message_tic,
+            hits: std::mem::take(&mut self.hits),
+            hit_sides: std::mem::take(&mut self.hit_sides),
+            hit_tic: self.hit_tic,
+        };
+        self.seats[self.me] = mine;
+        let theirs = std::mem::take(&mut self.seats[i]);
+        self.suits = theirs.suits;
+        self.ironfeet = theirs.ironfeet;
+        self.message_tic = theirs.message_tic;
+        self.hits = theirs.hits;
+        self.hit_sides = theirs.hit_sides;
+        self.hit_tic = theirs.hit_tic;
+        self.me = i;
+        self.game.as_player(i);
+    }
+
+    /// The player the engine's calls are about (`as_player`).
+    pub fn me(&self) -> usize {
+        self.me
     }
 
     pub fn start(&mut self) {
@@ -304,24 +370,33 @@ impl Engine {
                     .new_game(self.skill, self.episode, self.map, self.nomonsters);
             }
         }
-        self.suits = 0;
-        self.ironfeet = 0;
-        self.message_tic = -1;
+        let me = self.me;
+        for i in 0..self.players {
+            self.as_player(i);
+            self.suits = 0;
+            self.ironfeet = 0;
+            self.message_tic = -1;
+        }
+        self.as_player(me);
         for _ in 0..WARMUP_TICS {
             self.game.tic(TicCmd::default());
         }
-        if let Some(l) = &self.carry {
-            self.game.give(l);
-            if crate::debug::on().carry {
-                eprintln!(
-                    "carried in: {l:?}; in her hands now, the game's weapon {}",
-                    self.game.player().readyweapon
-                );
+        for i in 0..self.players {
+            self.as_player(i);
+            if let Some(l) = &self.carry {
+                self.game.give(l);
+                if crate::debug::on().carry {
+                    eprintln!(
+                        "carried in: {l:?}; in her hands now, the game's weapon {}",
+                        self.game.player().readyweapon
+                    );
+                }
+            }
+            if self.god {
+                self.game.god(true);
             }
         }
-        if self.god {
-            self.game.god(true);
-        }
+        self.as_player(me);
     }
 
     /// The demo being recorded, ended and written to `path` (see `Dsda::record_end`): the tics
@@ -433,9 +508,15 @@ impl Engine {
         self.god
     }
 
+    /// God mode, for every player there is.
     pub fn set_god(&mut self, on: bool) {
         self.god = on;
-        self.game.god(on);
+        let me = self.me;
+        for i in 0..self.players {
+            self.as_player(i);
+            self.game.god(on);
+        }
+        self.as_player(me);
     }
 
     /// The level's tally so far: items, kills, secrets, each (got, of).
@@ -731,17 +812,31 @@ impl Engine {
     }
 
     pub fn step(&mut self, c: &Controls) {
-        let scale = if c.run { 1.0 } else { 0.5 };
-        self.game.tic(TicCmd {
-            forward: (c.forward * scale).round() as i32,
-            side: (c.strafe * scale).round() as i32,
-            turn: (-c.turn * 65536.0 / 360.0).round() as i32,
-            attack: c.attack,
-            use_: c.use_,
-            weapon: c.weapon,
-            exact: c.exact,
-        });
+        self.game.tic(ticcmd(c));
         self.tic += 1;
+        self.note_hits();
+    }
+
+    /// A co-op game's tic: each player's controls (`cs[i]` player i's; one short, standing
+    /// still), the hits on each kept for them. The engine's calls are about the player they
+    /// were about before.
+    pub fn step_all(&mut self, cs: &[Controls]) {
+        for i in 1..self.players {
+            self.game
+                .stage(i, cs.get(i).map(ticcmd).unwrap_or_default());
+        }
+        self.game.tic(cs.first().map(ticcmd).unwrap_or_default());
+        self.tic += 1;
+        let me = self.me;
+        for i in 0..self.players {
+            self.as_player(i);
+            self.note_hits();
+        }
+        self.as_player(me);
+    }
+
+    /// The hits on her the tic just played, kept (`take_hits`, `Observation::hit_sides`).
+    fn note_hits(&mut self) {
         let hits = self.game.hits();
         let sides = self.hit_sides.len();
         self.hit_sides
@@ -766,6 +861,26 @@ impl Engine {
     /// the screen's rate: things where they'd be between two tics).
     pub fn frame_at(&self, between: f64) -> Option<(usize, usize, Vec<u8>)> {
         self.game.draw_at(between)
+    }
+
+    /// Player `i`'s view as `frame_at` draws the first's, their status bar with it, and the
+    /// palette it's in (a co-op watch's).
+    pub fn frame_of(&self, i: usize, between: f64) -> Option<(usize, usize, Vec<u8>, usize)> {
+        self.game.draw_as(i, between)
+    }
+}
+
+/// A tic's controls as the game's command.
+fn ticcmd(c: &Controls) -> TicCmd {
+    let scale = if c.run { 1.0 } else { 0.5 };
+    TicCmd {
+        forward: (c.forward * scale).round() as i32,
+        side: (c.strafe * scale).round() as i32,
+        turn: (-c.turn * 65536.0 / 360.0).round() as i32,
+        attack: c.attack,
+        use_: c.use_,
+        weapon: c.weapon,
+        exact: c.exact,
     }
 }
 

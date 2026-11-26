@@ -121,9 +121,33 @@ const BT_USE: i32 = 2;
 const BT_CHANGE: i32 = 4;
 const BT_WEAPONSHIFT: i32 = 3;
 
+impl TicCmd {
+    /// (forwardmove, sidemove, angleturn, buttons) as `evil_tic` and `evil_cmd` take them
+    fn encoded(&self) -> (c_int, c_int, c_int, c_int) {
+        let mut buttons = 0;
+        if self.attack {
+            buttons |= BT_ATTACK;
+        }
+        if self.use_ {
+            buttons |= BT_USE;
+        }
+        if let Some(gun) = self.exact.filter(|g| (0..=8).contains(g)) {
+            buttons |= BT_CHANGE | EVIL_EXACT | (gun << BT_WEAPONSHIFT);
+        } else if (1..=7).contains(&self.weapon) {
+            buttons |= BT_CHANGE | ((self.weapon - 1) << BT_WEAPONSHIFT);
+        }
+        (
+            self.forward.clamp(-50, 50),
+            self.side.clamp(-50, 50),
+            self.turn.clamp(-32768, 32767),
+            buttons,
+        )
+    }
+}
+
 /// What `evil_api.c` calls itself (`EVIL_ABI` there): raised, there and here together, whenever
 /// a call's arguments or one of the structs above changes its meaning.
-const EVIL_ABI: c_int = 1;
+const EVIL_ABI: c_int = 2;
 
 /// (said when the library isn't the one this program was built against)
 const REBUILD: &str = "the engine library doesn't match this program ({}): build them from the \
@@ -165,6 +189,16 @@ type ScreenFn = unsafe extern "C" fn(*mut c_int);
 type TitleFn = unsafe extern "C" fn(*mut c_char, c_int) -> c_int;
 type DrawAtFn = unsafe extern "C" fn(*mut u8, c_int, f64) -> c_int;
 type IconFn = unsafe extern "C" fn(*const u32, c_int, c_int);
+type DrawAsFn = unsafe extern "C" fn(c_int, *mut u8, c_int, f64, *mut c_int) -> c_int;
+type CmdFn = unsafe extern "C" fn(c_int, c_int, c_int, c_int, c_int);
+
+/// A co-op game's calls (`evil_players`, `evil_as`, `evil_cmd`, `evil_draw_as`).
+struct CoopFns {
+    players: unsafe extern "C" fn(c_int),
+    as_: unsafe extern "C" fn(c_int),
+    cmd: CmdFn,
+    draw_as: DrawAsFn,
+}
 
 /// The watcher's window, the game's SDL's (evil_window_*): none in a library from before it.
 struct WindowFns {
@@ -324,6 +358,7 @@ pub struct Dsda {
     window_fns: Option<WindowFns>,
     /// (none in a library from before it was added)
     window_icon_fn: Option<IconFn>,
+    coop: CoopFns,
     /// what a frame's drawn into, kept across frames
     draw_buffer: RefCell<Vec<u8>>,
     /// (the game keeps pointers into its arguments, and it's never unloaded, as below: they're
@@ -447,6 +482,16 @@ impl Dsda {
                 get::<MobjsFn>(&lib, b"evil_mobjs")?,
                 get::<PlayerFn>(&lib, b"evil_player_state")?,
             )
+        };
+        // SAFETY: as above: evil_players(int), evil_as(int), evil_cmd's and evil_draw_as's
+        // signatures (EVIL_ABI 2 on).
+        let coop = unsafe {
+            CoopFns {
+                players: get::<unsafe extern "C" fn(c_int)>(&lib, b"evil_players")?,
+                as_: get::<unsafe extern "C" fn(c_int)>(&lib, b"evil_as")?,
+                cmd: get::<CmdFn>(&lib, b"evil_cmd")?,
+                draw_as: get::<DrawAsFn>(&lib, b"evil_draw_as")?,
+            }
         };
         // SAFETY: as above, evil_power's signature; optional, an older library hasn't it.
         let power_fn = unsafe { get::<PowerFn>(&lib, b"evil_power") }.ok();
@@ -622,6 +667,7 @@ impl Dsda {
             draw_at_fn,
             window_fns,
             window_icon_fn,
+            coop,
             draw_buffer: RefCell::new(Vec::new()),
             _argv: std::mem::ManuallyDrop::new(argv),
             _argv_ptrs: std::mem::ManuallyDrop::new(argv_ptrs),
@@ -1055,28 +1101,53 @@ impl Dsda {
         }
     }
 
+    /// One tic, with this command for the first player (and the others' as `stage` gave them).
     pub fn tic(&self, cmd: TicCmd) {
-        let mut buttons = 0;
-        if cmd.attack {
-            buttons |= BT_ATTACK;
-        }
-        if cmd.use_ {
-            buttons |= BT_USE;
-        }
-        if let Some(gun) = cmd.exact.filter(|g| (0..=8).contains(g)) {
-            buttons |= BT_CHANGE | EVIL_EXACT | (gun << BT_WEAPONSHIFT);
-        } else if (1..=7).contains(&cmd.weapon) {
-            buttons |= BT_CHANGE | ((cmd.weapon - 1) << BT_WEAPONSHIFT);
-        }
+        let (forward, side, turn, buttons) = cmd.encoded();
         // SAFETY: as above.
-        unsafe {
-            (self.tic_fn)(
-                cmd.forward.clamp(-50, 50),
-                cmd.side.clamp(-50, 50),
-                cmd.turn.clamp(-32768, 32767),
-                buttons,
-            )
+        unsafe { (self.tic_fn)(forward, side, turn, buttons) }
+    }
+
+    /// The players in the games begun from now on (1 to 4; more than one: co-op).
+    pub fn set_players(&self, n: usize) {
+        // SAFETY: a plain value into the game; see `load`.
+        unsafe { (self.coop.players)(n as c_int) }
+    }
+
+    /// The player the calls about "the player" are about from now on (`player`, `status`,
+    /// `sounds`, `hits`, `god`, `give`, ...): 0, the first, unless told.
+    pub fn as_player(&self, i: usize) {
+        // SAFETY: as above.
+        unsafe { (self.coop.as_)(i as c_int) }
+    }
+
+    /// Another player's command for the next tic (1 to the players there are), before `tic`
+    /// plays it with the first's.
+    pub fn stage(&self, i: usize, cmd: TicCmd) {
+        let (forward, side, turn, buttons) = cmd.encoded();
+        // SAFETY: as above.
+        unsafe { (self.coop.cmd)(i as c_int, forward, side, turn, buttons) }
+    }
+
+    /// Player `i`'s view drawn `between` the tic before and this one, their status bar with it:
+    /// (width, height, pixels, the palette it's in). None: no such player, or nothing drawn.
+    pub fn draw_as(&self, i: usize, between: f64) -> Option<(usize, usize, Vec<u8>, usize)> {
+        let mut buf = self.draw_buffer.borrow_mut();
+        buf.resize(MAX_RENDER.0 * MAX_RENDER.1, 0);
+        let (out, max) = (buf.as_mut_ptr(), buf.len() as c_int);
+        let mut palette: c_int = 0;
+        // SAFETY: the game writes at most `max` bytes into the buffer, and one int to `palette`.
+        let wh = unsafe { (self.coop.draw_as)(i as c_int, out, max, between, &mut palette) };
+        if wh <= 0 {
+            return None;
         }
+        let (w, h) = ((wh >> 16) as usize, (wh & 0xFFFF) as usize);
+        Some((
+            w,
+            h,
+            buf[..w * h].to_vec(),
+            usize::try_from(palette).unwrap_or(0),
+        ))
     }
 
     /// Put the player at (x, y) facing `angle` (degrees), still, on the floor (for checking

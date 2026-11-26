@@ -1,8 +1,39 @@
 # Two players: Evil and Neuro, co-op or deathmatch (a plan)
 
-> **Status:** proposed, nothing built. Written 2026-11-13 from a reading of the engine boundary,
-> the bot and the Neuro session as they are now. Section 4 (whose win a deathmatch is) added
-> 2026-11-14.
+> **Status:** stage 1 built (2026-11-25), for up to four bots: see "Stage 1 as built" below.
+> Written 2026-11-13 from a reading of the engine boundary, the bot and the Neuro session as
+> they are now. Section 4 (whose win a deathmatch is) added 2026-11-14.
+
+## Stage 1 as built (2026-11-25)
+
+`evil-boom watch WAD MAP --players N` (2 to 4; `viewer/coop.rs`): one game, N agents, nothing
+shared between them, none aware of the others (their bodies aren't among her things).
+
+- **The boundary** (`EVIL_ABI` 2): `evil_players(n)` for the games begun after it (netgame on
+  through `solo_net`, which is what `G_DoNewGame` sets netgame from); `evil_as(i)`, the player
+  every call about "the player" is about (0 unless told: single-player is unchanged, parity
+  24/24); `evil_cmd(i, ...)` stages another player's command before `evil_tic`, and a player
+  given none stands still; `evil_draw_as(i, ...)` draws a player's view with their status bar
+  (`ST_EvilView` in the patch: their numbers, arms and keys; the face straight ahead as hurt as
+  they are, its moods worked out only for player 0).
+- **The patch's hooks, by player:** hits carry the player hit; pellets, messages and the
+  sounds' loudness and side are kept for each player (a sound with no origin, her pickups, heard
+  only by the listener, as the game plays it). `after_her` is the player asked about.
+- **Two traps found:** `G_DoNewGame` calls `G_ReloadDefaults`, which takes every player but
+  the first out of the game (a hook, `evil_players_again`, puts them back); and a player added
+  with no body is marked to be born, which in a netgame the next tic's reborns do before the new
+  game loads the level (a crash: they're held live until `G_InitNew` marks them itself).
+- **`Engine`** keeps each player's suits, message and hits (`as_player` swaps them in);
+  `step_all` plays a tic with every player's controls; god mode and the carry go to all.
+- **Death** is Doom's co-op rebirth: a use press a second after dying, the level going on. Her
+  head is reset as for a level begun again (`Agent::restart`): heights back to the map's,
+  monsters back where first seen. Not right for a level that went on; a `reborn` that keeps the
+  world is to come.
+- **First runs** (seed 2, mortal, headless): E1M1 UV x4 exited 104 s; MAP01 HMP x3 121 s; E1M3
+  UV x2 684 s; MAP07 UV x4 148 s (17 deaths). Most of the damage taken was each other's (MAP07: 70
+  of 90 hits): vanilla co-op has friendly fire and DSDA no setting against it. And at the start
+  they block each other, staring at each other, till the stuck rules back them out. Both are
+  stage 2's first work.
 
 The goal: one game with two players in it, each played by the bot and directed by her own AI
 (Evil on one, Neuro on the other), working together through a level (co-op) or against each

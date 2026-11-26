@@ -102,22 +102,23 @@ index 4e6abe4..b479a44 100644
 +  D_PageDrawer();
 +}
 diff --git a/prboom2/src/dsda/messenger.c b/prboom2/src/dsda/messenger.c
-index bbdfdb6..f71ed9b 100644
+index bbdfdb6..07e713f 100644
 --- a/prboom2/src/dsda/messenger.c
 +++ b/prboom2/src/dsda/messenger.c
-@@ -106,7 +106,16 @@ void dsda_AddAlert(const char* str) {
+@@ -106,7 +106,17 @@ void dsda_AddAlert(const char* str) {
    dsda_QueueMessage(str, message_alert);
  }
  
-+// Evil (evil-boom): the last message the game gave the player and when, shown or not
++// Evil (evil-boom): the last message the game gave each player and when, shown or not
 +// ("You need a blue key to open this door": a player knows what she pressed was locked)
-+const char* evil_message;
-+int evil_message_tic = -1;
++const char* evil_message[MAX_MAXPLAYERS];
++int evil_message_tic[MAX_MAXPLAYERS] = { -1, -1, -1, -1, -1, -1, -1, -1 };
 +
  void dsda_AddPlayerMessage(const char* str, player_t* player) {
-+  if (player == &players[consoleplayer]) {
-+    evil_message = str;
-+    evil_message_tic = gametic;
++  int evil_i = (int)(player - players);
++  if (evil_i >= 0 && evil_i < MAX_MAXPLAYERS) {
++    evil_message[evil_i] = str;
++    evil_message_tic[evil_i] = gametic;
 +  }
    if (dsda_ShowMessages() && player == &players[displayplayer])
      dsda_QueueMessage(str, message_normal);
@@ -145,11 +146,28 @@ index 5089f33..e963438 100644
  
    P_LOAD_X(map_colormap);
  
+diff --git a/prboom2/src/g_game.c b/prboom2/src/g_game.c
+index a8d215e..d1f9ae4 100644
+--- a/prboom2/src/g_game.c
++++ b/prboom2/src/g_game.c
+@@ -2873,6 +2873,12 @@ void G_DoNewGame (void)
+   G_ReloadDefaults();            // killough 3/1/98
+   netgame = solo_net;
+   deathmatch = false;
++  // Evil (evil-boom): a co-op game's players kept (G_ReloadDefaults leaves only the first in
++  // the game: evil_players, evil_api.c)
++  {
++    void evil_players_again(void);
++    evil_players_again();
++  }
+ 
+   dsda_NewGameMap(&realEpisode, &realMap);
+   dsda_ResetLeaveData();
 diff --git a/prboom2/src/p_inter.c b/prboom2/src/p_inter.c
-index c941fd6..b834048 100644
+index c941fd6..185805e 100644
 --- a/prboom2/src/p_inter.c
 +++ b/prboom2/src/p_inter.c
-@@ -1226,7 +1226,62 @@ static dboolean P_InfightingImmune(mobj_t *target, mobj_t *source)
+@@ -1226,7 +1226,63 @@ static dboolean P_InfightingImmune(mobj_t *target, mobj_t *source)
  
  static dboolean P_MorphMonster(mobj_t * actor);
  
@@ -186,6 +204,7 @@ index c941fd6..b834048 100644
 +    // (as ST_updateFaceWidget turns the face: straight within 45 degrees of her facing, else
 +    // to the side it's on; behind is one side or the other)
 +    h->source_id = source ? source->evil_id : 0;
++    h->player = (int)(player - players);
 +    h->side = 2;
 +    if (source && source != target)
 +    {
@@ -213,10 +232,10 @@ index c941fd6..b834048 100644
    player_t *player;
    dboolean justhit = false;          /* killough 11/98 */
 diff --git a/prboom2/src/p_inter.h b/prboom2/src/p_inter.h
-index 3ec7d91..5c8a141 100644
+index 3ec7d91..b694a76 100644
 --- a/prboom2/src/p_inter.h
 +++ b/prboom2/src/p_inter.h
-@@ -48,6 +48,20 @@
+@@ -48,6 +48,21 @@
  dboolean P_GivePower(player_t *, int);
  void P_TouchSpecialThing(mobj_t *special, mobj_t *toucher);
  void P_DamageMobj(mobj_t *target,mobj_t *inflictor,mobj_t *source,int damage);
@@ -230,6 +249,7 @@ index 3ec7d91..5c8a141 100644
 +  int cause;             // 0 a thing, 1 a crusher, 2 the floor, 3 something else
 +  int source_id;         // whose it was: that thing's evil_id (0: no one's); for measuring, not hers to know
 +  int side;              // where the status bar's face looks for it: -1 left, 0 straight at it, 1 right; 2: nowhere (no one's)
++  int player;            // which player it was on (players[]: more than one in a co-op game)
 +} evil_hit_t;
 +#define EVIL_HITS 64
 +extern evil_hit_t evil_hits[EVIL_HITS];
@@ -238,10 +258,10 @@ index 3ec7d91..5c8a141 100644
  int P_PlayerHealthIncrease(int value);
  
 diff --git a/prboom2/src/p_map.c b/prboom2/src/p_map.c
-index 2b511c4..635ca31 100644
+index 2b511c4..ce4a8cf 100644
 --- a/prboom2/src/p_map.c
 +++ b/prboom2/src/p_map.c
-@@ -2196,6 +2196,20 @@ fixed_t   shootz;
+@@ -2196,6 +2196,21 @@ fixed_t   shootz;
  int       la_damage;
  fixed_t   attackrange;
  
@@ -253,16 +273,17 @@ index 2b511c4..635ca31 100644
 +// And by the shot (the pellets of one tic): shots, and those of them no pellet of hit a thing.
 +// And the bullets and pellets fired with the trigger held since the shot before (spread on a
 +// bullet).
-+int evil_pellets[7];
++// (each player's, by their number: more than one in a co-op game)
++int evil_pellets[MAX_MAXPLAYERS][7];
 +static int evil_pellet_hit;
 +static int evil_kill_tic = -1;
-+static int evil_shot_tic = -1;
-+static int evil_shot_hit;
++static int evil_shot_tic[MAX_MAXPLAYERS] = { -1, -1, -1, -1, -1, -1, -1, -1 };
++static int evil_shot_hit[MAX_MAXPLAYERS];
 +
  static fixed_t   aimslope;
  
  // slopes to top and bottom of target
-@@ -2475,6 +2489,8 @@ dboolean PTR_ShootTraverse (intercept_t* in)
+@@ -2475,6 +2490,8 @@ dboolean PTR_ShootTraverse (intercept_t* in)
    // hit thing
    // position a bit closer
  
@@ -271,7 +292,7 @@ index 2b511c4..635ca31 100644
    frac = in->frac - FixedDiv (10*FRACUNIT,attackrange);
  
    x = trace.x + FixedMul (trace.dx, frac);
-@@ -2525,6 +2541,8 @@ dboolean PTR_ShootTraverse (intercept_t* in)
+@@ -2525,6 +2542,8 @@ dboolean PTR_ShootTraverse (intercept_t* in)
      {
        P_DamageMobj(th, shootthing, shootthing, la_damage);
      }
@@ -280,7 +301,7 @@ index 2b511c4..635ca31 100644
    }
  
    // don't go any farther
-@@ -2598,7 +2616,36 @@ void P_LineAttack(mobj_t* t1, angle_t angle, fixed_t distance, fixed_t slope,
+@@ -2598,7 +2617,38 @@ void P_LineAttack(mobj_t* t1, angle_t angle, fixed_t distance, fixed_t slope,
    attackrange = distance;
    aimslope = slope;
  
@@ -288,29 +309,31 @@ index 2b511c4..635ca31 100644
 +  evil_pellet_hit = 0;  // Evil (evil-boom)
 +  {
 +    dboolean evil_missed = P_PathTraverse(t1->x,t1->y,x2,y2,PT_ADDLINES|PT_ADDTHINGS,PTR_ShootTraverse);
-+    if (t1->player && damage && distance == MISSILERANGE)
++    int evil_i = t1->player ? (int)(t1->player - players) : -1;
++    if (evil_i >= 0 && evil_i < MAX_MAXPLAYERS && damage && distance == MISSILERANGE)
 +    {
-+      evil_pellets[0]++;
++      int *pellets = evil_pellets[evil_i];
++      pellets[0]++;
 +      if (t1->player->refire)
-+        evil_pellets[6]++;
-+      if (evil_shot_tic != gametic)
++        pellets[6]++;
++      if (evil_shot_tic[evil_i] != gametic)
 +      {
-+        evil_shot_tic = gametic;
-+        evil_shot_hit = 0;
-+        evil_pellets[4]++;
-+        evil_pellets[5]++;
++        evil_shot_tic[evil_i] = gametic;
++        evil_shot_hit[evil_i] = 0;
++        pellets[4]++;
++        pellets[5]++;
 +      }
-+      if (evil_pellet_hit && !evil_shot_hit)
++      if (evil_pellet_hit && !evil_shot_hit[evil_i])
 +      {
-+        evil_shot_hit = 1;
-+        evil_pellets[5]--;
++        evil_shot_hit[evil_i] = 1;
++        pellets[5]--;
 +      }
 +      if (evil_pellet_hit)
-+        evil_pellets[1]++;
++        pellets[1]++;
 +      if (evil_pellet_hit == 2)
-+        evil_pellets[2]++;
++        pellets[2]++;
 +      if (!evil_pellet_hit && evil_kill_tic == gametic)
-+        evil_pellets[3]++;
++        pellets[3]++;
 +    }
 +    if (!evil_missed)
 +      return;
@@ -443,36 +466,39 @@ index 4f17958..e28f88a 100644
          index = MAXLIGHTSCALE - 1;
        vis->colormap = spritelights[index];
 diff --git a/prboom2/src/s_sound.c b/prboom2/src/s_sound.c
-index a12136e..3f19306 100644
+index a12136e..55f142b 100644
 --- a/prboom2/src/s_sound.c
 +++ b/prboom2/src/s_sound.c
-@@ -320,6 +320,76 @@ void S_ResetAdjustments(void) {
+@@ -320,6 +320,105 @@ void S_ResetAdjustments(void) {
    adjust_volume = 0;
  }
  
 +// Evil (evil-boom): a sound noted as the listener would hear it, by vanilla's rule (heard within
 +// 1200 whatever's between, full within 160; its side by the sine of its bearing), whether
-+// sound's on or not and whether a channel's found for it or not.
++// sound's on or not and whether a channel's found for it or not. And as each other player in
++// the game would hear it from where they are (a co-op game): a sound with no origin (her
++// pickups) only by the listener, as the game plays it only for the player it's showing.
 +evil_sound_t evil_sounds[EVIL_SOUNDS];
 +int evil_sound_count;
 +
-+static void Evil_NoteSound(mobj_t *origin, mobj_t *listener, int sfx_id)
++/* How `listener` hears a sound from `origin`: 0, not at all. */
++static int Evil_Hear(mobj_t *origin, mobj_t *listener, int *volume, int *separation, int *own)
 +{
-+  evil_sound_t *e;
-+  int volume = 127, separation = 128, own = !origin || origin == listener;
-+  sfx_id &= ~PICKUP_SOUND;
-+  if (sfx_id == sfx_None || !listener)
-+    return;
-+  if (!own)
++  *volume = 127;
++  *separation = 128;
++  *own = !origin || origin == listener;
++  if (!listener)
++    return 0;
++  if (!*own)
 +  {
 +    angle_t angle;
 +    fixed_t dist = P_AproxDistance(D_abs(listener->x - origin->x), D_abs(listener->y - origin->y)) >> FRACBITS;
 +    if (dist >= 1200)
-+      return;
++      return 0;
 +    if (dist >= 160)
-+      volume = 127 * (1200 - dist) / (1200 - 160);
-+    if (volume < 1)
-+      volume = 1;
++      *volume = 127 * (1200 - dist) / (1200 - 160);
++    if (*volume < 1)
++      *volume = 1;
 +    if (origin->x != listener->x || origin->y != listener->y)
 +    {
 +      angle = R_PointToAngle2(listener->x, listener->y, origin->x, origin->y);
@@ -480,13 +506,35 @@ index a12136e..3f19306 100644
 +        angle += 0xffffffff;
 +      angle -= listener->angle;
 +      angle >>= ANGLETOFINESHIFT;
-+      separation = 128 - (FixedMul(S_STEREO_SWING, finesine[angle]) >> FRACBITS);
++      *separation = 128 - (FixedMul(S_STEREO_SWING, finesine[angle]) >> FRACBITS);
 +    }
 +  }
++  return 1;
++}
++
++static void Evil_NoteSound(mobj_t *origin, mobj_t *listener, int sfx_id)
++{
++  evil_sound_t *e;
++  int volume[MAX_MAXPLAYERS], separation[MAX_MAXPLAYERS], own[MAX_MAXPLAYERS];
++  int i, heard = 0;
++  sfx_id &= ~PICKUP_SOUND;
++  if (sfx_id == sfx_None)
++    return;
++  for (i = 0; i < MAX_MAXPLAYERS; i++)
++  {
++    mobj_t *ears = i == displayplayer ? listener
++                 : playeringame[i] && origin ? players[i].mo
++                 : NULL;
++    if (!Evil_Hear(origin, ears, &volume[i], &separation[i], &own[i]))
++      volume[i] = 0;
++    else
++      heard = 1;
++  }
++  if (!heard)
++    return;
 +  e = &evil_sounds[evil_sound_count % EVIL_SOUNDS];
 +  e->tic = gametic;
 +  e->sfx = sfx_id;
-+  e->own = own;
 +  e->chasing = 0;
 +  if (origin && origin->thinker.function == P_MobjThinker)
 +  {
@@ -513,8 +561,12 @@ index a12136e..3f19306 100644
 +    e->origin_id = 0;
 +    e->origin_type = -1;
 +  }
-+  e->volume = volume;
-+  e->separation = separation;
++  for (i = 0; i < MAX_MAXPLAYERS; i++)
++  {
++    e->own[i] = own[i];
++    e->volume[i] = volume[i];
++    e->separation[i] = separation[i];
++  }
 +  e->x = origin ? origin->x >> FRACBITS : listener->x >> FRACBITS;
 +  e->y = origin ? origin->y >> FRACBITS : listener->y >> FRACBITS;
 +  evil_sound_count++;
@@ -523,7 +575,7 @@ index a12136e..3f19306 100644
  void S_StartSoundAtVolume(void *origin_p, int sfx_id, int volume, dboolean important, int loop_timeout)
  {
    int cnum;
-@@ -333,6 +403,8 @@ void S_StartSoundAtVolume(void *origin_p, int sfx_id, int volume, dboolean impor
+@@ -333,6 +432,8 @@ void S_StartSoundAtVolume(void *origin_p, int sfx_id, int volume, dboolean impor
    origin = (mobj_t *) origin_p;
    listener = GetSoundListener();
  
@@ -533,10 +585,10 @@ index a12136e..3f19306 100644
    if (nosfxparm)
      return;
 diff --git a/prboom2/src/s_sound.h b/prboom2/src/s_sound.h
-index 633f674..1779bfc 100644
+index 633f674..95dd005 100644
 --- a/prboom2/src/s_sound.h
 +++ b/prboom2/src/s_sound.h
-@@ -62,6 +62,24 @@ void S_Start(void);
+@@ -62,6 +62,26 @@ void S_Start(void);
  //  using <sound_id> from sounds.h
  //
  void S_StartSound(void *origin, int sound_id);
@@ -549,10 +601,12 @@ index 633f674..1779bfc 100644
 +  int sfx;         // the sound's number (sfxenum_t)
 +  int origin_id;   // the thing it comes from (its evil_id); 0: not a thing (a sector, a line, none)
 +  int origin_type; // that thing's type (mobjtype_t); -1: not a thing
-+  int own;         // the listener's own (no origin, or the listener itself)
 +  int chasing;     // from a thing in its chase (walking) states: a footstep, not an attack
-+  int volume;      // 0-127 by its distance (127 within 160, falling to nothing at 1200)
-+  int separation;  // 0-255, 128 the middle: which side it's on (never front or back)
++  // as each player hears it, by their number (players[]; more than one in a co-op game):
++  int own[MAX_MAXPLAYERS];         // their own (no origin, or they themselves)
++  int volume[MAX_MAXPLAYERS];      // 0-127 by its distance (127 within 160, falling to nothing
++                                   // at 1200); 0: not heard
++  int separation[MAX_MAXPLAYERS];  // 0-255, 128 the middle: which side it's on (never front or back)
 +  int x, y;        // where it comes from (map units): the game's, not something heard
 +} evil_sound_t;
 +#define EVIL_SOUNDS 256
@@ -561,6 +615,51 @@ index 633f674..1779bfc 100644
  void S_LoopSound(void *origin, int sfx_id, int timeout);
  
  void S_StartSectorSound(sector_t *sector, int sfx_id);
+diff --git a/prboom2/src/st_stuff.c b/prboom2/src/st_stuff.c
+index 06d62a8..5bd9b18 100644
+--- a/prboom2/src/st_stuff.c
++++ b/prboom2/src/st_stuff.c
+@@ -1231,3 +1231,40 @@ void ST_Init(void)
+   veryfirsttime = 0;
+   ST_loadGraphics();
+ }
++
++// Evil (evil-boom): the status bar drawn for another player's view (a co-op watch's views
++// of each player): its numbers, arms and keys theirs, its face straight ahead as hurt as they
++// are, god or dead (the face's moods are worked out a tic at a time, ST_Ticker, for the
++// player the bar was started for: consoleplayer). ST_EvilView(consoleplayer) puts it back,
++// the face as it was.
++void ST_EvilView(int player)
++{
++  static int kept_face = -1;
++  static int no_ammo = 1994;  // (as ST_updateWidgets has it: "n/a")
++  int i;
++  if (raven || player < 0 || player >= MAX_MAXPLAYERS || plyr == &players[player])
++    return;
++  if (plyr == &players[consoleplayer])
++    kept_face = st_faceindex;
++  plyr = &players[player];
++  ST_createWidgets();
++  w_ready.num = weaponinfo[plyr->readyweapon].ammo == am_noammo ? &no_ammo
++              : &plyr->ammo[weaponinfo[plyr->readyweapon].ammo];
++  for (i = 0; i < 3; i++)
++  {
++    keyboxes[i] = plyr->cards[i] ? i : -1;
++    if (plyr->cards[i+3])
++      keyboxes[i] = keyboxes[i]==-1 || sts_traditional_keys ? i+3 : i+6;
++  }
++  if (player == consoleplayer)
++  {
++    if (kept_face >= 0)
++      st_faceindex = kept_face;
++  }
++  else if (plyr->health <= 0)
++    st_faceindex = ST_DEADFACE;
++  else if ((plyr->cheats & CF_GODMODE) || plyr->powers[pw_invulnerability])
++    st_faceindex = ST_GODFACE;
++  else
++    st_faceindex = ST_calcPainOffset() + 1;
++}
 diff --git a/prboom2/src/wi_stuff.c b/prboom2/src/wi_stuff.c
 index 2cc1c97..ff1bde2 100644
 --- a/prboom2/src/wi_stuff.c

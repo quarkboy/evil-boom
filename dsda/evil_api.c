@@ -16,7 +16,12 @@
  *
  * Built into a shared library with DSDA-Doom's own sources (see dsda/README.md). Plain C
  * types only across the boundary, so any toolchain can load it. One game a process: the
- * engine is all globals. */
+ * engine is all globals.
+ *
+ * A game can have up to four players in it, co-op (evil_players): each a bot of her own. The
+ * calls about "the player" are about the one evil_as last chose (0 unless told: the game's
+ * consoleplayer, the one a single-player game has); every player's command for a tic is staged
+ * (evil_cmd) before evil_tic plays it. */
 #include <stdio.h>
 #include <string.h>
 
@@ -103,8 +108,15 @@ typedef struct {
 
 extern int evil_fixed_seed;      /* (SDL/i_system.c, patched) */
 extern unsigned long evil_seed_value;
-extern const char *evil_message;  /* (dsda/messenger.c, patched) */
-extern int evil_message_tic;
+extern const char *evil_message[MAX_MAXPLAYERS];  /* (dsda/messenger.c, patched): by player */
+extern int evil_message_tic[MAX_MAXPLAYERS];
+void ST_EvilView(int player);      /* (st_stuff.c, patched) */
+
+/* The player the calls about "the player" are about (evil_as), and how many the next game
+ * begun has (evil_players: co-op with more than one). */
+#define EVIL_PLAYERS 4
+static int evil_me;
+static int evil_player_count = 1;
 
 typedef struct {
   int gametic;
@@ -154,7 +166,7 @@ static double degrees(angle_t a) { return a * (360.0 / 4294967296.0); }
  * a call's arguments or one of the structs above changes its meaning, and the structs' sizes
  * as this compiler laid them out. The program checks all four before it calls anything else
  * (Dsda::load): one built against another evil_api.c would read or write past what's here. */
-#define EVIL_ABI 1
+#define EVIL_ABI 2
 
 EVIL_API int evil_abi(int *out)
 {
@@ -221,6 +233,58 @@ EVIL_API int evil_init(int argc, char **argv)
 
 /* A new game: skill 1-5, the map (episode 1-4 and map 1-9; Doom II: episode 1, map 1-32),
  * monsters or none. Takes effect on the next tic. */
+/* The players in the games begun from now on (1 to EVIL_PLAYERS): more than one, a co-op game
+ * (netgame on, deathmatch off: each at their own start, the things only a netgame has, keys and
+ * weapons left lying for the others, a death a rebirth at the start, the level going on). */
+EVIL_API void evil_players(int n)
+{
+  evil_player_count = n < 1 ? 1 : n > EVIL_PLAYERS ? EVIL_PLAYERS : n;
+  if (evil_me >= evil_player_count)
+    evil_me = 0;
+}
+
+/* The player the calls about "the player" are about from now on (0 to the players there are). */
+EVIL_API void evil_as(int player)
+{
+  if (player >= 0 && player < evil_player_count)
+    evil_me = player;
+}
+
+/* (a game begun: the players there are in it. A netgame by solo_net, -solo-net's flag, which is
+ * what the game's beginning sets netgame from (G_DoNewGame): set here, it begins one, the
+ * command line's -solo-net kept for a game of one) */
+static void evil_set_players(void)
+{
+  extern int solo_net;  /* (d_client.c) */
+  static int solo_net_asked = -1;
+  int i;
+  if (solo_net_asked < 0)
+    solo_net_asked = solo_net;
+  for (i = 0; i < MAX_MAXPLAYERS; i++)
+  {
+    playeringame[i] = i < evil_player_count;
+    /* (one come into the game with no body yet: not to be born again by the next tic's reborns,
+     * which come before the new game it begins and in a netgame put her at her start, with no
+     * level yet. The new game marks every player to be born, G_InitNew, and spawns them) */
+    if (i > 0 && playeringame[i] && !players[i].mo && players[i].playerstate == PST_REBORN)
+      players[i].playerstate = PST_LIVE;
+    evil_message[i] = NULL;
+    evil_message_tic[i] = -1;
+  }
+  solo_net = evil_player_count > 1 || solo_net_asked;
+  netgame = solo_net;
+  deathmatch = 0;
+}
+
+/* (g_game.c, patched: the new game's settings put back as they were set, which takes all but
+ * the first player out of the game; and they're put back in) */
+void evil_players_again(void)
+{
+  int i;
+  for (i = 0; i < MAX_MAXPLAYERS; i++)
+    playeringame[i] = i < evil_player_count;
+}
+
 EVIL_API void evil_new_game(int skill, int episode, int map, int no_monsters)
 {
   /* (a new game sets the first from the second, then, as the skill's modifiers are worked out,
@@ -232,8 +296,7 @@ EVIL_API void evil_new_game(int skill, int episode, int map, int no_monsters)
   exited = secret_exit = 0;
   if (evil_fixed_seed)
     rngseed = 0;  /* (the game adds the seed to what it had: from nothing, the same each time) */
-  evil_message = NULL;
-  evil_message_tic = -1;
+  evil_set_players();
   evil_held = 0;
   G_DeferedInitNew(skill - 1, episode, map);
 }
@@ -263,8 +326,7 @@ EVIL_API int evil_record(int skill, int episode, int map, int no_monsters)
   exited = secret_exit = 0;
   if (evil_fixed_seed)
     rngseed = 0;
-  evil_message = NULL;
-  evil_message_tic = -1;
+  evil_set_players();
   evil_held = 0;
   dsda_InitDemoRecording();
   /* (the level set up now: what the next tic's G_Ticker would have done for ga_newgame) */
@@ -315,7 +377,11 @@ EVIL_API void evil_title(void)
   if (menuactive)
     M_ClearMenus();
   gameaction = ga_nothing;
-  players[consoleplayer].playerstate = PST_LIVE;
+  {
+    int i;
+    for (i = 0; i < MAX_MAXPLAYERS; i++)
+      players[i].playerstate = PST_LIVE;
+  }
   dsda_ResetPauseMode();
   advancedemo = false;
   gamestate = GS_DEMOSCREEN;
@@ -439,25 +505,30 @@ EVIL_API void evil_screen(int *out)
   out[5] = itemOn;
 }
 
-/* The sounds the game's started since the last call, as she'd hear them (up to max; the oldest
- * of a long run of them lost): ten numbers each, as evil_sound_t has them (tic, sfx, origin id,
- * origin type, own, volume, separation, x, y, chasing). Returns how many. */
-static int evil_sounds_read;
+/* The sounds the game's started since the last call for her (evil_as's player), as she'd hear
+ * them (up to max; the oldest of a long run of them lost): ten numbers each, as evil_sound_t
+ * has them (tic, sfx, origin id, origin type, own, volume, separation, x, y, chasing). Returns
+ * how many. */
+static int evil_sounds_read[EVIL_PLAYERS];
 
 EVIL_API int evil_sounds_since(int *out, int max)
 {
   int n = 0;
-  if (evil_sound_count - evil_sounds_read > EVIL_SOUNDS)
-    evil_sounds_read = evil_sound_count - EVIL_SOUNDS;
-  if (evil_sounds_read > evil_sound_count)
-    evil_sounds_read = evil_sound_count;
-  while (evil_sounds_read < evil_sound_count && n < max)
+  int *read = &evil_sounds_read[evil_me];
+  if (evil_sound_count - *read > EVIL_SOUNDS)
+    *read = evil_sound_count - EVIL_SOUNDS;
+  if (*read > evil_sound_count)
+    *read = evil_sound_count;
+  while (*read < evil_sound_count && n < max)
   {
-    evil_sound_t *e = &evil_sounds[evil_sounds_read % EVIL_SOUNDS];
+    evil_sound_t *e = &evil_sounds[*read % EVIL_SOUNDS];
     int *o = out + 10 * n;
-    o[0] = e->tic; o[1] = e->sfx; o[2] = e->origin_id; o[3] = e->origin_type; o[4] = e->own;
-    o[5] = e->volume; o[6] = e->separation; o[7] = e->x; o[8] = e->y; o[9] = e->chasing;
-    evil_sounds_read++;
+    (*read)++;
+    if (!e->volume[evil_me])
+      continue;
+    o[0] = e->tic; o[1] = e->sfx; o[2] = e->origin_id; o[3] = e->origin_type;
+    o[4] = e->own[evil_me]; o[5] = e->volume[evil_me]; o[6] = e->separation[evil_me];
+    o[7] = e->x; o[8] = e->y; o[9] = e->chasing;
     n++;
   }
   return n;
@@ -503,32 +574,35 @@ EVIL_API void evil_reset_ids(void)
   evil_spawned = 0;
 }
 
-/* The hits on her since the last call (up to max; the oldest of a long run of them lost):
- * eight numbers each, as evil_hit_t has them (health, armor, inflictor, source, self, cause,
- * side, source id).
+/* The hits on her (evil_as's player) since the last call for her (up to max; the oldest of a
+ * long run of them lost): eight numbers each, as evil_hit_t has them (health, armor, inflictor,
+ * source, self, cause, side, source id).
  * Returns how many. */
-static int evil_hits_read;
+static int evil_hits_read[EVIL_PLAYERS];
 
 EVIL_API int evil_hits_since(int *out, int max)
 {
   int n = 0;
-  if (evil_hit_count - evil_hits_read > EVIL_HITS)
-    evil_hits_read = evil_hit_count - EVIL_HITS;
-  if (evil_hits_read > evil_hit_count)
-    evil_hits_read = evil_hit_count;
-  while (evil_hits_read < evil_hit_count && n < max)
+  int *read = &evil_hits_read[evil_me];
+  if (evil_hit_count - *read > EVIL_HITS)
+    *read = evil_hit_count - EVIL_HITS;
+  if (*read > evil_hit_count)
+    *read = evil_hit_count;
+  while (*read < evil_hit_count && n < max)
   {
-    evil_hit_t *h = &evil_hits[evil_hits_read % EVIL_HITS];
+    evil_hit_t *h = &evil_hits[*read % EVIL_HITS];
     int *o = out + 8 * n;
+    (*read)++;
+    if (h->player != evil_me)
+      continue;
     o[0] = h->health; o[1] = h->armor; o[2] = h->inflictor; o[3] = h->source;
     o[4] = h->self; o[5] = h->cause; o[6] = h->side; o[7] = h->source_id;
-    evil_hits_read++;
     n++;
   }
   return n;
 }
 
-extern int evil_pellets[7];  /* (p_map.c, patched) */
+extern int evil_pellets[MAX_MAXPLAYERS][7];  /* (p_map.c, patched): by player */
 
 /* Her bullets and pellets so far: fired, those that hit a thing that can be shot, those of
  * them a barrel, those that hit nothing after one of the same tic had killed; and her shots
@@ -538,7 +612,7 @@ EVIL_API void evil_pellets_so_far(int *out)
 {
   int i;
   for (i = 0; i < 7; i++)
-    out[i] = evil_pellets[i];
+    out[i] = evil_pellets[evil_me][i];
 }
 
 EVIL_API void evil_seed(int fixed, unsigned long value)
@@ -550,9 +624,9 @@ EVIL_API void evil_seed(int fixed, unsigned long value)
 EVIL_API void evil_god(int on)
 {
   if (on)
-    players[consoleplayer].cheats |= CF_GODMODE;
+    players[evil_me].cheats |= CF_GODMODE;
   else
-    players[consoleplayer].cheats &= ~CF_GODMODE;
+    players[evil_me].cheats &= ~CF_GODMODE;
 }
 
 /* Give the player power `power` (pw_invulnerability 0 .. pw_infrared 5) for `tics` tics (for
@@ -560,14 +634,14 @@ EVIL_API void evil_god(int on)
 EVIL_API void evil_power(int power, int tics)
 {
   if (power >= 0 && power < NUMPOWERS)
-    players[consoleplayer].powers[power] = tics;
+    players[evil_me].powers[power] = tics;
 }
 
 /* Put the player at (x, y) facing `angle` (degrees), standing still on the floor there (as a
  * "warp": for checking jumps in the game itself). Returns 0 if something's in the way. */
 EVIL_API int evil_warp(double x, double y, double angle)
 {
-  mobj_t *mo = players[consoleplayer].mo;
+  mobj_t *mo = players[evil_me].mo;
   dboolean moved;
   if (!mo)
     return 0;
@@ -579,27 +653,20 @@ EVIL_API int evil_warp(double x, double y, double angle)
   mo->z = mo->floorz;
   mo->momx = mo->momy = mo->momz = 0;
   mo->angle = (angle_t)(long long)(angle / 360.0 * 4294967296.0);
-  players[consoleplayer].viewz = mo->z + players[consoleplayer].viewheight;
+  players[evil_me].viewz = mo->z + players[evil_me].viewheight;
   return 1;
 }
 
-/* One tic, with this command for the player (forwardmove/sidemove as in a ticcmd: a run is
- * 50 forward, 40 sideways; turn: angleturn, <<16 for the angle, positive to the left;
- * buttons: BT_ATTACK 1, BT_USE 2, BT_CHANGE 4 with the weapon in bits 3-6; 0x100 a weapon press
- * for the very gun its number says). */
-EVIL_API void evil_tic(int forward, int side, int turn, int buttons)
+/* A player's command for the next tic, as evil_tic takes the first player's (`player` 0 to the
+ * players there are; a player given none this tic stands still). */
+static void evil_stage(int player, int forward, int side, int turn, int buttons)
 {
   ticcmd_t *cmd;
-  /* (no I_StartTic: her commands are set here, not read from a keyboard; and the window's
-   * events, drawing for a watcher, paused the game when it wasn't in focus) */
-  dsda_ResetPauseMode();
-  if (!evil_presenting)
-    menuactive = false;
   /* (the slot the game reads this tic, and no other: drawing a frame calls NetUpdate partway
    * through, which builds commands for the clock's tics and moves maketic on, and a command
    * written to maketic's slot then went nowhere: a tic of hers lost now and then) */
   maketic = gametic;
-  cmd = &local_cmds[consoleplayer][gametic % BACKUPTICS];
+  cmd = &local_cmds[player][gametic % BACKUPTICS];
   /* (not G_BuildTiccmd: it folds in the mouse and the smoothed view's turning, which with
    * frames being drawn turned her a little each tic of its own accord) */
   memset(cmd, 0, sizeof *cmd);
@@ -615,19 +682,46 @@ EVIL_API void evil_tic(int forward, int side, int turn, int buttons)
   {
     if (gamemode == commercial &&
         ((buttons & BT_WEAPONMASK) >> BT_WEAPONSHIFT) == wp_shotgun &&
-        players[consoleplayer].weaponowned[wp_supershotgun])
+        players[player].weaponowned[wp_supershotgun])
       buttons = (buttons & ~BT_WEAPONMASK) | (wp_supershotgun << BT_WEAPONSHIFT);
     if (((buttons & BT_WEAPONMASK) >> BT_WEAPONSHIFT) == wp_fist &&
-        players[consoleplayer].weaponowned[wp_chainsaw] && !players[consoleplayer].powers[pw_strength])
+        players[player].weaponowned[wp_chainsaw] && !players[player].powers[pw_strength])
       buttons = (buttons & ~BT_WEAPONMASK) | (wp_chainsaw << BT_WEAPONSHIFT);
   }
   cmd->buttons = (byte)buttons;
+}
+
+/* Another player's command for the next tic (a co-op game's: `player` 1 to the players there
+ * are), as evil_tic takes the first's. Given before evil_tic plays the tic. */
+EVIL_API void evil_cmd(int player, int forward, int side, int turn, int buttons)
+{
+  if (player > 0 && player < evil_player_count)
+    evil_stage(player, forward, side, turn, buttons);
+}
+
+/* One tic, with this command for the first player (forwardmove/sidemove as in a ticcmd: a run
+ * is 50 forward, 40 sideways; turn: angleturn, <<16 for the angle, positive to the left;
+ * buttons: BT_ATTACK 1, BT_USE 2, BT_CHANGE 4 with the weapon in bits 3-6; 0x100 a weapon press
+ * for the very gun its number says), and the others' as evil_cmd gave them. */
+EVIL_API void evil_tic(int forward, int side, int turn, int buttons)
+{
+  int i;
+  /* (no I_StartTic: her commands are set here, not read from a keyboard; and the window's
+   * events, drawing for a watcher, paused the game when it wasn't in focus) */
+  dsda_ResetPauseMode();
+  if (!evil_presenting)
+    menuactive = false;
+  evil_stage(consoleplayer, forward, side, turn, buttons);
   /* (presenting: the move on to the next level held for the caller, the screen as it is) */
   if (evil_presenting && gameaction == ga_worlddone)
     evil_held = 1;
   M_Ticker();
   if (!evil_held)
     G_Ticker();
+  /* (the others' commands used: a player not given one next tic stands still, rather than
+   * playing one from BACKUPTICS tics ago) */
+  for (i = 1; i < evil_player_count; i++)
+    memset(&local_cmds[i][(gametic) % BACKUPTICS], 0, sizeof(ticcmd_t));
   if (gameaction == ga_completed || gameaction == ga_victory || gamestate == GS_INTERMISSION)
   {
     if (!exited)
@@ -846,6 +940,25 @@ EVIL_API int evil_draw_at(unsigned char *out, int max, double between)
   return (w << 16) | h;
 }
 
+/* evil_draw_at, the view `player`'s (a co-op game's: each player's view drawn in turn), the
+ * status bar theirs; the sound's listener and the game's own view (consoleplayer's) put back
+ * after. Returns as evil_draw_at; `palette`, the palette that player's frame is in (as
+ * evil_palette). */
+EVIL_API int evil_draw_as(int player, unsigned char *out, int max, double between, int *palette)
+{
+  extern int st_palette;
+  int got;
+  if (player < 0 || player >= evil_player_count || !playeringame[player])
+    return 0;
+  displayplayer = player;
+  ST_EvilView(player);
+  got = evil_draw_at(out, max, between);
+  *palette = st_palette < 0 ? 0 : st_palette;
+  displayplayer = consoleplayer;
+  ST_EvilView(consoleplayer);
+  return got;
+}
+
 /* evil_draw_at the tic as it is. */
 EVIL_API int evil_draw(unsigned char *out, int max)
 {
@@ -1058,11 +1171,11 @@ EVIL_API void evil_get_status(evil_status *out)
   out->gameaction = gameaction;
   out->exited = exited;
   out->secret = secret_exit;
-  out->items = players[consoleplayer].itemcount;
+  out->items = players[evil_me].itemcount;
   out->total_items = totalitems;
-  out->kills = players[consoleplayer].killcount;
+  out->kills = players[evil_me].killcount;
   out->total_kills = totalkills;
-  out->secrets = players[consoleplayer].secretcount;
+  out->secrets = players[evil_me].secretcount;
   out->total_secrets = totalsecret;
 }
 
@@ -1128,7 +1241,7 @@ EVIL_API int evil_mobjs(evil_mobj *out, int max)
       o->flags = mo->flags;
       o->owner_type = (mo->flags & MF_MISSILE) && mo->target ? (int)mo->target->type : -1;
       o->state = mo->state ? (int)(mo->state - states) : -1;
-      o->after_her = mo->target && mo->target->player ? 1 : 0;
+      o->after_her = mo->target && mo->target->player == &players[evil_me] ? 1 : 0;
       o->attack = (mo->flags & MF_COUNTKILL) || mo->type == MT_SKULL ? attack_tics(mo) : -1;
     }
     n++;
@@ -1138,7 +1251,7 @@ EVIL_API int evil_mobjs(evil_mobj *out, int max)
 
 EVIL_API void evil_player_state(evil_player *out)
 {
-  player_t *p = &players[consoleplayer];
+  player_t *p = &players[evil_me];
   int i;
   memset(out, 0, sizeof *out);
   out->playerstate = p->playerstate;
@@ -1155,12 +1268,12 @@ EVIL_API void evil_player_state(evil_player *out)
   out->ironfeet = p->powers[pw_ironfeet];
   out->damagecount = p->damagecount;
   out->allmap = p->powers[pw_allmap] != 0;
-  out->message_tic = evil_message_tic;
+  out->message_tic = evil_message_tic[evil_me];
   out->armortype = p->armortype;
   out->backpack = p->backpack ? 1 : 0;
   out->strength = p->powers[pw_strength] != 0;
-  if (evil_message)
-    snprintf(out->message, sizeof out->message, "%s", evil_message);
+  if (evil_message[evil_me])
+    snprintf(out->message, sizeof out->message, "%s", evil_message[evil_me]);
   if (p->mo)
   {
     out->x = fx(p->mo->x); out->y = fx(p->mo->y); out->z = fx(p->mo->z);
@@ -1222,7 +1335,7 @@ EVIL_API int evil_clear_items(void)
  * the backpack, health and armor (armortype 1 green, 2 blue). For arenas. */
 EVIL_API void evil_give(int weapons, int clip, int shell, int cell, int missile, int backpack, int health, int armor, int armortype)
 {
-  player_t *p = &players[consoleplayer];
+  player_t *p = &players[evil_me];
   int i;
   for (i = 0; i < NUMWEAPONS && i < 9; i++)
     p->weaponowned[i] = (weapons >> i) & 1;
@@ -1247,7 +1360,7 @@ EVIL_API void evil_give(int weapons, int clip, int shell, int cell, int missile,
  * had up coming out of the level before, an episode's next level begun with it. */
 EVIL_API void evil_ready(int weapon)
 {
-  player_t *p = &players[consoleplayer];
+  player_t *p = &players[evil_me];
   if (weapon < 0 || weapon >= NUMWEAPONS || !p->weaponowned[weapon])
     return;
   p->readyweapon = weapon;
@@ -1274,7 +1387,7 @@ typedef struct {
   int episode, map, skill;  /* the level it's of */
   int exited, secret_exit, held, spawned, gametic;
   int hit_count, sound_count;
-  int pellets[7];
+  int pellets[7];  /* (the first player's: the look ahead's a single-player game's) */
 } evil_frame_t;
 
 static evil_frame_t evil_frames[EVIL_FRAMES];
@@ -1376,7 +1489,7 @@ EVIL_API int evil_save(int slot)
   f->hit_count = evil_hit_count;
   f->sound_count = evil_sound_count;
   for (i = 0; i < 7; i++)
-    f->pellets[i] = evil_pellets[i];
+    f->pellets[i] = evil_pellets[0][i];
   return f->len;
 }
 
@@ -1423,12 +1536,15 @@ EVIL_API int evil_restore(int slot)
   maketic = gametic;
   evil_hit_count = f->hit_count;
   evil_sound_count = f->sound_count;
-  if (evil_hits_read > evil_hit_count)
-    evil_hits_read = evil_hit_count;
-  if (evil_sounds_read > evil_sound_count)
-    evil_sounds_read = evil_sound_count;
+  for (i = 0; i < EVIL_PLAYERS; i++)
+  {
+    if (evil_hits_read[i] > evil_hit_count)
+      evil_hits_read[i] = evil_hit_count;
+    if (evil_sounds_read[i] > evil_sound_count)
+      evil_sounds_read[i] = evil_sound_count;
+  }
   for (i = 0; i < 7; i++)
-    evil_pellets[i] = f->pellets[i];
+    evil_pellets[0][i] = f->pellets[i];
   return 0;
 }
 
@@ -1511,7 +1627,7 @@ fixed_t P_AproxDistance(fixed_t dx, fixed_t dy);  /* (p_maputl.c) */
 EVIL_API int evil_nearest_seen(double *out)
 {
   thinker_t *th;
-  mobj_t *me = players[consoleplayer].mo;
+  mobj_t *me = players[evil_me].mo;
   mobj_t *best = NULL;
   fixed_t best_d = 0;
   if (gamestate != GS_LEVEL || !me)

@@ -36,6 +36,7 @@ use crate::things::{pickup, PickupKind};
 
 mod canvas;
 mod console;
+mod coop;
 mod draw;
 mod frames;
 mod instinct;
@@ -157,6 +158,9 @@ pub struct WatchOptions {
     pub soundfont: Option<std::path::PathBuf>,
     /// the songs played as recorded (the Steam re-release's), the rest as MIDI
     pub music: Option<crate::music::Recordings>,
+    /// (`--players N`) a co-op game of N players (2 to 4), each a bot of her own (see
+    /// viewer::coop); 1: the single-player watch
+    pub players: usize,
 }
 
 impl Watch {
@@ -542,6 +546,9 @@ struct Watch {
 }
 
 pub fn watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(), String> {
+    if o.players > 1 {
+        return coop::watch(wad, map_name, o);
+    }
     let sound = o.sound && !o.headless;
     let (w, mut watch) = first_watch(wad, map_name, o, sound)?;
     (watch.sound, watch.sound_on) = (sound, sound);

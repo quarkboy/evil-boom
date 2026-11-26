@@ -977,6 +977,7 @@ fn watch_options(
         render: None,
         soundfont: evilboom::config::default_soundfont(),
         music: None,
+        players: 1,
     };
     let mut names = Vec::new();
     let mut it = rest.iter();
@@ -991,6 +992,13 @@ fn watch_options(
             }
             "--all" => w.show_all = true,
             "--show-keys" => w.show_keys = true,
+            "--players" => {
+                w.players = it
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .filter(|n| (1..=4).contains(n))
+                    .ok_or("--players N: 1 to 4 (more than one: a co-op game, each a bot)")?;
+            }
             "--episode" => w.episode = true,
             "--episode-lives" => {
                 w.lives = it

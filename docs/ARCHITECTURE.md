@@ -115,7 +115,8 @@ and replanning when the world doesn't match the plan.
 
 - `sweep`, `score`, `play`, `replay`: headless runs, the one-death score (retired: see
   TESTING.md), recording and replaying runs.
-- `viewer/`: the watch window (`minifb`), the stream layout, Doom's own screens.
+- `viewer/`: the watch window (`minifb`), the stream layout, Doom's own screens; `viewer/coop`,
+  a co-op game of up to four bots, every view at once (`watch --players N`).  The bots are not aware of each other yet.
 - `console/`: the stream console, a web page that supervises a `watch` child process
   ([CONSOLE.md](CONSOLE.md)).
 - `arena`, `drive`, `survey`: fights set up for development, driving by hand, the secret survey.

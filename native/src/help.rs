@@ -106,6 +106,10 @@ zooms, Esc quits.
 The game:
   --episode               on to the next level when she exits, what she has carried over
   --episode-lives N       her lives for all of it, not each level's (with --mortal)
+  --players N             a co-op game of N players (2 to 4), each a bot of her own, every
+                          one's view on screen (Doom's co-op: rebirth at the start, friendly
+                          fire). They don't know of each other yet. Each one's log in
+                          out/watch/coop/ when a level ends
   --speed X               play speed (1: real time; the sound plays only at 1)
   --mute                  no sound
   --log full|brief|off    how much of the log is kept in out/watch/: all of it (her fight's
