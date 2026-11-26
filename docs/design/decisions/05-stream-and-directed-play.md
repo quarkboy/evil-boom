@@ -4586,3 +4586,25 @@ there, nothing ended the step, and she stood on to the 15 s cap.
   stands in the pool by 234 and never steps on: its floor is somewhere else each time she
   looks (-40, -256, -72, 28). Unconfirmed guess: her own presses keep sending it back
   before she's on. Look there before trying the early drop again.
+
+## TNT MAP20: slow, not stuck; three rules tried, none kept (2026-11-25)
+
+On main, skill 1 exits 4 of 4 in 42 to 57 minutes; skill 2 exits none (three dead, one out of
+the hour having seen the exit). The time goes on the nukage: the blue door (line 150) stands
+across sectors 185 and 69, and the rooms 156-163 past a strip of it. A suit on, she clears
+them in seconds; without one they wait. Traced on skill 2, seed 1008128369: the door is
+`ShortOfHealth` (76 reckoned, the way back off doubled, at 96 health, margin 25) for 26
+minutes, and `ways_on_hurt` never comes, the ordinary pass always having a wall by her or a
+look again; on skill 1, seed 854202743, new ground over the nukage (21 at full health) is
+`HarmWhileSafeLeft` for 12 minutes of looks again, till she goes for a suit.
+
+- **Healing tops out at 100** (a way that would leave her under the margin even at full
+  health gets the clock's margin instead): skill 1 4 exits -> 1, skill 2 none.
+- **New ground first, playing alone** (`new_ground_first` without `resorts`): 4 exits for 4,
+  quicker on skill 1, the first on skill 2, but it's been worse over the levels before (the
+  maintainer: less equipped, more woken); it stays the stream's.
+- **Looks again after risky ways on** (while something's unexplained): skill 1 4 exits -> 2,
+  skill 2 four dead.
+- Patches: out/patches/1125-new-ground-solo.patch, 1125-rechecks-after-risky-ways.patch.
+- **Not modelled:** skill 1 halves every hit she takes, floors' too (`damage_factor`), and
+  the reckoning counts them whole. Skill 1 only, which the three-lives test doesn't play.
