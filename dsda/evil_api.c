@@ -840,11 +840,13 @@ static void evil_render(fixed_t frac)
    * drew. A game put back is at an earlier one: till it had caught up, seconds of it, no frame
    * was a first, and the weapon was drawn each frame from where it was before the game went
    * back to where it is now: a gun changed in those seconds hopped between the two) */
+  /* (and each player's view by itself: a co-op watch draws every player's a frame, and each
+   * one's first since the tic is its own, for its gun's smoothing, r_things.c) */
   {
-    static int drawn_tic = -1;
-    if (gametic != drawn_tic)
+    static int drawn_tic[MAX_MAXPLAYERS] = { -1, -1, -1, -1, -1, -1, -1, -1 };
+    if (gametic != drawn_tic[displayplayer])
       realframe = true;
-    drawn_tic = gametic;
+    drawn_tic[displayplayer] = gametic;
   }
   if (setsizeneeded)
     R_ExecuteSetViewSize();  /* (the view's size and buffers: D_Display does this first) */

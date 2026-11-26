@@ -375,6 +375,33 @@ index 65eb56a..f9efdff 100644
      // heretic
      int damage;                 // For missiles
      uint64_t flags2;           // Heretic & MBF21 flags
+diff --git a/prboom2/src/r_fps.c b/prboom2/src/r_fps.c
+index 7e3a7e5..40b8fc0 100644
+--- a/prboom2/src/r_fps.c
++++ b/prboom2/src/r_fps.c
+@@ -101,7 +101,13 @@ dboolean R_ViewInterpolation(void) {
+ 
+ void R_InterpolateView(player_t *player, fixed_t frac)
+ {
+-  static mobj_t *oviewer;
++  // Evil (evil-boom): the last viewer each player's view was drawn for (a co-op watch draws
++  // every player's view a frame: one kept for all, each frame's view was taken for a new one
++  // and not smoothed)
++  static mobj_t *oviewers[MAX_MAXPLAYERS];
++  int evil_i = (int)(player - players);
++  mobj_t **oviewer_at = &oviewers[evil_i >= 0 && evil_i < MAX_MAXPLAYERS ? evil_i : 0];
++  #define oviewer (*oviewer_at)
+   int quake_intensity;
+ 
+   dboolean NoInterpolate = dsda_CameraPaused() || dsda_PausedViaMenu();
+@@ -219,6 +225,7 @@ void R_InterpolateView(player_t *player, fixed_t frac)
+       }
+     }
+   }
++  #undef oviewer
+ }
+ 
+ void R_ResetViewInterpolation ()
 diff --git a/prboom2/src/r_main.c b/prboom2/src/r_main.c
 index 7885732..1cf8a7b 100644
 --- a/prboom2/src/r_main.c
@@ -453,7 +480,7 @@ index 6d60ba4..abd6fdc 100644
          index = MAXLIGHTSCALE - 1;
  
 diff --git a/prboom2/src/r_things.c b/prboom2/src/r_things.c
-index 4f17958..e28f88a 100644
+index 4f17958..1c0ea75 100644
 --- a/prboom2/src/r_things.c
 +++ b/prboom2/src/r_things.c
 @@ -912,7 +912,7 @@ static void R_ProjectSprite (mobj_t* thing, int lightlevel)
@@ -465,6 +492,27 @@ index 4f17958..e28f88a 100644
        if (index >= MAXLIGHTSCALE)
          index = MAXLIGHTSCALE - 1;
        vis->colormap = spritelights[index];
+@@ -1236,7 +1236,11 @@ static void R_DrawPSprite (pspdef_t *psp)
+       int lump;
+     } psp_interpolate_t;
+ 
+-    static psp_interpolate_t psp_inter;
++    // Evil (evil-boom): each player's, by the view being drawn (a co-op watch draws every
++    // player's view a frame: one kept for all, each gun was smoothed from the last one drawn's)
++    static psp_interpolate_t psp_inters[MAX_MAXPLAYERS];
++    int evil_i = viewplayer ? (int)(viewplayer - players) : 0;
++    #define psp_inter psp_inters[evil_i >= 0 && evil_i < MAX_MAXPLAYERS ? evil_i : 0]
+ 
+     if (realframe)
+     {
+@@ -1268,6 +1272,7 @@ static void R_DrawPSprite (pspdef_t *psp)
+         psp_inter.lump=lump;
+       }
+     }
++    #undef psp_inter
+   }
+ 
+   if (dsda_HideWeapon())
 diff --git a/prboom2/src/s_sound.c b/prboom2/src/s_sound.c
 index a12136e..55f142b 100644
 --- a/prboom2/src/s_sound.c
