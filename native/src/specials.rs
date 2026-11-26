@@ -134,6 +134,17 @@ impl Key {
         Key::ALL.into_iter().find(|&k| k as u16 == kind)
     }
 
+    /// The key a thing of this name is ("BlueCard", as the game's things are named).
+    pub fn named(name: &str) -> Option<Key> {
+        Key::ALL.into_iter().find(|k| format!("{k:?}") == name)
+    }
+
+    /// A netgame's key she has, lying where it was: every key stays for the others there
+    /// (`P_TouchSpecialThing`), and gives her nothing.
+    pub fn had_already(name: &str, keys: Option<Keys>) -> bool {
+        Key::named(name).is_some_and(|k| keys.unwrap_or_default().has(k))
+    }
+
     pub fn color(self) -> Color {
         match self {
             Key::BlueCard | Key::BlueSkull => Color::Blue,

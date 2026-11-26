@@ -1362,7 +1362,11 @@ impl Fight {
     /// A co-op game's gun she has already, lying where the level put it: it stays there for the
     /// others, and walking over it gives her nothing (a monster's dropped gun gives its ammo and
     /// goes, as alone). Placed, by lying where a thing of the map's does.
+    /// A key she has too, there: a netgame leaves every key where it lies.
     fn left_lying(&self, obs: &Observation, t: &crate::domain::Thing) -> bool {
+        if self.coop.is_some() && t.category == "Key" {
+            return crate::specials::Key::had_already(t.name, obs.keys);
+        }
         self.coop.as_ref().is_some_and(|spots| {
             crate::bestiary::weapon_item(t.name).is_some()
                 && !Self::new_gun(obs, t.name)

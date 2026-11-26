@@ -645,11 +645,7 @@ impl Knowledge {
     /// A key she has too: a netgame leaves every key where it lies (`P_TouchSpecialThing`).
     pub fn left_lying(&self, obs: &Observation, t: &crate::domain::Thing) -> bool {
         if self.coop && t.category == "Key" {
-            use crate::specials::Key;
-            return Key::ALL
-                .into_iter()
-                .find(|k| format!("{k:?}") == t.name)
-                .is_some_and(|k| obs.keys.unwrap_or_default().has(k));
+            return crate::specials::Key::had_already(t.name, obs.keys);
         }
         let Some(slot) = crate::bestiary::weapon_item(t.name).filter(|_| self.coop) else {
             return false;
