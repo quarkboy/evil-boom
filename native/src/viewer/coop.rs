@@ -168,6 +168,19 @@ impl Coop {
     /// A tic: each player sees the level and decides (a dead one presses on to be born again),
     /// then the tic's played with all their controls.
     fn tic(&mut self) {
+        // (what each is going for, told the players after her: left to her)
+        let going: Vec<Option<(crate::knowledge::explorer::Kind, crate::geom::Point)>> = self
+            .seats
+            .iter()
+            .map(|s| {
+                (s.dead_since.is_none())
+                    .then(|| s.agent.x().current.as_ref().map(|o| (o.kind, o.goal)))
+                    .flatten()
+            })
+            .collect();
+        for (i, s) in self.seats.iter_mut().enumerate() {
+            s.agent.x_mut().claimed = going[..i].iter().flatten().copied().collect();
+        }
         let mut cs = Vec::with_capacity(self.seats.len());
         for (i, s) in self.seats.iter_mut().enumerate() {
             self.engine.as_player(i);

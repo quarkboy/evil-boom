@@ -62,7 +62,7 @@ const CARROT_STEPS: [f64; 4] = [72.0, 56.0, 40.0, 28.0];
 const STUCK_TICS: i64 = 35;
 
 /// nowhere this long with another player at her elbow: one of them gives way (`give_way`)
-const GIVE_WAY_AFTER: i64 = 17;
+const GIVE_WAY_AFTER: i64 = 12;
 
 const UNSTICK_TICS: i64 = 12;
 
@@ -501,28 +501,61 @@ impl RouteFollower {
         None
     }
 
-    /// A co-op game: nowhere for a while with another player at her elbow. Not stuck, and not
-    /// counted against the way (stuck there often enough, she'd give the way up for the level):
-    /// of the two, the one whose number is higher steps away and the other goes on, the clock
-    /// for being stuck put back for both. After `GIVE_WAY_MOST` in a row with no progress,
-    /// stuck as by anything else. None: she goes on as she was.
+    /// A co-op game: nowhere for a while with another player at her elbow, ahead of her. Not
+    /// stuck, and not counted against the way (stuck there often enough, she'd give the way up
+    /// for the level). As people in a corridor one wide:
+    /// - going her way: she's in a queue, and waits;
+    /// - backing toward her (backing out for someone further on): she backs out too, whoever she
+    ///   is, or the two of them shut the third in;
+    /// - else, of the two, the one whose number is lower goes on, and the other backs out the way
+    ///   she came (back along her own way, which there's room on; sideways there's none).
+    ///
+    /// After `GIVE_WAY_MOST` in a row with no progress, stuck as by anything else. None: she goes
+    /// on as she was.
     fn give_way(&mut self, obs: &Observation) -> Option<Controls> {
-        /// two players' radii and a step: at her elbow
-        const NEAR: f64 = 16.0 * 2.0 + 24.0;
-        const GIVE_WAY_TICS: i64 = 20;
-        const GIVE_WAY_MOST: i32 = 4;
+        /// two players' radii and a stride: at her elbow
+        const NEAR: f64 = 16.0 * 2.0 + 32.0;
+        /// within this of her way on, ahead of her
+        const AHEAD: f64 = 75.0;
+        const WAIT_TICS: i64 = 20;
+        const BACK_TICS: i64 = 35;
+        /// how far back along her way she backs out to
+        const BACK: f64 = 128.0;
+        const GIVE_WAY_MOST: i32 = 8;
         let pos = obs.pos();
-        let m = obs
+        let track = &self.segments[self.seg_i].track;
+        let on = heading(
+            pos,
+            track.point_at((self.at.along + 64.0).min(track.length)),
+        );
+        let behind = track.point_at((self.at.along - BACK).max(0.0));
+        let m = *obs
             .mates
             .iter()
-            .filter(|m| m.alive && dist(pos, m.pos()) < NEAR)
+            .filter(|m| {
+                m.alive
+                    && dist(pos, m.pos()) < NEAR
+                    && crate::domain::norm(heading(pos, m.pos()) - on).abs() < AHEAD
+            })
             .min_by(|a, b| dist(pos, a.pos()).total_cmp(&dist(pos, b.pos())))?;
         if self.unstick.given_way >= GIVE_WAY_MOST {
             return None;
         }
         self.unstick.given_way += 1;
-        self.progress_tic = obs.tic + GIVE_WAY_TICS;
-        if obs.me < m.index {
+        let moving = m.vx.hypot(m.vy) > 1.0;
+        let their_way = m.vy.atan2(m.vx).to_degrees();
+        let going_her_way = moving && crate::domain::norm(their_way - on).abs() < 60.0;
+        let backing_at_her = moving
+            && crate::domain::norm(their_way - heading(m.pos(), pos)).abs() < 60.0
+            && crate::domain::norm(their_way - m.angle).abs() > 120.0;
+        if going_her_way {
+            self.progress_tic = obs.tic + WAIT_TICS;
+            self.log
+                .add(obs.tic, format!("behind player {}: waiting", m.index + 1));
+            return Some(Controls::default());
+        }
+        if obs.me < m.index && !backing_at_her {
+            self.progress_tic = obs.tic + WAIT_TICS;
             self.log.add(
                 obs.tic,
                 format!("player {} in the way: hers is the way, on", m.index + 1),
@@ -531,18 +564,17 @@ impl RouteFollower {
         }
         self.log.add(
             obs.tic,
-            format!("player {} in the way: giving way", m.index + 1),
+            format!(
+                "player {} in the way: backing out the way she came",
+                m.index + 1
+            ),
         );
-        self.unstick.until = obs.tic + GIVE_WAY_TICS;
-        // (off the other's line, to the side of it she's on: straight away from them is along
-        // their way, and they follow her into the same spot. Standing, straight away)
-        let away = heading(m.pos(), pos);
-        self.unstick.dir = if m.vx.hypot(m.vy) > 1.0 {
-            let way = m.vy.atan2(m.vx).to_degrees();
-            let side = (pos.0 - m.x) * m.vy - (pos.1 - m.y) * m.vx; // (> 0: on their right)
-            way + if side > 0.0 { -90.0 } else { 90.0 }
+        self.unstick.until = obs.tic + BACK_TICS;
+        self.progress_tic = obs.tic + BACK_TICS;
+        self.unstick.dir = if dist(behind, pos) > 16.0 {
+            heading(pos, behind)
         } else {
-            away
+            heading(m.pos(), pos) // (at her way's start: straight away)
         };
         Some(self.unstick(obs))
     }

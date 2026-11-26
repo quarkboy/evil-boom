@@ -28,6 +28,9 @@ const LOW_BULLETS: i32 = 10;
 const LOW_SHELLS: i32 = 4;
 
 /// what gives bullets or shells for tapping walls and gun lines
+/// a co-op game: an objective this near one a player before her is going for is hers
+const CLAIM_NEAR: f64 = 64.0;
+
 const TAP_AMMO: [&str; 7] = [
     "Clip", "ClipBox", "Shell", "ShellBox", "Backpack", "Chaingun", "Shotgun",
 ];
@@ -1662,6 +1665,21 @@ impl Explorer {
         hooks: &mut dyn Hooks,
     ) -> Vec<Objective> {
         let mut options = self.objectives(obs, risky, hooks);
+        // (a co-op game: what a player before her is going for is left to her while there's
+        // anything else; not the exit, nor a key, which each must have for herself)
+        if !self.claimed.is_empty() {
+            let claimed = |o: &Objective| {
+                !matches!(o.kind, Kind::Exit | Kind::Key)
+                    && self
+                        .claimed
+                        .iter()
+                        .any(|(k, at)| *k == o.kind && dist(*at, o.goal) < CLAIM_NEAR)
+            };
+            let free: Vec<Objective> = options.iter().filter(|o| !claimed(o)).cloned().collect();
+            if !free.is_empty() {
+                options = free;
+            }
+        }
         let mesh = Arc::clone(&self.nav.mesh);
         if !self.knowledge.traps.is_empty() {
             // Not back into a trap she's been stuck in before, for a key lying there or anything
