@@ -4580,3 +4580,9 @@ there, nothing ended the step, and she stood on to the 15 s cap.
   the hour); skill 2 unchanged. With the pool drop on top she no longer dies waiting; she
   fails over and over on the pool's second lift (sector 233, travelling between the pool and
   256), the plan wanting it at 256 with her at -256: next.
+- **Parked (2026-11-25), corrected:** sector 233 is a fixed walk at 256 and never moves; the
+  lift is sector 234 beside it (tag 35, lowered by the pool's SR lines 1151, 1124, 1125), and
+  the heights in the "waited too long" line are her own sector's. With the early drop she
+  stands in the pool by 234 and never steps on: its floor is somewhere else each time she
+  looks (-40, -256, -72, 28). Unconfirmed guess: her own presses keep sending it back
+  before she's on. Look there before trying the early drop again.
