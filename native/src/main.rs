@@ -978,6 +978,9 @@ fn watch_options(
         soundfont: evilboom::config::default_soundfont(),
         music: None,
         players: 1,
+        deathmatch: 0,
+        frag_limit: 20,
+        minutes: 10.0,
     };
     let mut names = Vec::new();
     let mut it = rest.iter();
@@ -998,6 +1001,20 @@ fn watch_options(
                     .and_then(|v| v.parse().ok())
                     .filter(|n| (1..=4).contains(n))
                     .ok_or("--players N: 1 to 4 (more than one: a co-op game, each a bot)")?;
+            }
+            "--deathmatch" => w.deathmatch = 1,
+            "--altdeath" => w.deathmatch = 2,
+            "--frags" => {
+                w.frag_limit = it
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .ok_or("--frags N (a deathmatch over at N frags; 0: no limit)")?;
+            }
+            "--minutes" => {
+                w.minutes = it
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .ok_or("--minutes M (a deathmatch over after M minutes; 0: no limit)")?;
             }
             "--episode" => w.episode = true,
             "--episode-lives" => {

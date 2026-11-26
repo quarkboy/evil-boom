@@ -161,6 +161,13 @@ pub struct WatchOptions {
     /// (`--players N`) a co-op game of N players (2 to 4), each a bot of her own (see
     /// viewer::coop); 1: the single-player watch
     pub players: usize,
+    /// (`--deathmatch`, `--altdeath`) with more than one player: 0 co-op, 1 deathmatch, 2
+    /// altdeath
+    pub deathmatch: i32,
+    /// (`--frags N`) a deathmatch over at this many frags (0: no limit)
+    pub frag_limit: i32,
+    /// (`--minutes M`) a deathmatch over after this much game time (0: no limit)
+    pub minutes: f64,
 }
 
 impl Watch {
@@ -546,7 +553,7 @@ struct Watch {
 }
 
 pub fn watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(), String> {
-    if o.players > 1 {
+    if o.players > 1 || o.deathmatch > 0 {
         return coop::watch(wad, map_name, o);
     }
     let sound = o.sound && !o.headless;

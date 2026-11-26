@@ -77,6 +77,9 @@ pub fn monster(name: &str) -> Option<Monster> {
             ..mon(128.0, 100.0, 3000, A::Hitscan, false, 15.0)
         },
         "CommanderKeen" => mon(16.0, 72.0, 100, A::None, false, 0.0),
+        // (a deathmatch's other player: her size, her health, and as dangerous as a chaingunner,
+        // whatever gun she holds)
+        "Opponent" => mon(16.0, 56.0, 100, A::Hitscan, false, 6.0),
         _ => return None,
     })
 }

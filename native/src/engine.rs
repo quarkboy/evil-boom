@@ -16,6 +16,9 @@ use std::path::{Path, PathBuf};
 /// (the level loads on the first, then a few idle tics)
 pub const WARMUP_TICS: i64 = 8;
 
+/// `Thing::owner` of a missile another player fired (0 is hers, as alone: a player's)
+pub const OTHER_PLAYERS: i32 = -2;
+
 /// Where the game's library and its own WAD are built.
 pub fn build_dir() -> PathBuf {
     config::engine_dir()
@@ -111,6 +114,8 @@ pub struct Engine {
     players: usize,
     me: usize,
     seats: Vec<Seat>,
+    /// with more than one player: 0 co-op, 1 deathmatch, 2 altdeath
+    deathmatch: i32,
 }
 
 /// What this side keeps of a player (the suits, the message, the hits), for each of a co-op
@@ -245,6 +250,7 @@ impl Engine {
             players: 1,
             me: 0,
             seats: vec![Seat::default()],
+            deathmatch: 0,
         })
     }
 
@@ -256,6 +262,22 @@ impl Engine {
         self.players = n;
         self.seats = vec![Seat::default(); n];
         self.game.set_players(n);
+    }
+
+    /// The games begun from now on with more than one player: co-op (0), deathmatch (1),
+    /// altdeath (2). Before `start`.
+    pub fn set_mode(&mut self, deathmatch: i32) {
+        self.deathmatch = deathmatch;
+        self.game.set_mode(deathmatch);
+    }
+
+    pub fn deathmatch(&self) -> i32 {
+        self.deathmatch
+    }
+
+    /// The frags so far: `[i][j]`, the times player i has killed player j (i == j: herself).
+    pub fn frags(&self) -> [[i32; 4]; 4] {
+        self.game.frags()
     }
 
     pub fn players(&self) -> usize {
@@ -611,13 +633,20 @@ impl Engine {
                     barrels_lit.push((m.x, m.y));
                 }
             }
-            if m.kind == 0
+            // (a deathmatch: another player, alive, is one to fight, as a monster is)
+            let opponent = self.deathmatch > 0
+                && m.kind == 0
+                && m.mine == 0
+                && m.health > 0
+                && m.flags & dsda::MF_CORPSE == 0;
+            if (m.kind == 0 && !opponent)
                 || m.flags & dsda::MF_CORPSE != 0
                 || (m.flags & dsda::MF_SHOOTABLE != 0 && m.health <= 0)
             {
                 continue;
             }
             let Some(name) = name else { continue };
+            let name = if opponent { "Opponent" } else { name };
             if let Some(things) = things.as_mut() {
                 let category = category(name);
                 if !matches!(name, "DoomPlayer" | "BossTarget") && category != "Other" {
@@ -633,7 +662,14 @@ impl Engine {
                         vz: m.momz,
                         angle: m.angle,
                         health: m.health,
-                        owner: m.owner_type,
+                        // (a deathmatch: another player's missile, not hers, a player's as it
+                        // is. In co-op a teammate's is taken as hers, as it always was: seen as
+                        // an attack, the fight turned on where it came from)
+                        owner: if self.deathmatch > 0 && m.owner_type == 0 && m.mine == 0 {
+                            OTHER_PLAYERS
+                        } else {
+                            m.owner_type
+                        },
                         state: m.state,
                         after_her: m.after_her != 0,
                         attack: m.attack,
@@ -742,8 +778,12 @@ impl Engine {
         }
     }
 
-    /// A co-op game's other players, where they are (none alone).
+    /// A co-op game's other players, where they are (none alone, nor in a deathmatch: there
+    /// they're opponents, among the things, when seen).
     fn mates(&self) -> Vec<crate::domain::Mate> {
+        if self.deathmatch > 0 {
+            return Vec::new();
+        }
         let others: Vec<usize> = (0..self.players).filter(|&j| j != self.me).collect();
         let mates = others
             .into_iter()

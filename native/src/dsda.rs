@@ -40,6 +40,8 @@ pub struct Mobj {
     pub after_her: c_int,
     /// a monster: tics into its missile attack (-1: not attacking)
     pub attack: c_int,
+    /// hers (the player the calls are about): her body, or a missile she fired
+    pub mine: c_int,
 }
 
 /// The player (`evil_player`).
@@ -147,7 +149,7 @@ impl TicCmd {
 
 /// What `evil_api.c` calls itself (`EVIL_ABI` there): raised, there and here together, whenever
 /// a call's arguments or one of the structs above changes its meaning.
-const EVIL_ABI: c_int = 2;
+const EVIL_ABI: c_int = 3;
 
 /// (said when the library isn't the one this program was built against)
 const REBUILD: &str = "the engine library doesn't match this program ({}): build them from the \
@@ -192,9 +194,12 @@ type IconFn = unsafe extern "C" fn(*const u32, c_int, c_int);
 type DrawAsFn = unsafe extern "C" fn(c_int, *mut u8, c_int, f64, *mut c_int) -> c_int;
 type CmdFn = unsafe extern "C" fn(c_int, c_int, c_int, c_int, c_int);
 
-/// A co-op game's calls (`evil_players`, `evil_as`, `evil_cmd`, `evil_draw_as`).
+/// A co-op or deathmatch game's calls (`evil_players`, `evil_mode`, `evil_frags`, `evil_as`,
+/// `evil_cmd`, `evil_draw_as`).
 struct CoopFns {
     players: unsafe extern "C" fn(c_int),
+    mode: unsafe extern "C" fn(c_int),
+    frags: unsafe extern "C" fn(*mut c_int),
     as_: unsafe extern "C" fn(c_int),
     cmd: CmdFn,
     draw_as: DrawAsFn,
@@ -488,6 +493,8 @@ impl Dsda {
         let coop = unsafe {
             CoopFns {
                 players: get::<unsafe extern "C" fn(c_int)>(&lib, b"evil_players")?,
+                mode: get::<unsafe extern "C" fn(c_int)>(&lib, b"evil_mode")?,
+                frags: get::<unsafe extern "C" fn(*mut c_int)>(&lib, b"evil_frags")?,
                 as_: get::<unsafe extern "C" fn(c_int)>(&lib, b"evil_as")?,
                 cmd: get::<CmdFn>(&lib, b"evil_cmd")?,
                 draw_as: get::<DrawAsFn>(&lib, b"evil_draw_as")?,
@@ -1112,6 +1119,21 @@ impl Dsda {
     pub fn set_players(&self, n: usize) {
         // SAFETY: a plain value into the game; see `load`.
         unsafe { (self.coop.players)(n as c_int) }
+    }
+
+    /// The games begun from now on with more than one player: co-op (0), deathmatch (1),
+    /// altdeath (2).
+    pub fn set_mode(&self, deathmatch: i32) {
+        // SAFETY: a plain value into the game; see `load`.
+        unsafe { (self.coop.mode)(deathmatch) }
+    }
+
+    /// The frags so far: `[i][j]`, the times player i has killed player j (i == j: herself).
+    pub fn frags(&self) -> [[i32; 4]; 4] {
+        let mut out = [0 as c_int; 16];
+        // SAFETY: the game writes sixteen ints.
+        unsafe { (self.coop.frags)(out.as_mut_ptr()) };
+        std::array::from_fn(|i| std::array::from_fn(|j| out[i * 4 + j]))
     }
 
     /// The player the calls about "the player" are about from now on (`player`, `status`,

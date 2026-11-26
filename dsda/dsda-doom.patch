@@ -147,15 +147,15 @@ index 5089f33..e963438 100644
    P_LOAD_X(map_colormap);
  
 diff --git a/prboom2/src/g_game.c b/prboom2/src/g_game.c
-index a8d215e..d1f9ae4 100644
+index a8d215e..5d61c41 100644
 --- a/prboom2/src/g_game.c
 +++ b/prboom2/src/g_game.c
 @@ -2873,6 +2873,12 @@ void G_DoNewGame (void)
    G_ReloadDefaults();            // killough 3/1/98
    netgame = solo_net;
    deathmatch = false;
-+  // Evil (evil-boom): a co-op game's players kept (G_ReloadDefaults leaves only the first in
-+  // the game: evil_players, evil_api.c)
++  // Evil (evil-boom): a co-op or deathmatch game's players kept (G_ReloadDefaults leaves only
++  // the first in the game), and the deathmatch (evil_players, evil_mode, evil_api.c)
 +  {
 +    void evil_players_again(void);
 +    evil_players_again();
@@ -664,10 +664,10 @@ index 633f674..95dd005 100644
  
  void S_StartSectorSound(sector_t *sector, int sfx_id);
 diff --git a/prboom2/src/st_stuff.c b/prboom2/src/st_stuff.c
-index 06d62a8..5bd9b18 100644
+index 06d62a8..7a28566 100644
 --- a/prboom2/src/st_stuff.c
 +++ b/prboom2/src/st_stuff.c
-@@ -1231,3 +1231,40 @@ void ST_Init(void)
+@@ -1231,3 +1231,46 @@ void ST_Init(void)
    veryfirsttime = 0;
    ST_loadGraphics();
  }
@@ -682,7 +682,13 @@ index 06d62a8..5bd9b18 100644
 +  static int kept_face = -1;
 +  static int no_ammo = 1994;  // (as ST_updateWidgets has it: "n/a")
 +  int i;
-+  if (raven || player < 0 || player >= MAX_MAXPLAYERS || plyr == &players[player])
++  if (raven || player < 0 || player >= MAX_MAXPLAYERS)
++    return;
++  // (a deathmatch's FRAG box: theirs, as ST_updateWidgets counts the shown player's)
++  st_fragscount = 0;
++  for (i = 0; i < g_maxplayers; i++)
++    st_fragscount += i != player ? players[player].frags[i] : -players[player].frags[i];
++  if (plyr == &players[player])
 +    return;
 +  if (plyr == &players[consoleplayer])
 +    kept_face = st_faceindex;

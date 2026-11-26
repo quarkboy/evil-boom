@@ -1,8 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Quarkboy
 
-//! A co-op game watched (`watch --players N`, 2 to 4): one game with up to four players in it,
-//! each a bot of her own, every one's view on the screen at once.
+//! A co-op or deathmatch game watched (`watch --players N`, 2 to 4; `--deathmatch`): one game
+//! with up to four players in it, each a bot of her own, every one's view on the screen at once.
+//!
+//! Deathmatch, Doom's classic (`--deathmatch`, or `--altdeath` for its second kind): random
+//! starts, weapons left lying, a death a rebirth at a start. The others are opponents: among the
+//! things she sees, to be fought as a monster is (`Opponent`), their missiles not hers; nothing's
+//! shared. The exit's kept back; with nothing left to do she walks the level round again. Over
+//! at `--frags N` (20 unless told; 0: no limit) or `--minutes M` (10; 0: none): the level's
+//! ended there, and Doom's own tally of frags comes up. Monsters in or not, as `--fight` says.
 //!
 //! Each player is an `Agent` as a single-player watch has one, with what she's seen and learned
 //! her own: nothing's shared, and none of them knows the others are there yet (their bodies
@@ -41,6 +48,9 @@ pub const MAX_PLAYERS: usize = 4;
 /// A dead player presses on to be born again this long after dying (tics).
 const REBIRTH_WAIT: i64 = 35;
 
+/// (a deathmatch) nothing to do this long, she walks the level round again (tics)
+const PATROL_AFTER: i64 = 3 * 35;
+
 /// Each player's colour, as Doom's co-op has them (green, indigo, brown, red).
 const COLOURS: [Rgb; MAX_PLAYERS] = [
     (80, 220, 80),
@@ -62,6 +72,8 @@ struct Seat {
     deaths: i32,
     /// her lines set off so far that the others have been told of (`tell_used`)
     told: usize,
+    /// (a deathmatch) with nothing to do since this tic
+    idle_since: Option<i64>,
     /// her view as last drawn: (width, height, palette indices, the palette)
     frame: Option<(usize, usize, Vec<u8>, usize)>,
 }
@@ -79,6 +91,11 @@ struct Coop {
     began: i64,
     /// the game's seed (the logs are named by it)
     seed: Option<u32>,
+    /// 0 co-op, 1 deathmatch, 2 altdeath
+    deathmatch: i32,
+    /// a deathmatch over at this many frags (0: no limit), or this much game time (tics; 0: none)
+    frag_limit: i32,
+    time_limit: i64,
     speed: f64,
     paused: bool,
     sound: bool,
@@ -105,6 +122,9 @@ pub fn watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(), String> 
     ];
     if let Some((_, what)) = unsupported.iter().find(|(is, _)| *is) {
         return Err(format!("--players: not yet with {what}"));
+    }
+    if o.deathmatch > 0 && o.players < 2 {
+        return Err("--deathmatch: two players at least (--players N)".into());
     }
     let sound = o.sound && !o.headless;
     let mut coop = Coop::new(wad, map_name, o, sound)?;
@@ -139,12 +159,29 @@ impl Coop {
             },
         )?;
         engine.set_players(o.players);
+        engine.set_mode(o.deathmatch);
         engine.carry.clone_from(&o.carry);
         engine.start();
         if !o.mortal || o.charmed {
             engine.set_god(true);
         }
         let seats = seats(&nav, &map_name, o)?;
+        if o.deathmatch > 0 {
+            println!(
+                "deathmatch on {map_name}: {} players, to {} frags or {} minutes",
+                o.players,
+                if o.frag_limit > 0 {
+                    o.frag_limit.to_string()
+                } else {
+                    "no".into()
+                },
+                if o.minutes > 0.0 {
+                    o.minutes.to_string()
+                } else {
+                    "no".into()
+                }
+            );
+        }
         let palettes = palettes(&w).iter().map(|p| brightened(p)).collect();
         let began = engine.tic;
         Ok(Coop {
@@ -157,6 +194,9 @@ impl Coop {
             palettes,
             began,
             seed: o.seed,
+            deathmatch: o.deathmatch,
+            frag_limit: o.frag_limit,
+            time_limit: (o.minutes * 60.0 * TICRATE) as i64,
             speed: o.speed,
             paused: false,
             sound,
@@ -179,7 +219,9 @@ impl Coop {
             })
             .collect();
         for (i, s) in self.seats.iter_mut().enumerate() {
-            s.agent.x_mut().claimed = going[..i].iter().flatten().copied().collect();
+            if self.deathmatch == 0 {
+                s.agent.x_mut().claimed = going[..i].iter().flatten().copied().collect();
+            }
         }
         let mut cs = Vec::with_capacity(self.seats.len());
         for (i, s) in self.seats.iter_mut().enumerate() {
@@ -212,6 +254,20 @@ impl Coop {
                     .log
                     .push(format!("tic {tic}: born again at the start"));
             }
+            // (a deathmatch: nothing left to do a while, the level walked round again, for whoever's
+            // about and whatever's back)
+            if self.deathmatch > 0 {
+                if s.agent.x().current.is_some() {
+                    s.idle_since = None;
+                } else if tic - *s.idle_since.get_or_insert(tic) > PATROL_AFTER {
+                    s.idle_since = None;
+                    s.agent.x_mut().knowledge.visited.clear();
+                    s.agent
+                        .x_mut()
+                        .log
+                        .push(format!("tic {tic}: nothing to do: round the level again"));
+                }
+            }
             let obs = self.engine.observe();
             s.secrets_seen =
                 crate::run::secret_found(&self.engine, &mut s.agent, &obs, s.secrets_seen);
@@ -240,8 +296,38 @@ impl Coop {
             }
         }
         self.engine.as_player(0);
-        self.tell_used();
-        self.share_knowledge();
+        if self.deathmatch == 0 {
+            self.tell_used();
+            self.share_knowledge();
+        } else if !self.engine.exited() && self.match_over().is_some() {
+            // (the frags or the time up: the level ended, as an exit ends it, Doom's tally next)
+            self.engine.exit_level(false);
+        }
+    }
+
+    /// Each player's frags: the others she's killed, less the times she's killed herself.
+    fn frags(&self) -> Vec<i32> {
+        let f = self.engine.frags();
+        (0..self.seats.len())
+            .map(|i| {
+                (0..self.seats.len())
+                    .map(|j| if i == j { -f[i][j] } else { f[i][j] })
+                    .sum()
+            })
+            .collect()
+    }
+
+    /// A deathmatch's end: why, if it's over.
+    fn match_over(&self) -> Option<String> {
+        let frags = self.frags();
+        let top = frags.iter().copied().max().unwrap_or(0);
+        if self.frag_limit > 0 && top >= self.frag_limit {
+            return Some(format!("{} frags", top));
+        }
+        if self.time_limit > 0 && self.engine.tic - self.began >= self.time_limit {
+            return Some("the time's up".into());
+        }
+        None
     }
 
     /// What each has come to know of the level, known to all (`Knowledge::share_from`).
@@ -351,13 +437,35 @@ impl Coop {
         } else {
             "TIMEOUT"
         };
+        let kind = if self.deathmatch > 0 {
+            "DEATHMATCH"
+        } else {
+            "COOP"
+        };
         println!(
-            "COOP {} {outcome} {:.0}s game, {:.0}s real, {} players",
+            "{kind} {} {outcome} {:.0}s game, {:.0}s real, {} players",
             self.map_name,
             secs,
             start.elapsed().as_secs_f64(),
             self.seats.len()
         );
+        if self.deathmatch > 0 {
+            let frags = self.frags();
+            let f = self.engine.frags();
+            for i in 0..self.seats.len() {
+                let by: Vec<String> = (0..self.seats.len())
+                    .map(|j| format!("{}", f[i][j]))
+                    .collect();
+                println!(
+                    "  player {}: frags {} (kills of players 1-{}: {}) deaths {}",
+                    i + 1,
+                    frags[i],
+                    self.seats.len(),
+                    by.join(" "),
+                    self.seats[i].deaths
+                );
+            }
+        }
         for i in 0..self.seats.len() {
             self.engine.as_player(i);
             let t = self.engine.tally();
@@ -390,8 +498,16 @@ impl Coop {
         }
     }
 
+    fn kind(&self) -> &'static str {
+        if self.deathmatch > 0 {
+            "deathmatch"
+        } else {
+            "co-op"
+        }
+    }
+
     fn show(&mut self, o: &WatchOptions) -> Result<(), String> {
-        let title = format!("evil-boom co-op: {}", self.map_name);
+        let title = format!("evil-boom {}: {}", self.kind(), self.map_name);
         let mut window = window::Window::open(&self.engine.game, &title, (W, H), o.window)?;
         let mut canvas = Canvas {
             px: vec![0; W * H],
@@ -449,7 +565,7 @@ impl Coop {
                     reported = false;
                     window::Window::set_title(
                         &self.engine.game,
-                        &format!("evil-boom co-op: {}", self.map_name),
+                        &format!("evil-boom {}: {}", self.kind(), self.map_name),
                     );
                 }
             }
@@ -546,6 +662,16 @@ impl Coop {
                 (255, 60, 60),
                 4,
             );
+        } else if self.engine.exited() && self.deathmatch > 0 {
+            let frags = self.frags();
+            let top = frags.iter().copied().max().unwrap_or(0);
+            let won = frags[i] == top;
+            c.text(
+                if won { "WINNER" } else { "MATCH OVER" },
+                (r.0 + r.2 / 2 - if won { 48 } else { 80 }, r.1 + r.3 / 3),
+                HEAD,
+                4,
+            );
         } else if self.engine.exited() {
             c.text("EXITED", (r.0 + r.2 / 2 - 48, r.1 + r.3 / 3), HEAD, 4);
         }
@@ -570,8 +696,13 @@ impl Coop {
         let mut y = c.text(&format!("Player {}", i + 1), (x, r.1 + 6), COLOURS[i], 2);
         if let Some(obs) = &s.obs {
             let gun = obs.weapon.map_or(String::new(), |w| format!(", gun {w}"));
+            let frags = if self.deathmatch > 0 {
+                format!("frags {}  ", self.frags()[i])
+            } else {
+                String::new()
+            };
             let line = format!(
-                "health {:.0}  armor {:.0}{gun}  deaths {}",
+                "{frags}health {:.0}  armor {:.0}{gun}  deaths {}",
                 obs.health.unwrap_or(0.0),
                 obs.armor.unwrap_or(0.0),
                 s.deaths
@@ -579,7 +710,7 @@ impl Coop {
             y = c.text(&line, (x, y + 2), TEXT, 1);
         }
         let doing = if s.dead_since.is_some() {
-            "dead: back at the start in a moment".to_string()
+            "dead: back in a moment".to_string()
         } else {
             s.agent
                 .x()
@@ -674,11 +805,25 @@ fn seats(nav: &Rc<Navigator>, map_name: &str, o: &WatchOptions) -> Result<Vec<Se
         .map(|_| {
             let mut knowledge = Knowledge::new(Rc::clone(nav), o.mortal, !o.peek);
             knowledge.charmed = o.charmed;
-            knowledge.coop = true;
-            let mut agent = Agent::new(nav, knowledge, o.fight, false, o.lives, Rc::clone(&tune));
+            // (a gun the level put down stays when picked up: co-op's, and classic deathmatch's;
+            // altdeath's goes, and comes back)
+            knowledge.coop = o.deathmatch != 2;
+            // (a deathmatch: the fight hers whether the monsters are in or not, the others being
+            // what she fights; the exit not for her, it'd end the match)
+            let fight = if o.deathmatch > 0 && o.fight == 0 {
+                3
+            } else {
+                o.fight
+            };
+            let mut agent = Agent::new(nav, knowledge, fight, false, o.lives, Rc::clone(&tune));
             if let Some(p) = agent.player_mut() {
-                p.set_going_on(going_on);
-                p.set_coop();
+                p.set_going_on(going_on && o.deathmatch == 0);
+                if o.deathmatch != 2 {
+                    p.set_coop();
+                }
+            }
+            if o.deathmatch > 0 {
+                agent.x_mut().exit_held_back = true;
             }
             if o.keys {
                 agent.keys_only();
@@ -691,6 +836,7 @@ fn seats(nav: &Rc<Navigator>, map_name: &str, o: &WatchOptions) -> Result<Vec<Se
                 dead_since: None,
                 deaths: 0,
                 told: 0,
+                idle_since: None,
                 frame: None,
             }
         })

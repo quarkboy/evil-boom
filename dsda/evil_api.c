@@ -86,6 +86,7 @@ typedef struct {
   int state;       /* its state now (an index into states[]: what it's doing) */
   int after_her;   /* a monster: its target is the player */
   int attack;      /* a monster: tics into its (missile) attack, from its first frame; -1: not attacking */
+  int mine;        /* her own (evil_as's player): her body, or a missile she fired */
 } evil_mobj;
 
 typedef struct {
@@ -117,6 +118,8 @@ void ST_EvilView(int player);      /* (st_stuff.c, patched) */
 #define EVIL_PLAYERS 4
 static int evil_me;
 static int evil_player_count = 1;
+/* the games begun from now on: 0 co-op (or one player), 1 deathmatch, 2 altdeath (evil_mode) */
+static int evil_deathmatch;
 
 typedef struct {
   int gametic;
@@ -166,7 +169,7 @@ static double degrees(angle_t a) { return a * (360.0 / 4294967296.0); }
  * a call's arguments or one of the structs above changes its meaning, and the structs' sizes
  * as this compiler laid them out. The program checks all four before it calls anything else
  * (Dsda::load): one built against another evil_api.c would read or write past what's here. */
-#define EVIL_ABI 2
+#define EVIL_ABI 3
 
 EVIL_API int evil_abi(int *out)
 {
@@ -273,7 +276,23 @@ static void evil_set_players(void)
   }
   solo_net = evil_player_count > 1 || solo_net_asked;
   netgame = solo_net;
-  deathmatch = 0;
+  deathmatch = evil_player_count > 1 ? evil_deathmatch : 0;
+}
+
+/* The games begun from now on with more than one player: co-op (0), deathmatch (1: weapons stay,
+ * the rest taken for good, random starts) or altdeath (2: everything taken, and back 30 s on). */
+EVIL_API void evil_mode(int dm)
+{
+  evil_deathmatch = dm < 0 ? 0 : dm > 2 ? 2 : dm;
+}
+
+/* The frags so far: out[i * 4 + j], the times player i has killed player j (i == j: herself). */
+EVIL_API void evil_frags(int *out)
+{
+  int i, j;
+  for (i = 0; i < EVIL_PLAYERS; i++)
+    for (j = 0; j < EVIL_PLAYERS; j++)
+      out[i * EVIL_PLAYERS + j] = players[i].frags[j];
 }
 
 /* (g_game.c, patched: the new game's settings put back as they were set, which takes all but
@@ -283,6 +302,7 @@ void evil_players_again(void)
   int i;
   for (i = 0; i < MAX_MAXPLAYERS; i++)
     playeringame[i] = i < evil_player_count;
+  deathmatch = evil_player_count > 1 ? evil_deathmatch : 0;
 }
 
 EVIL_API void evil_new_game(int skill, int episode, int map, int no_monsters)
@@ -1245,6 +1265,8 @@ EVIL_API int evil_mobjs(evil_mobj *out, int max)
       o->state = mo->state ? (int)(mo->state - states) : -1;
       o->after_her = mo->target && mo->target->player == &players[evil_me] ? 1 : 0;
       o->attack = (mo->flags & MF_COUNTKILL) || mo->type == MT_SKULL ? attack_tics(mo) : -1;
+      o->mine = mo == players[evil_me].mo
+        || ((mo->flags & MF_MISSILE) && mo->target && mo->target == players[evil_me].mo);
     }
     n++;
   }

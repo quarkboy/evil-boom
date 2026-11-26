@@ -262,3 +262,24 @@ The maintainer's brief: just for fun, make them slightly less dumb, no sweeps. M
   stays hers (what she pressed, doubts, sounds, where she got stuck). `tools/coop/run.sh`: 7/8
   exits, 5906 s -> 8/8, 1934 s; stuck 1042 -> 450; deaths 13 both; friendly-fire damage 1238 ->
   1476. MAP07 seed 7 exits (75 s): what switch 162 did is known now.
+
+## Deathmatch, a first version (2026-11-26)
+
+`watch WAD MAP --players N --deathmatch` (`--altdeath` for Doom's second kind), monsters in with
+`--fight N` or none. Over at `--frags N` (20) or `--minutes M` (10), either 0 for none: the level
+is ended there, which brings up Doom's tally. Same window as co-op, each card with the frags; the
+status bars show Doom's own FRAG box (`ST_EvilView` counts it for the player drawn).
+
+- **The boundary** (`EVIL_ABI` 3): `evil_mode` (0 co-op, 1 deathmatch, 2 altdeath, restored after
+  `G_ReloadDefaults` with the players), `evil_frags` (the game's frag table), and `mine` on each
+  thing: her own body, or a missile she fired.
+- **The others are opponents:** another player alive is a thing named `Opponent` (in the
+  bestiary: a player's size and health, as dangerous as a chaingunner), seen and fought as a
+  monster is, by what she sees and hears. Their missiles aren't hers (`engine::OTHER_PLAYERS` as
+  the owner): dodged. In co-op a teammate's missile stays taken as hers, as before: counted as
+  hostile there, the fight turned on where it came from (co-op test: friendly fire 1226 -> 1888).
+- **Nothing shared,** no claims, no teammates; the exit kept back (it would end the match). With
+  nothing to do for 3 s she walks the level round again (what she's walked forgotten).
+- **First matches** (headless): MAP01 4 players no monsters, 10-9-7-3 in 121 s; with UV monsters,
+  10-8-8-5 in 109 s; E1M1 2 players, 10-8 in 420 s; MAP07 3 players altdeath, 10-9-7 in 345 s.
+  The co-op test is unchanged by it (main-a796-1126 = dm-coop2-1126, run for run).

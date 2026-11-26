@@ -110,6 +110,10 @@ The game:
                           one's view on screen (Doom's co-op: rebirth at the start, friendly
                           fire). They don't know of each other yet. Each one's log in
                           out/watch/coop/ when a level ends
+  --deathmatch            with --players: Doom's deathmatch instead (random starts, weapons
+                          stay, respawns); --altdeath for its second kind (everything comes
+                          back). Monsters in with --fight N, none without
+  --frags N, --minutes M  a deathmatch over at N frags (20) or after M minutes (10); 0: none
   --speed X               play speed (1: real time; the sound plays only at 1)
   --mute                  no sound
   --log full|brief|off    how much of the log is kept in out/watch/: all of it (her fight's
