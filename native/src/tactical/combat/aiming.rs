@@ -177,7 +177,11 @@ impl Combat {
         let pos = obs.pos();
         let d = dist((t.x, t.y), pos);
         let rockets = Self::held(obs).contains(&5) && Self::ammo(obs, 5) > 0;
-        let blocked = rockets && !self.rocket_lane_clear(obs, t);
+        // (a rocket's way to it, or across its width where its middle's way is blocked)
+        let rocket_to = rockets
+            .then(|| self.across(t, pos, |c, at| c.rocket_lane_clear(obs, at)))
+            .flatten();
+        let blocked = rockets && rocket_to.is_none();
         if blocked {
             self.rocket_blocked = Some((t.id, obs.tic));
         }
@@ -200,21 +204,31 @@ impl Combat {
             ));
         }
         let w = weapon_in(if (1..=7).contains(&held) { held } else { 2 }, obs);
+        let info = mon(t.name);
+        // (the point across it a shot gets to: its middle, or its side out from behind something;
+        // a bullet's by its line, a rocket's and a plasma ball's by their lanes, as wide as they
+        // are. The turn's leeway what's left of it that side)
+        let plasma_to = (held == 6)
+            .then(|| {
+                self.across(t, pos, |c, at| {
+                    c.projectile_reaches(obs, at, pos, PLASMA_RADIUS)
+                })
+            })
+            .flatten();
+        let to = match held {
+            5 => rocket_to,
+            6 => plasma_to,
+            _ if w.hitscan => self.line_to(obs, t, None),
+            _ => None,
+        };
+        let off = to.map_or(0.0, |p| dist(p, (t.x, t.y)));
+        let (mut ax, mut ay) = to.unwrap_or((t.x, t.y));
         // Lead a moving target with a missile weapon.
-        let (mut ax, mut ay) = (t.x, t.y);
         if !w.hitscan && w.speed > 0.0 {
             let tof = d / w.speed;
             let (vx, vy) = self.moving(t);
             ax += vx * tof;
             ay += vy * tof;
-        }
-        let info = mon(t.name);
-        // (a bullet at the point across it that a shot gets to: its middle, or its side out
-        // from behind something; the turn's leeway what's left of it that side)
-        let line = w.hitscan.then(|| self.line_to(obs, t, None)).flatten();
-        let off = line.map_or(0.0, |p| dist(p, (t.x, t.y)));
-        if let Some(p) = line {
-            (ax, ay) = p;
         }
         let aim = heading(pos, (ax, ay));
         let leeway = (info.radius * 0.7 - off).max(info.radius * 0.15);
@@ -235,7 +249,7 @@ impl Combat {
         // case it's for, the shot's middle clear and its side not. Any rounds that did nothing,
         // a cyberdemon she'd missed with three rockets was left alone for half a minute: E2M8
         // 8 exits of 16 to 3)
-        let plasma_blocked = held == 6 && !self.projectile_reaches(obs, t, pos, PLASMA_RADIUS);
+        let plasma_blocked = held == 6 && plasma_to.is_none();
         if plasma_blocked {
             self.trigger.blocked_at = Some((t.id, obs.tic));
         }
@@ -387,34 +401,50 @@ impl Combat {
         t: &Thing,
         height: Option<f64>,
     ) -> Option<Point> {
-        /// across its width, these shares of its radius either side (inside its edge: the box
-        /// is as narrow as its radius seen square on)
-        const ACROSS: [f64; 4] = [0.5, -0.5, 0.8, -0.8];
-        /// narrower than this, the middle only
-        const WIDE: f64 = 20.0;
         let h = height.unwrap_or_else(|| mon(t.name).height);
         self.refresh_tic_cache(obs);
         let key = (t.id, h.to_bits());
         if let Some(&v) = self.hit_cache.get(&key) {
             return v;
         }
-        let at = (t.x, t.y);
-        let mut v = self.shot_clear(obs, at, t.z, h).then_some(at);
-        let r = mon(t.name).radius;
-        let pos = obs.pos();
-        let d = dist(pos, at).max(1.0);
-        if v.is_none() && r >= WIDE {
-            let side = (-(at.1 - pos.1) / d, (at.0 - pos.0) / d);
-            for f in ACROSS {
-                let p = (at.0 + side.0 * f * r, at.1 + side.1 * f * r);
-                if self.shot_clear(obs, p, t.z, h) {
-                    v = Some(p);
-                    break;
-                }
-            }
-        }
+        let v = self.across(t, obs.pos(), |c, at| {
+            c.shot_clear(obs, (at.x, at.y), at.z, h)
+        });
         self.hit_cache.insert(key, v);
         v
+    }
+
+    /// The point on t a shot from `from` gets to, by `gets_there` (asked of t moved to the point):
+    /// its middle, or with that blocked, a point across its width (Doom's shots hit whatever's box
+    /// they cross, missiles too: the edge of a spider mastermind standing half behind a pillar).
+    /// The nearest the middle first; None: nowhere.
+    fn across(
+        &mut self,
+        t: &Thing,
+        from: Point,
+        mut gets_there: impl FnMut(&mut Self, &Thing) -> bool,
+    ) -> Option<Point> {
+        /// across its width, these shares of its radius either side (inside its edge: the box
+        /// is as narrow as its radius seen square on)
+        const ACROSS: [f64; 4] = [0.5, -0.5, 0.8, -0.8];
+        /// narrower than this, the middle only
+        const WIDE: f64 = 20.0;
+        let at = (t.x, t.y);
+        if gets_there(self, t) {
+            return Some(at);
+        }
+        let r = mon(t.name).radius;
+        if r < WIDE {
+            return None;
+        }
+        let d = dist(from, at).max(1.0);
+        let side = (-(at.1 - from.1) / d, (at.0 - from.0) / d);
+        ACROSS.into_iter().find_map(|f| {
+            let p = (at.0 + side.0 * f * r, at.1 + side.1 * f * r);
+            let mut moved = t.clone();
+            (moved.x, moved.y) = p;
+            gets_there(self, &moved).then_some(p)
+        })
     }
 
     pub(super) fn shot_clear(&mut self, obs: &Observation, at: Point, z: f64, h: f64) -> bool {
