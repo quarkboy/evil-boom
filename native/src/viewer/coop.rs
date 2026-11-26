@@ -228,6 +228,30 @@ impl Coop {
         }
         self.engine.as_player(0);
         self.tell_used();
+        self.share_knowledge();
+    }
+
+    /// What each has come to know of the level, known to all (`Knowledge::share_from`).
+    fn share_knowledge(&mut self) {
+        let n = self.seats.len();
+        for i in 0..n {
+            for j in 0..n {
+                if i == j {
+                    continue;
+                }
+                let (to, from) = if i < j {
+                    let (a, b) = self.seats.split_at_mut(j);
+                    (&mut a[i], &b[0])
+                } else {
+                    let (a, b) = self.seats.split_at_mut(i);
+                    (&mut b[0], &a[j])
+                };
+                to.agent
+                    .x_mut()
+                    .knowledge
+                    .share_from(&from.agent.x().knowledge);
+            }
+        }
     }
 
     /// What each has set off of the level's once-only lines, told the others (as players say

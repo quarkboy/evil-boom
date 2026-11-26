@@ -591,6 +591,51 @@ impl Knowledge {
     /// As `interactables`, and with them the faces of what she has seen move that are a wall
     /// only from the side they're pressed from (`on_a_mover`'s `from_front`): the last
     /// resort's (`Explorer::lift_faces`).
+    /// A co-op game: what another player has come to know of the level, known to her too (as
+    /// they'd tell each other): what's been seen (lines, sectors, where's been walked, heights,
+    /// the freshest sighting of each sector winning), and what's been learned (what lines do,
+    /// where teleports go, walls with nothing behind, locked doors, floors that hurt or end the
+    /// level, traps). What's of her own doing stays hers: what she pressed, doubts, sounds heard,
+    /// where she got stuck. The polys seen are put in as they are; `subsectors_seen` is hers (it
+    /// only spares work).
+    pub fn share_from(&mut self, o: &Knowledge) {
+        self.mapped.extend(&o.mapped);
+        self.seen_front.extend(&o.seen_front);
+        self.sectors.extend(&o.sectors);
+        self.seen_polys.extend(&o.seen_polys);
+        self.visited.extend(&o.visited);
+        for (&s, &t) in &o.seen_tic {
+            if self.seen_tic.get(&s).is_none_or(|&mine| mine < t) {
+                self.seen_tic.insert(s, t);
+                if let Some(&h) = o.seen_heights.get(&s) {
+                    self.seen_heights.insert(s, h);
+                }
+            }
+        }
+        for (&s, &h) in &o.first_heights {
+            self.first_heights.entry(s).or_insert(h);
+        }
+        for (&t, sectors) in &o.learned {
+            self.learned.entry(t).or_default().extend(sectors);
+        }
+        for (&li, &p) in &o.teleports {
+            self.teleports.entry(li).or_insert(p);
+        }
+        for (&li, &k) in &o.tried_walls {
+            self.tried_walls.entry(li).or_insert(k);
+        }
+        self.locked.extend(&o.locked);
+        self.exit_floors.extend(&o.exit_floors);
+        for (&s, &hurts) in &o.felt {
+            self.felt.entry(s).or_insert(hurts);
+        }
+        for t in &o.traps {
+            if !self.traps.contains(t) {
+                self.traps.push(t.clone());
+            }
+        }
+    }
+
     /// A line that works once only (W1, S1, G1, D1).
     pub fn once_only(&self, li: usize) -> bool {
         use crate::specials::Trigger;

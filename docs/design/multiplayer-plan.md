@@ -254,3 +254,11 @@ The maintainer's brief: just for fun, make them slightly less dumb, no sweeps. M
   s, 8 deaths, 744, 786). The miss is MAP07 seed 7: sector 1, lowered first by switch 162 and then
   raised by the arachnotrons' death, ends at 40, and the mover model waits for 24. Order of
   events; the sharing only changed which run met it. MAP07 on five other seeds exits in 81-97 s.
+
+- **Shared knowledge** (2026-11-26, the maintainer's call, settling section 6's open question):
+  what one comes to know of the level all know, every tic (`Knowledge::share_from`): lines,
+  sectors, where's been walked, heights (the freshest sighting wins), what lines do, teleports,
+  walls tried, locked doors, floors that hurt or end the level, traps. What's of her own doing
+  stays hers (what she pressed, doubts, sounds, where she got stuck). `tools/coop/run.sh`: 7/8
+  exits, 5906 s -> 8/8, 1934 s; stuck 1042 -> 450; deaths 13 both; friendly-fire damage 1238 ->
+  1476. MAP07 seed 7 exits (75 s): what switch 162 did is known now.
