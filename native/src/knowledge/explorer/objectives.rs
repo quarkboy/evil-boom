@@ -1658,6 +1658,17 @@ impl Explorer {
 
     /// The objectives open, the explorer's way round: the exit first if she can get there, then
     /// the locks her keys open, then by distance as the crow flies (weighted by kind).
+    /// (co-op) Another player's at this already (the same kind, at the same spot or wall): left
+    /// to her while there's anything else. Not the exit, nor a key, which each must have for
+    /// herself.
+    pub fn claimed_by_mate(&self, o: &Objective) -> bool {
+        !matches!(o.kind, Kind::Exit | Kind::Key)
+            && self.claimed.iter().any(|(k, at, wall)| {
+                *k == o.kind
+                    && (dist(*at, o.goal) < CLAIM_NEAR || wall.is_some() && *wall == o.wall)
+            })
+    }
+
     pub fn ranked(
         &mut self,
         obs: &Observation,
@@ -1668,14 +1679,11 @@ impl Explorer {
         // (a co-op game: what a player before her is going for is left to her while there's
         // anything else; not the exit, nor a key, which each must have for herself)
         if !self.claimed.is_empty() {
-            let claimed = |o: &Objective| {
-                !matches!(o.kind, Kind::Exit | Kind::Key)
-                    && self
-                        .claimed
-                        .iter()
-                        .any(|(k, at)| *k == o.kind && dist(*at, o.goal) < CLAIM_NEAR)
-            };
-            let free: Vec<Objective> = options.iter().filter(|o| !claimed(o)).cloned().collect();
+            let free: Vec<Objective> = options
+                .iter()
+                .filter(|o| !self.claimed_by_mate(o))
+                .cloned()
+                .collect();
             if !free.is_empty() {
                 options = free;
             }

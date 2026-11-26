@@ -775,6 +775,19 @@ impl Explorer {
         }
     }
 
+    /// (co-op) The objective under way left to another player who's at it too and nearer: not a
+    /// failure (no cooldown, no count against it), only not hers now.
+    pub fn leave_to_mate(&mut self, obs: &Observation, mate: usize) {
+        if let Some(obj) = self.current.take() {
+            self.follower = None;
+            self.end_kind = EndKind::Plain;
+            let why = Why::Mate(mate);
+            self.log
+                .push(format!("tic {}: dropped '{}' ({why})", obs.tic, obj.label));
+            self.end_why = Some((false, why));
+        }
+    }
+
     /// Dropped for want of a route this think: noted (`refused_now`: what the dead-end pass may
     /// take up again), then dropped as any other.
     pub(super) fn drop_no_route(&mut self, obj: &Objective, obs: &Observation) {

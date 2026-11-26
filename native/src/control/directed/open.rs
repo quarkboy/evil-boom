@@ -16,7 +16,7 @@ const OPEN_KEPT_LEAST: i64 = 12;
 pub(super) struct OpenKept {
     key: (bool, bool),
     tic: i64,
-    knows: ([usize; 4], usize),
+    knows: ([usize; 4], usize, u64),
     open: Vec<Objective>,
 }
 
@@ -31,13 +31,27 @@ impl Director {
     /// begins (`fresh_ranking`).
     fn ranked(&self, agent: &mut Agent, obs: &Observation, risky: bool) -> Vec<Objective> {
         let key = (risky, agent.x().exit_held_back);
+        // (co-op: what the others are at, left to them, changes it too: kept no longer then)
+        let claims = {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            for (k, at, wall) in &agent.x().claimed {
+                format!("{k:?}").hash(&mut h);
+                (at.0.round() as i64, at.1.round() as i64, *wall).hash(&mut h);
+            }
+            h.finish()
+        };
         let knows = (
             agent.x().knowledge.amount(),
             obs.keys.unwrap_or_default().iter().count(),
+            claims,
         );
         if let Some(k) = self.open_kept.borrow().iter().find(|k| k.key == key) {
             let age = obs.tic - k.tic;
-            if (0..OPEN_KEPT_MOST).contains(&age) && (k.knows == knows || age < OPEN_KEPT_LEAST) {
+            if (0..OPEN_KEPT_MOST).contains(&age)
+                && k.knows.2 == knows.2
+                && (k.knows == knows || age < OPEN_KEPT_LEAST)
+            {
                 return k.open.clone();
             }
         }
@@ -280,13 +294,16 @@ impl Director {
         // (the walls searched that thoroughly, not the strong ones by her the explorer offers;
         // after the rest, as a player does: what's in plain sight first)
         let walls = self.walls_to_search(agent, obs, secrets);
-        let options: Vec<Objective> = open
+        let mut options: Vec<Objective> = open
             .into_iter()
             .filter(explores)
             .chain(walls)
             .filter(|o| !self.taken.contains(&taken_key(o)))
             .filter(|o| fits(self, agent, o))
             .collect();
+        // (co-op: what another player's at, after the rest; the walls searched too, which aren't
+        // the explorer's ranking and weren't left to her)
+        options.sort_by_key(|o| agent.x().claimed_by_mate(o));
         for o in options {
             let id = taken_key(&o);
             if agent.x_mut().take(obs, o) {

@@ -54,6 +54,9 @@ pub const MAX_PLAYERS: usize = 4;
 /// A dead player presses on to be born again this long after dying (tics).
 const REBIRTH_WAIT: i64 = 35;
 
+/// A job left to another player and taken up again within this long (tics) is hers to do too.
+const LEFT_AGAIN: i64 = 10 * 35;
+
 /// (a deathmatch) nothing to do this long, she walks the level round again (tics)
 const PATROL_AFTER: i64 = 3 * 35;
 
@@ -82,6 +85,9 @@ struct Seat {
     idle_since: Option<i64>,
     /// her view as last drawn: (width, height, palette indices, the palette)
     frame: Option<(usize, usize, Vec<u8>, usize)>,
+    /// the job she last left to another, and when: back at it for want of anything else, it's
+    /// hers alongside them (not left again and again, tic by tic)
+    left_to_mate: Option<(Claim, i64)>,
     /// (directed) the hits on her since her director was last told, and the keys she had
     hits: Vec<crate::dsda::Hit>,
     keys_had: crate::specials::Keys,
@@ -238,19 +244,43 @@ impl Coop {
     /// A tic: each player sees the level and decides (a dead one presses on to be born again),
     /// then the tic's played with all their controls.
     fn tic(&mut self) {
-        // (what each is going for, told the players after her: left to her)
-        let going: Vec<Option<(crate::knowledge::explorer::Kind, crate::geom::Point)>> = self
-            .seats
-            .iter()
-            .map(|s| {
-                (s.dead_since.is_none())
-                    .then(|| s.agent.x().current.as_ref().map(|o| (o.kind, o.goal)))
-                    .flatten()
-            })
-            .collect();
-        for (i, s) in self.seats.iter_mut().enumerate() {
-            if self.deathmatch == 0 {
-                s.agent.x_mut().claimed = going[..i].iter().flatten().copied().collect();
+        // (what each is going for, as she'd say: left to her by the others. Kept up to date
+        // as each decides this tic, so the one after her knows what she's just taken up)
+        let mut going: Vec<Option<Claim>> = self.seats.iter().map(claim_of).collect();
+        // (two at the same job already, taken up the same tic or before they knew: the one
+        // further from it leaves it to the other)
+        if self.deathmatch == 0 {
+            for i in 0..self.seats.len() {
+                let Some(mine) = going[i] else { continue };
+                if !shareable(mine.0) {
+                    continue;
+                }
+                let tic = self.engine.tic;
+                if self.seats[i]
+                    .left_to_mate
+                    .is_some_and(|(c, t)| same_job(c, mine) && tic - t < LEFT_AGAIN)
+                {
+                    continue;
+                }
+                let Some(pos_i) = self.seats[i].obs.as_ref().map(Observation::pos) else {
+                    continue;
+                };
+                let nearer = (0..self.seats.len()).find(|&j| {
+                    j != i
+                        && going[j].is_some_and(|theirs| same_job(mine, theirs))
+                        && self.seats[j].obs.as_ref().is_some_and(|o| {
+                            let (dj, di) = (
+                                crate::geom::dist(o.pos(), mine.1),
+                                crate::geom::dist(pos_i, mine.1),
+                            );
+                            dj < di || (dj == di && j < i)
+                        })
+                });
+                if let (Some(j), Some(obs)) = (nearer, self.seats[i].obs.clone()) {
+                    self.seats[i].agent.x_mut().leave_to_mate(&obs, j);
+                    self.seats[i].left_to_mate = Some((mine, tic));
+                    going[i] = None;
+                }
             }
         }
         // (directed: each where she was last tic, for the others' directors)
@@ -334,6 +364,16 @@ impl Coop {
                 }
             }
             let obs = self.engine.observe();
+            // (what the others are at, as of their choices this tic: hers and her director's
+            // to leave to them)
+            if self.deathmatch == 0 {
+                s.agent.x_mut().claimed = going
+                    .iter()
+                    .enumerate()
+                    .filter(|&(j, _)| j != i)
+                    .filter_map(|(_, g)| *g)
+                    .collect();
+            }
             s.secrets_seen =
                 crate::run::secret_found(&self.engine, &mut s.agent, &obs, s.secrets_seen);
             if let Some(n) = self.neuro.get_mut(i) {
@@ -374,6 +414,7 @@ impl Coop {
                 s.agent.x_mut().log.extend(said);
             }
             let c = s.agent.act(&obs, s.controls.as_ref());
+            going[i] = claim_of(s);
             s.obs = Some(obs);
             cs.push(c);
         }
@@ -1008,6 +1049,7 @@ fn seats(nav: &Rc<Navigator>, map_name: &str, o: &WatchOptions) -> Result<Vec<Se
                 frame: None,
                 hits: Vec::new(),
                 keys_had: crate::specials::Keys::default(),
+                left_to_mate: None,
             }
         })
         .collect())
@@ -1056,4 +1098,45 @@ fn neuro_urls(spec: &str, players: usize) -> Result<Vec<String>, String> {
     Ok((0..players as u32)
         .map(|k| format!("{head}:{}", port + k))
         .collect())
+}
+
+/// What a player's going for, as the others leave it to her: (kind, where, the wall).
+type Claim = (
+    crate::knowledge::explorer::Kind,
+    crate::geom::Point,
+    Option<usize>,
+);
+
+fn claim_of(s: &Seat) -> Option<Claim> {
+    if s.dead_since.is_some() {
+        return None;
+    }
+    s.agent
+        .x()
+        .current
+        .as_ref()
+        .map(|o| (o.kind, o.goal, o.wall))
+}
+
+/// A job one does for all: looking round, trying a wall, a switch or a door (not a pickup each
+/// wants for herself, a key, the exit, a fight's).
+fn shareable(k: crate::knowledge::explorer::Kind) -> bool {
+    use crate::knowledge::explorer::Kind as K;
+    matches!(
+        k,
+        K::Frontier
+            | K::Room
+            | K::Visit
+            | K::Noise
+            | K::Recheck
+            | K::Wall
+            | K::Secret
+            | K::Switch
+            | K::Door
+    )
+}
+
+/// The same job: the same kind, at the same spot or wall.
+fn same_job(a: Claim, b: Claim) -> bool {
+    a.0 == b.0 && (crate::geom::dist(a.1, b.1) < 64.0 || a.2.is_some() && a.2 == b.2)
 }

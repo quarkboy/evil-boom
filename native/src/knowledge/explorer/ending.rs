@@ -33,6 +33,8 @@ pub enum Why {
     Fight(String),
     /// not taken: whoever directs her said not to (a jump)
     Declined,
+    /// (co-op) another player's at it, nearer (0-based)
+    Mate(usize),
 }
 
 impl fmt::Display for Why {
@@ -57,6 +59,7 @@ impl fmt::Display for Why {
             Why::Route(line, _) => return write!(f, "failed: {line}"),
             Why::Fight(why) => why,
             Why::Declined => "declined",
+            Why::Mate(m) => return write!(f, "player {} is on it", m + 1),
         };
         f.write_str(s)
     }
@@ -84,6 +87,7 @@ impl Why {
             Why::Route(_, t) => t.plain(),
             Why::Fight(_) => "a fight in the way",
             Why::Declined => "you said not to",
+            Why::Mate(m) => return format!("player {} is on it", m + 1),
         }
         .to_string()
     }

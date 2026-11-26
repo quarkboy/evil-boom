@@ -662,9 +662,9 @@ pub struct Explorer {
     pub nav: Rc<Navigator>,
     pub knowledge: Knowledge,
     pub current: Option<Objective>,
-    /// a co-op game: what the players before her are going for (kind, where), as they'd say;
-    /// left to them while there's anything else (`ranked`)
-    pub claimed: Vec<(Kind, Point)>,
+    /// a co-op game: what the other players are going for (kind, where, the wall if it's one),
+    /// as they'd say; left to them while there's anything else (`ranked`)
+    pub claimed: Vec<(Kind, Point, Option<usize>)>,
     /// (for measuring the stocking up before an exit) when the exit first came first of what
     /// she'd do, and what she was sent for before it, going on (`Hooks::stocking`)
     pub exit_first: Option<i64>,
