@@ -456,13 +456,24 @@ impl<'a> Planner<'a> {
                     .then(a.0.cmp(&b.0))
             });
             for (gp, gpt) in gps {
-                if let Some(&gt) = q.goal_triggers.get(&point_key(gpt))
-                    && !self.activators_now(gt, &node.states, None).contains(&gp)
-                {
-                    continue;
+                let mut to = gpt;
+                if let Some(&gt) = q.goal_triggers.get(&point_key(gpt)) {
+                    let now = self.activators_now(gt, &node.states, None);
+                    if !now.contains(&gp) {
+                        // (the spot chosen from the start can be on a side it can't be set off
+                        // from now, the far side of a walk-over line into a pit: then from where
+                        // it can, if that's in reach. TNT MAP28: the exit lines round the pit,
+                        // each spot down in it or across it, and "no route")
+                        let usable: HashSet<usize> =
+                            now.intersection(&node.reach).copied().collect();
+                        if usable.is_empty() {
+                            continue;
+                        }
+                        to = self.activation_point(gt, node.pos, &usable);
+                    }
                 }
                 let Some((path, used)) =
-                    self.timed_path(node.pos, gpt, &node.states, node.keys, &node.timers)
+                    self.timed_path(node.pos, to, &node.states, node.keys, &node.timers)
                 else {
                     continue;
                 };

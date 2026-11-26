@@ -4656,3 +4656,18 @@ checked it in the game).
 - **Measured, MAP21 with all four:** skill 1, 0 -> 3 of 4 out (the fourth to 337 of 342
   sectors by the hour; all four had stood at 134); skill 2, one run to 341 of 342, the other
   three dead early as before.
+
+## TNT MAP28: an exit's spot chosen again where it can be set off from (2026-11-25)
+
+The plan said "no route to the exit", though the relaxed pass got there. The exit is a ring
+of walk-over lines round a pit of nukage (sector 90, -1000) in the last room. Each exit line's
+spot is chosen once, from the start, among all its activators: down in the pit, or across the
+room in parts of it no way goes to. The search skipped a goal not an activator at the node's
+heights, so it skipped them all (from the pit a line isn't crossed again); the route to the
+door before them (three keys, three keyed switches) was found.
+
+- **The rule:** a goal whose spot isn't an activator now is set off from the activators it has
+  now in the node's reach, the spot chosen there (as a trigger step's is); none, skipped as
+  before. The route keeps its goal, for the exit it stands for.
+- **Measured:** MAP28's omniscient follow exits in 105 s (14 steps). Its eight runs the same
+  (5 out: exploring found its way without the plan). Three-lives every run the same.
