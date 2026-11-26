@@ -30,6 +30,9 @@ const CORNER_CLEARANCE: f64 = PLAYER_RADIUS * std::f64::consts::SQRT_2 + 4.0;
 const THING_CLEARANCE: f64 = 6.0;
 /// How much further than the box a path keeps from an exit line it doesn't mean to cross.
 const TRIP_MARGIN: f64 = 24.0;
+/// A walk-over teleport's line is in the box's way only where her centre comes this close to
+/// it: the game sets it off when her centre crosses it, not when the box is over it.
+const TELE_CENTRE: f64 = 6.0;
 /// The box checks' tolerance.
 const BOX_SLACK: f64 = 0.25;
 /// How many waypoints ahead straightening looks for a direct line.
@@ -537,6 +540,22 @@ impl Fitter<'_> {
                 continue;
             }
             if self.exempt.contains(&li) || ignore.contains(&k) {
+                continue;
+            }
+            // (a walk-over teleport goes off as her centre crosses its line (P_TryMove: the side
+            // her centre's on before the move and after), not as the box goes over it: a way past
+            // a pad's edge with the centre a few units off it is a way. MAP03's pocket by the
+            // blue door has its mouth 24 over a pad's edge, and no other way in: the box was held
+            // off it, and the way taken was a squeeze into the door's jamb, stuck there)
+            let walked_tele = crate::specials::classify_line(nav.map.linedefs[li].special)
+                .is_some_and(|i| {
+                    i.category == crate::specials::Category::Teleport
+                        && matches!(
+                            i.trigger,
+                            crate::specials::Trigger::W1 | crate::specials::Trigger::WR
+                        )
+                });
+            if walked_tele && segment_distance(p, q, e.0, e.1) >= TELE_CENTRE {
                 continue;
             }
             if self.line_blocks(li, p, &mut standing) {
