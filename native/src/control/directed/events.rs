@@ -144,6 +144,8 @@ pub enum Event {
     Team,
     /// born again at her start, the level going on
     Reborn,
+    /// (deathmatch) a rival fragged by her
+    Frag,
 }
 
 impl Event {
@@ -191,7 +193,8 @@ impl Event {
             | E::HeldFire
             | E::UltraOver
             | E::LevelStart
-            | E::Team => Weight::Moment,
+            | E::Team
+            | E::Frag => Weight::Moment,
             E::Outcome
             | E::Replaced
             | E::Asked

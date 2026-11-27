@@ -51,6 +51,8 @@ pub struct Rivals {
     pub clues: Vec<Clue>,
     /// geared up and going after them (else gearing up)
     pub hunting: bool,
+    /// told to hunt them (directed): gone after whatever she's got
+    pub ordered: bool,
     /// the heard sounds of movers taken so far (`Knowledge::heard`)
     pub heard_seen: usize,
     /// the tic a hunt last took her off something else (not again at once)

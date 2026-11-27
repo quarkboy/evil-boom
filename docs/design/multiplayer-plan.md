@@ -347,3 +347,10 @@ keeps it from level to level. What was new:
   steady, 40 matches each, none clearly stronger (hunting +0.70, +1.35, -0.65, -1.43; fighting
   -1.35, -0.42, -0.72, -0.33, s.e. about 0.9): they're flavours, for a deathmatch policy and
   Evil's stances later. `--hunt-style`, `--fight-style`.
+- **Neuro in deathmatch (2026-11-27):** a Neuro each, instinct off and locked (the maintainer:
+  every move hers). `doom_hunt` (hunt | gear) carries the bots' hunting and gearing up as her
+  order, clue after clue, looking about with no word (its progress quiet: told aloud, Gary
+  ordered the hunt again at each, 34 times in 4 minutes); `doom_policy` fight/hunt styles in
+  place of the stance; exit, goal and game not offered; status the score, the clock, the last
+  word of a rival; frags and the match's end told as Doom's messages tell every player. NEURO.md
+  has the whole of it.

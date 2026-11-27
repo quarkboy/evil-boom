@@ -191,7 +191,38 @@ one, her own link, director, actions and context. On top of that she's told:
 Headless, a co-op game directed by Neuro runs at real speed, and each player's log is written as
 it goes (every 5 s). `tools/neuro/garys.sh N` starts a Gary for each player. Player K's profile,
 `evil-boom-pK` on port 7999+K, is made on first use as a copy of `evil-boom`'s, with only the
-port and the name shown changed (*Evil Neuro K*). Not in a deathmatch yet.
+port and the name shown changed (*Evil Neuro K*).
+
+### Deathmatch: a Neuro each
+
+```sh
+tools/neuro/garys.sh 2
+evil-boom watch doom2 MAP01 --players 2 --deathmatch --mortal --neuro ws://127.0.0.1:8000 --tuning config/gary.json
+```
+
+As co-op, a Neuro each, with the deathmatch's own rules, actions and settings:
+
+- **No instinct, ever:** it's off and locked. An action done, she stands and waits; every move is
+  hers but the bot's reflexes (moving, fighting, dodging, picking up what she walks over).
+- **The rules:** "Deathmatch: you're player 1 (green) of 2; the others are your rivals. Most frags
+  wins (to 20 frags or 10 minutes). Killed, you're back at once at a random start with a pistol.
+  Weapons stay where they lie... No exit. You hear rivals...; you see them only in sight."
+- **`doom_hunt`:** `hunt` goes after the rivals by what she's seen and heard (`tactical/rivals.rs`),
+  the freshest clue first, clue after clue, looking about when there's no word, till her next
+  action; `gear` takes guns, ammo, armor and health till she's geared up ("Geared up."), looking
+  about for some when she knows of none.
+- **`doom_policy`:** `fight` (berserk, aggressive, steady, careful, evasive) and `hunt` (relentless,
+  eager, steady, careful, passive), the styles of `tactical/styles.rs`, in place of the stance;
+  `risk` and `powerups` as ever; no `save`, `explore` or `instinct`. `doom_fight`'s
+  `override_stance` takes the fighting styles for a while; `target: rival` shoots a rival first.
+- **Not offered:** `doom_exit`, `doom_goal`, `doom_game`.
+- **Her status:** her kit without the keys (every player has them all), then the score, best
+  first ("frags: player 2 (indigo) 7, you 5 (to 20); 4:12 left"), whether she's geared up, and the
+  last word of a rival ("a shotgun NE 600, 3s ago"). No positions of the others: Doom's deathmatch
+  shows none.
+- **Moments:** each frag, as Doom tells every player, with the score ("You fragged player 2
+  (indigo). You lead, 5 to 3."); "In sight: 1 rival"; back at a random start; "Match over: you
+  won, with 20 frags." 
 
 Gary's diagnostics ask for `additionalProperties: false` on every schema. Ours follow the SDK's
 specification instead, which lists `additionalProperties` among the keywords Neuro may not

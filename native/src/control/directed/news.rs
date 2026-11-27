@@ -223,8 +223,14 @@ impl Director {
             let dangerous = new
                 .iter()
                 .any(|m| crate::bestiary::monster(m.1).is_some_and(|i| i.boss || i.threat >= 6.0));
+            // (a deathmatch's rivals: in sight, not "monsters")
+            let label = if new.iter().all(|m| m.1 == "Opponent") {
+                "In sight"
+            } else {
+                "Monsters"
+            };
             let text = format!(
-                "Monsters: {} ({} {:.0}).",
+                "{label}: {} ({} {:.0}).",
                 what.join(", "),
                 compass(heading(pos, nearest)),
                 dist(pos, nearest)

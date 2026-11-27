@@ -13,11 +13,29 @@ use crate::play::Agent;
 /// Each player's colour's name, as Doom's co-op has them.
 pub const COLOUR_NAMES: [&str; 4] = ["green", "indigo", "brown", "red"];
 
+/// A deathmatch she's in (the watch's to set, each tic): the score and the clock, as Doom's own
+/// messages and its frag counts tell every player.
+#[derive(Clone, Debug, Default)]
+pub struct Match {
+    /// 1 Doom's classic (weapons stay), 2 deathmatch 2.0 (what's taken comes back)
+    pub mode: i32,
+    /// over at this many frags (0: none), after this long (s; 0: none)
+    pub frag_limit: i32,
+    pub seconds: f64,
+    /// the game's time so far (s), and each player's frags
+    pub played: f64,
+    pub frags: Vec<i32>,
+    /// gearing up or hunting, and the best word of the others she has (`Player::hunt_state`)
+    pub hunt: Option<String>,
+}
+
 /// The game she's one of the players of.
 #[derive(Clone, Debug, Default)]
 pub struct Team {
     /// her own number (0-based), and how many there are
     pub me: usize,
+    /// a deathmatch, not co-op: the others are her rivals
+    pub rivals: Option<Match>,
     /// the player who's a person, not a bot, if one is
     pub human: Option<usize>,
     pub players: usize,
@@ -47,6 +65,27 @@ pub fn who(player: usize) -> String {
 impl Team {
     /// Told her with the rules: who she is in this game.
     pub fn brief(&self) -> String {
+        if let Some(m) = &self.rivals {
+            let limit = match (m.frag_limit, m.seconds) {
+                (0, s) if s <= 0.0 => "no limit".to_string(),
+                (0, s) => format!("after {:.0} minutes", s / 60.0),
+                (f, s) if s <= 0.0 => format!("to {f} frags"),
+                (f, s) => format!("to {f} frags or {:.0} minutes", s / 60.0),
+            };
+            let items = if m.mode == 2 {
+                "Everything taken comes back 30 s later."
+            } else {
+                "Weapons stay where they lie; the rest doesn't come back."
+            };
+            return format!(
+                "Deathmatch: you're {} of {}; the others are your rivals. Most frags wins ({limit}). \
+                 Killed, you're back at once at a random start with a pistol. {items} No exit. \
+                 You hear rivals: their guns, grunts, doors; you see them only in sight. \
+                 Doing nothing by instinct: doom_hunt to hunt them or gear up.",
+                who(self.me),
+                self.players
+            );
+        }
         let person = self.human.map_or(String::new(), |h| {
             format!(
                 " Player{} is a person, playing with you.",
@@ -66,6 +105,12 @@ impl Director {
     /// The others as they are this tic (the watch's to set): the line in her status made again
     /// once a second.
     pub fn set_team(&mut self, agent: &Agent, obs: &Observation, team: Team) {
+        if let Some(m) = &team.rivals {
+            // (each tic: the score as she's just been told it)
+            self.team_line = standings(&team, m);
+            self.team = Some(team);
+            return;
+        }
         if self.team.is_none() || obs.tic % 35 == 0 {
             let pos = obs.pos();
             let mut parts = Vec::new();
@@ -93,6 +138,73 @@ impl Director {
             };
         }
         self.team = Some(team);
+    }
+
+    /// A deathmatch: a frag, as Doom tells every player (`by` fragged `of`; the same, a
+    /// suicide), with the score after.
+    pub fn frag_news(&mut self, tic: i64, by: usize, of: usize, frags: &[i32]) {
+        let Some(team) = &self.team else { return };
+        let me = team.me;
+        let name = |p: usize| if p == me { "you".to_string() } else { who(p) };
+        let text = if by == of {
+            format!(
+                "{} died by {} own hand.",
+                cap(&name(by)),
+                if by == me { "your" } else { "their" }
+            )
+        } else if by == me {
+            format!("You fragged {}.", who(of))
+        } else if of == me {
+            format!("{} fragged you.", cap(&who(by)))
+        } else {
+            format!("{} fragged {}.", cap(&who(by)), who(of))
+        };
+        let mine = frags.get(me).copied().unwrap_or(0);
+        let best = (0..frags.len())
+            .filter(|&p| p != me)
+            .map(|p| frags[p])
+            .max()
+            .unwrap_or(0);
+        let score = match mine.cmp(&best) {
+            std::cmp::Ordering::Greater => format!(" You lead, {mine} to {best}."),
+            std::cmp::Ordering::Equal => format!(" Level at {mine}."),
+            std::cmp::Ordering::Less => format!(" You trail, {mine} to {best}."),
+        };
+        self.reports.push(Report {
+            tic,
+            ok: true,
+            text: format!("{text}{score}"),
+            event: if by == me && by != of {
+                Event::Frag
+            } else {
+                Event::Team
+            },
+        });
+    }
+
+    /// A deathmatch over (the frags or the time): who won, as the game's end says.
+    pub fn match_over(&mut self, tic: i64, frags: &[i32]) {
+        let Some(team) = &self.team else { return };
+        let me = team.me;
+        let top = frags.iter().copied().max().unwrap_or(0);
+        let winners: Vec<usize> = (0..frags.len()).filter(|&p| frags[p] == top).collect();
+        let mine = frags.get(me).copied().unwrap_or(0);
+        let text = if winners == [me] {
+            format!("Match over: you won, with {mine} frags.")
+        } else if winners.contains(&me) {
+            format!("Match over: a draw at {mine} frags.")
+        } else {
+            format!(
+                "Match over: {} won with {top}; you had {mine}.",
+                who(winners[0])
+            )
+        };
+        self.reports.push(Report {
+            tic,
+            ok: true,
+            text,
+            event: Event::Team,
+        });
     }
 
     /// Something another player's done, told her as they'd say it ("player 2 (indigo) got the
@@ -197,7 +309,11 @@ impl Director {
         self.reports.push(Report {
             tic: obs.tic,
             ok: true,
-            text: format!("You're back at your start with a pistol. The level's as it was.{known}"),
+            text: if self.team.as_ref().is_some_and(|t| t.rivals.is_some()) {
+                format!("You're back, at a random start, with a pistol.{known}")
+            } else {
+                format!("You're back at your start with a pistol. The level's as it was.{known}")
+            },
             event: Event::Reborn,
         });
     }
@@ -224,4 +340,43 @@ mod tests {
             "{b}"
         );
     }
+}
+
+/// A deathmatch's line in her status: the frags, best first, her own "you", the clock, and her
+/// hunting ("frags: player 1 (green) 7, you 5, player 3 (brown) 2; 4:12 left; hunting: a
+/// shotgun 600 off, 3s ago").
+fn standings(team: &Team, m: &Match) -> String {
+    let mut order: Vec<usize> = (0..m.frags.len()).collect();
+    order.sort_by_key(|&p| std::cmp::Reverse(m.frags[p]));
+    let parts: Vec<String> = order
+        .iter()
+        .map(|&p| {
+            let name = if p == team.me {
+                "you".to_string()
+            } else {
+                who(p)
+            };
+            format!("{name} {}", m.frags[p])
+        })
+        .collect();
+    let mut line = format!("frags: {}", parts.join(", "));
+    if m.frag_limit > 0 {
+        line.push_str(&format!(" (to {})", m.frag_limit));
+    }
+    if m.seconds > 0.0 {
+        let left = (m.seconds - m.played).max(0.0) as i64;
+        line.push_str(&format!("; {}:{:02} left", left / 60, left % 60));
+    }
+    if let Some(h) = &m.hunt {
+        line.push_str(&format!("; {h}"));
+    }
+    line
+}
+
+/// "Player 2 (indigo)": a name to begin a sentence with.
+fn cap(s: &str) -> String {
+    let mut c = s.chars();
+    c.next().map_or(String::new(), |f| {
+        f.to_uppercase().collect::<String>() + c.as_str()
+    })
 }

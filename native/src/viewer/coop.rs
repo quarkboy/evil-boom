@@ -142,10 +142,6 @@ pub fn watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(), String> 
             o.directed.is_some() || o.gpt.is_some(),
             "a directed script or the GPT stand-in (--neuro is)",
         ),
-        (
-            o.neuro.is_some() && o.deathmatch > 0,
-            "Neuro in a deathmatch",
-        ),
         (o.present, "--present"),
         (o.stream.is_some(), "--stream"),
         (
@@ -227,10 +223,16 @@ impl Coop {
             for (k, url) in neuro_urls(spec, directed)?.iter().enumerate() {
                 let i = k + usize::from(o.human);
                 let mut n = Session::new(url, &clocks);
-                n.set_locked(&o.locked);
-                if o.instinct_off {
+                // (a deathmatch: no instinct, ever: every move hers, the bot's reflexes aside)
+                let mut locked = o.locked.clone();
+                if o.deathmatch > 0 && !locked.iter().any(|l| l == "instinct") {
+                    locked.push("instinct".into());
+                }
+                n.set_locked(&locked);
+                if o.instinct_off || o.deathmatch > 0 {
                     n.set_instinct(false);
                 }
+                n.set_deathmatch(o.deathmatch > 0);
                 n.set_choices(&no_game());
                 println!("player {}: directed by Neuro at {url}", i + 1);
                 neuro.push(n);
@@ -339,6 +341,18 @@ impl Coop {
         let mut news: Vec<(usize, String)> = Vec::new();
         let mut cs = Vec::with_capacity(self.seats.len());
         let from = self.neuro_from;
+        // (a deathmatch: the score and the clock, as each is told them)
+        let rivals = (self.deathmatch > 0 && !self.neuro.is_empty()).then(|| {
+            crate::control::directed::Match {
+                mode: self.deathmatch,
+                frag_limit: self.frag_limit,
+                seconds: self.time_limit as f64 / TICRATE,
+                played: (self.engine.tic - self.began) as f64 / TICRATE,
+                frags: self.frags(),
+                hunt: None,
+            }
+        });
+        let deathmatch = self.deathmatch > 0;
         for (i, s) in self.seats.iter_mut().enumerate() {
             self.engine.as_player(i);
             let tic = self.engine.tic;
@@ -356,12 +370,15 @@ impl Coop {
                 if let Some(n) = i.checked_sub(from).and_then(|k| self.neuro.get_mut(k)) {
                     if newly {
                         n.director.died(tic, false, &std::mem::take(&mut s.hits));
-                        news.push((i, format!("{} died.", who(i))));
+                        // (a deathmatch's deaths are frags, told as such)
+                        if !deathmatch {
+                            news.push((i, format!("{} died.", who(i))));
+                        }
                     }
                     let said = n.dead(tic);
                     s.agent.x_mut().log.extend(said);
                 }
-                if newly && person {
+                if newly && person && !deathmatch {
                     news.push((i, format!("{} died.", who(i))));
                 }
                 // (the use key, pressed and let go: Doom wants it pressed again for each go; a
@@ -408,7 +425,8 @@ impl Coop {
             // (a person: their own controls, nothing of the bot's; their keys told the others)
             if let Some(h) = self.human.as_mut().filter(|_| person) {
                 let keys = obs.keys.unwrap_or_default();
-                for k in keys.iter().filter(|&k| !s.keys_had.has(k)) {
+                // (a deathmatch gives every key to every player: no news)
+                for k in keys.iter().filter(|&k| !s.keys_had.has(k) && !deathmatch) {
                     news.push((
                         i,
                         format!(
@@ -442,7 +460,8 @@ impl Coop {
                     n.director.reborn(&s.agent, &obs, s.obs.as_ref());
                 }
                 let keys = obs.keys.unwrap_or_default();
-                for k in keys.iter().filter(|&k| !s.keys_had.has(k)) {
+                // (a deathmatch gives every key to every player: no news)
+                for k in keys.iter().filter(|&k| !s.keys_had.has(k) && !deathmatch) {
                     news.push((
                         i,
                         format!(
@@ -465,6 +484,10 @@ impl Coop {
                 d.gibbed = self.engine.gibbed();
                 let team = crate::control::directed::Team {
                     me: i,
+                    rivals: rivals.clone().map(|mut m| {
+                        m.hunt = s.agent.player().and_then(|p| p.hunt_state(&obs));
+                        m
+                    }),
                     human: self.human.is_some().then_some(HUMAN_SEAT),
                     players,
                     mates: mates.iter().filter(|m| m.player != i).cloned().collect(),
@@ -486,7 +509,24 @@ impl Coop {
                 }
             }
         }
+        let frags_before = (deathmatch && !self.neuro.is_empty()).then(|| self.engine.frags());
         self.engine.step_all(&cs);
+        // (a deathmatch: each frag told every one, as Doom's messages tell every player)
+        if let Some(before) = frags_before {
+            let after = self.engine.frags();
+            let score = self.frags();
+            let tic = self.engine.tic;
+            for (by, row) in after.iter().enumerate().take(self.seats.len()) {
+                for (of, &n) in row.iter().enumerate().take(self.seats.len()) {
+                    let was = before.get(by).and_then(|r| r.get(of)).copied().unwrap_or(0);
+                    for _ in was..n {
+                        for nr in &mut self.neuro {
+                            nr.director.frag_news(tic, by, of, &score);
+                        }
+                    }
+                }
+            }
+        }
         let directed = !self.neuro.is_empty();
         for (i, s) in self.seats.iter_mut().enumerate() {
             self.engine.as_player(i);
@@ -677,12 +717,15 @@ impl Coop {
     fn level_over(&mut self) {
         let tic = self.engine.tic;
         let exited = self.engine.exited();
+        let final_frags = self.frags();
         for (n, s) in self
             .neuro
             .iter_mut()
             .zip(self.seats.iter_mut().skip(self.neuro_from))
         {
-            if exited {
+            if exited && self.deathmatch > 0 {
+                n.director.match_over(tic, &final_frags);
+            } else if exited {
                 n.director.level_done();
             }
             let said = n.between(tic);

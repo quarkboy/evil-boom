@@ -473,9 +473,15 @@ impl Director {
                 then: Then::Tactic("retreat"),
             });
         }
+        // (a deathmatch's stance is its fighting style)
+        let (bold, tactic) = if self.policy.deathmatch {
+            ("go aggressive", "aggressive")
+        } else {
+            ("go bold", "bold")
+        };
         choices.push(Choice {
-            label: "go bold".into(),
-            then: Then::Tactic("bold"),
+            label: bold.into(),
+            then: Then::Tactic(tactic),
         });
         self.ask_now(
             agent,

@@ -138,6 +138,12 @@ impl Director {
         let pos = obs.pos();
         m.last_tic = obs.tic;
         m.kit = kit(obs);
+        // (a deathmatch: every key's every player's: not worth her reading)
+        if self.policy.deathmatch
+            && let Some((k, _)) = m.kit.rsplit_once("; ")
+        {
+            m.kit = k.to_string();
+        }
 
         // The level begun: once its title's to be had (or a moment's gone without).
         let began = *m.began.get_or_insert(obs.tic);

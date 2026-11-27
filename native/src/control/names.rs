@@ -7,7 +7,7 @@
 //! tables that judge by kind are keyed by that.
 
 /// (class name, what it's called, several of them)
-const NAMES: [(&str, &str, &str); 69] = [
+const NAMES: [(&str, &str, &str); 70] = [
     ("Zombieman", "zombieman", "zombiemen"),
     ("ShotgunGuy", "shotgun guy", "shotgun guys"),
     ("ChaingunGuy", "chaingunner", "chaingunners"),
@@ -93,6 +93,7 @@ const NAMES: [(&str, &str, &str); 69] = [
     ("PlasmaBall", "plasma", "plasma"),
     ("BFGBall", "BFG blast", "BFG blasts"),
     ("DoomPlayer", "you", "you"),
+    ("Opponent", "rival", "rivals"),
 ];
 
 /// What a thing's called, by its class name (one with no name here: as it is).

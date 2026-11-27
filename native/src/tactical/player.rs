@@ -623,27 +623,46 @@ impl Player {
         });
     }
 
+    /// Told to hunt the others (directed: `doom_hunt`), geared up or not; or not (any other order).
+    pub fn set_hunt_ordered(&mut self, on: bool) {
+        if let Some(r) = self.fight.rivals.as_mut() {
+            r.ordered = on;
+            r.offered = None;
+        }
+    }
+
+    /// Geared up to hunt, by her numbers (`tactical/rivals.rs`).
+    pub fn geared_up(&self, obs: &Observation) -> bool {
+        super::rivals::geared(obs, &self.fight.tune.deathmatch, false)
+    }
+
     /// Whether she hunts the others (`set_hunting`).
     pub fn hunt_state_on(&self) -> bool {
         self.fight.rivals.is_some()
     }
 
-    /// The hunting's state for the log and the console: gearing up or hunting, and the best
-    /// clue there is. None if she doesn't hunt.
+    /// The hunting's state for her status and the console: geared up to hunt or not, and the
+    /// best word of a rival there is ("geared up; last of a rival: a shotgun NE 600, 3s ago").
+    /// None if she doesn't hunt.
     pub fn hunt_state(&self, obs: &Observation) -> Option<String> {
         let r = self.fight.rivals.as_ref()?;
         let tune = &self.fight.tune.deathmatch;
         let clue = r.best(obs.tic, obs.pos(), tune).map_or(String::new(), |c| {
             format!(
-                ", {} {:.0} off, {:.0}s ago",
+                "; last of a rival: {} {} {:.0}, {:.0}s ago",
                 c.what,
+                crate::control::directed::compass(crate::domain::heading(obs.pos(), c.at)),
                 dist(obs.pos(), c.at),
                 (obs.tic - c.tic) as f64 / 35.0
             )
         });
         Some(format!(
             "{}{clue}",
-            if r.hunting { "hunting" } else { "gearing up" }
+            if r.hunting {
+                "geared up"
+            } else {
+                "not geared up"
+            }
         ))
     }
 
@@ -1882,6 +1901,7 @@ impl Fight {
         let age = (obs.tic - c.tic) as f64 / crate::domain::TICRATE;
         let near = dist(pos, c.at);
         let go = r.hunting
+            || r.ordered
             || (age <= t.fresh_secs && near <= t.fresh_near && super::rivals::geared(obs, t, true));
         if !go {
             return None;
@@ -1931,6 +1951,7 @@ impl Fight {
         // (none she'd go after now: no news to her)
         let age = (obs.tic - tic) as f64 / crate::domain::TICRATE;
         if !r.hunting
+            && !r.ordered
             && !(age <= t.fresh_secs
                 && dist(obs.pos(), best.at) <= t.fresh_near
                 && super::rivals::geared(obs, t, true))

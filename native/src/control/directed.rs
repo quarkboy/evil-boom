@@ -49,12 +49,13 @@ pub use events::{Event, Weight};
 pub use look::{Listing, Pick};
 pub use moments::{skill_name, Level};
 pub use policy::{help_for as policy_help_for, Policy};
-pub use team::{Mate, Team};
+pub use team::{Match, Mate, Team};
 
 /// Her standing settings the stream can lock, so they're not hers to change (`--lock`, the
 /// console): `doom_policy`'s, then `doom_goal`'s.
 pub const LOCKABLE: &[&str] = &[
-    "stance", "save", "risk", "powerups", "explore", "instinct", "finish", "prefer",
+    "stance", "save", "risk", "powerups", "explore", "instinct", "finish", "prefer", "fight",
+    "hunt",
 ];
 pub use situation::Situation;
 
@@ -141,6 +142,9 @@ pub enum Order {
     Exit,
     /// stop and wait
     Stop,
+    /// (a deathmatch) hunt the rivals by what she's seen and heard of them, till another order;
+    /// with `true`, gear up instead: guns, ammo, armor and health till she's geared up to hunt
+    Hunt(bool),
 }
 
 /// What's happened, for whoever gave the orders.
@@ -181,6 +185,8 @@ enum Doing {
     /// no order for a while (`idle_auto`): carrying on by herself, the explorer choosing, till an
     /// order comes or there's nothing left but to leave
     Auto,
+    /// (a deathmatch) hunting the rivals, clue after clue; or (`true`) gearing up
+    Hunt(bool),
 }
 
 /// A fight under way: since when, what it's cost so far, what's been in it.
@@ -302,6 +308,8 @@ fn monster_kind(word: &str) -> Option<&'static str> {
         "spidermastermind" | "mastermind" | "spiderdemon" => "SpiderMastermind",
         "cyberdemon" | "cyber" => "Cyberdemon",
         "wolfensteins" | "ss" | "nazi" => "WolfensteinSS",
+        // (a deathmatch's other players, as she calls them)
+        "rival" | "player" | "opponent" | "enemy" => "Opponent",
         _ => return None,
     })
 }
@@ -367,6 +375,8 @@ impl Director {
     /// A setting taken (already checked), to be applied; what she's told.
     pub(super) fn policy_to(&mut self, setting: &str, v: &'static str) -> String {
         match setting {
+            "fight" => self.policy.fight = v,
+            "hunt" => self.policy.hunt = v,
             "stance" => self.policy.stance = v,
             "save" => self.policy.save = v,
             "risk" => self.policy.risk = v,
@@ -568,7 +578,9 @@ pub struct Director {
     /// her standing settings (`policy.rs`), and whether they're yet to be applied (a change, a
     /// new level: a new player)
     pub policy: Policy,
-    policy_due: bool,
+    pub(crate) policy_due: bool,
+    /// (a deathmatch) hunting or gearing up with nothing to go for, told so
+    hunt_idle: bool,
     /// the last resorts she's let her instinct take, this level
     resorts: std::collections::BTreeSet<crate::knowledge::explorer::Resort>,
     progress: Option<((usize, [usize; 6]), i64)>,
@@ -784,6 +796,8 @@ impl Director {
     pub fn doing(&self, agent: &Agent) -> String {
         let doing = match &self.doing {
             Some(Doing::Once(_, w)) => format!("going to {w}"),
+            Some(Doing::Hunt(false)) => "hunting rivals".to_string(),
+            Some(Doing::Hunt(true)) => "gearing up".to_string(),
             Some(Doing::Area(_, w, secrets)) => format!(
                 "exploring {w}{}{}",
                 with_secrets(*secrets),
@@ -861,6 +875,13 @@ impl Director {
         } else {
             format!("; {}", self.team_line)
         };
+        // (a deathmatch: every key's hers from the start, and the level's tally isn't the game:
+        // her kit without the keys, the frags in place of the tally)
+        if self.team.as_ref().is_some_and(|t| t.rivals.is_some()) {
+            let kit = kit(obs);
+            let kit = kit.rsplit_once("; ").map_or(kit.as_str(), |(k, _)| k);
+            return format!("{kit}; {doing}{plan}{ultra}{team}");
+        }
         // (short: what Evil reads costs her context)
         format!(
             "{}; {}; {doing}{plan}{ultra}{team}",
@@ -1144,6 +1165,7 @@ impl Director {
             Some(Doing::Off) => {}
             // (handled above: never taken here)
             Some(Doing::Auto) => self.doing = Some(Doing::Auto),
+            Some(Doing::Hunt(gear)) => self.hunt_next(agent, obs, gear),
             Some(Doing::Once(id, what)) => {
                 let (ok, why, pressed_nothing) = ended
                     .map_or((false, "stopped".to_string(), false), |e| {

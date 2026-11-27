@@ -27,6 +27,21 @@ impl Director {
             .player()
             .map(|p| p.known_monsters())
             .unwrap_or_default();
+        // (a deathmatch: her stances are its fighting styles, for a while over her policy's)
+        if self.policy.deathmatch
+            && let Some(&name) = crate::tactical::styles::FIGHT_STYLES
+                .iter()
+                .find(|&&s| s == what)
+        {
+            let over = crate::tactical::styles::fight_style(name).ok_or("no such style")?;
+            let (secs, until) = hold(stance_secs, STANCE_MOST);
+            agent
+                .player_mut()
+                .ok_or("no fight to take a stance in")?
+                .take_stance(name, &over)?;
+            self.tactics.stance = Some((name, until));
+            return Ok(format!("Fighting {name}, {secs:.0} s."));
+        }
         match what {
             "target" => {
                 let r = r.ok_or("target what: a monster's id or a kind (\"archvile\")")?;

@@ -165,8 +165,9 @@ The music (see evil-boom help music):
 
 Directed play:
   --neuro URL             directed by Neuro (or neuro-mock) over its WebSocket, ws://HOST:PORT.
-                          With --players N (co-op): one Neuro each, on URL's port and the
-                          ones after it (8000, 8001, ...), or URL,URL,... one each
+                          With --players N (co-op or a deathmatch): one Neuro each, on
+                          URL's port and the ones after it (8000, 8001, ...), or URL,URL,...
+                          one each. A deathmatch: instinct off, doom_hunt hers
   --gpt [CONFIG]          directed by a language model, run in this program
                           (config/neuro-gpt.json unless named)
   --directed FILE         orders read from FILE as lines are added to it; answers in FILE.out

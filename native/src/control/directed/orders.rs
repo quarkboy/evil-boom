@@ -7,6 +7,56 @@
 use super::*;
 
 impl Director {
+    /// (a deathmatch) The next of a hunt (the freshest, surest clue of a rival, as the fight has
+    /// them: `Kind::Hunt`) or of gearing up (a pickup); none, told so once, and a hunt waits for
+    /// word of one, listening; gearing up done once she's geared up, or with nothing to take.
+    pub(super) fn hunt_next(&mut self, agent: &mut Agent, obs: &Observation, gear: bool) {
+        if gear && agent.player().is_some_and(|p| p.geared_up(obs)) {
+            self.report(obs, true, Event::Outcome, "Geared up.".into());
+            return;
+        }
+        let open = self.open_objectives(agent, obs);
+        let wanted: Vec<Objective> = open
+            .iter()
+            .filter(|o| {
+                if gear {
+                    o.kind == Kind::Item
+                } else {
+                    o.kind == Kind::Hunt && o.thing.is_none()
+                }
+            })
+            .cloned()
+            .collect();
+        for o in wanted {
+            if agent.x_mut().take(obs, o) {
+                self.doing = Some(Doing::Hunt(gear));
+                self.hunt_idle = false;
+                return;
+            }
+        }
+        // (nothing to take that she knows of, or no word of anyone: she looks about, new ground
+        // first, the level walked round again once it's all seen; word of a rival turns her)
+        let roam: Vec<Objective> = open.into_iter().filter(explores).collect();
+        let mut roaming = false;
+        for o in roam {
+            if agent.x_mut().take(obs, o) {
+                roaming = true;
+                break;
+            }
+        }
+        self.doing = Some(Doing::Hunt(gear));
+        if !std::mem::replace(&mut self.hunt_idle, true) {
+            let text = match (gear, roaming) {
+                (true, true) => "No gear you know of: looking about for some.",
+                (false, true) => "No word of a rival: looking about.",
+                (true, false) => "No gear you know of, and nowhere new to look.",
+                (false, false) => "No word of a rival: you wait here, listening.",
+            };
+            // (how the hunt's going, not news to answer: quiet, or she orders it again and again)
+            self.report(obs, true, Event::Begun, text.into());
+        }
+    }
+
     pub(super) fn start(&mut self, agent: &mut Agent, obs: &Observation, o: Order) {
         // (a new order replaces the one in hand, and says so: two given together, the first
         // would be gone without a word. An errand in the middle of exploring is an errand: the
@@ -73,7 +123,15 @@ impl Director {
         x.ended = None;
         self.taken.clear();
         self.told_paused = false;
+        // (a deathmatch: hunting hers only while she's ordered it)
+        if let Some(p) = agent.player_mut() {
+            p.set_hunt_ordered(matches!(o, Order::Hunt(false)));
+        }
         match o {
+            Order::Hunt(gear) => {
+                self.hunt_idle = false;
+                self.hunt_next(agent, obs, gear);
+            }
             Order::Stop => self.report(obs, true, Event::Outcome, "Stopped.".into()),
             Order::Exit => match self
                 .objectives_of(agent, obs, &[Kind::Exit])
@@ -419,7 +477,7 @@ impl Director {
         // (co-op: a gun she has stays where the level put it, and gives her nothing)
         if thing.is_some_and(|t| agent.x().knowledge.left_lying(obs, t)) {
             return Err(format!(
-                "{what}: you have it. In co-op it stays for the others and gives you nothing."
+                "{what}: you have it. In this game it stays where it lies and gives you nothing."
             ));
         }
         if let Some(why) = thing.and_then(|t| Self::cant_take(t.name, obs)) {

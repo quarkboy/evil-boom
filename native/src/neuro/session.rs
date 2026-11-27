@@ -100,6 +100,8 @@ pub struct Session {
     /// she's mid-sentence (`speech_finished`, not the final one yet): since when it was last
     /// heard of
     speaking: Option<i64>,
+    /// a deathmatch (`set_deathmatch`): her actions and rules its own
+    deathmatch: bool,
 }
 
 /// The force out, if one is. Neuro handles one at a time, and a second sent meanwhile "will
@@ -207,6 +209,7 @@ fn answered_id(data: Option<&str>) -> Option<String> {
 
 /// Every action's name, as `actions` has them.
 const ALL_ACTIONS: &[&str] = &[
+    "doom_hunt",
     "doom_look",
     "doom_query",
     "doom_go",
@@ -300,12 +303,35 @@ pub fn actions_timed(c: &Directed) -> Vec<Value> {
     ]
 }
 
+/// A deathmatch's own actions over the rest: `doom_hunt` added; `doom_policy` with the deathmatch
+/// styles for fighting and hunting (`tactical::styles`) and no saving for bosses or exploring;
+/// `doom_fight`'s stance the fighting styles; the rival a target.
+pub fn deathmatch_actions(all: &mut Vec<Value>, c: &Directed) {
+    use crate::tactical::styles::{FIGHT_STYLES, HUNT_STYLES};
+    let s = |props: Value, required: &[&str]| json!({ "type": "object", "properties": props, "required": required });
+    let (tactic, stance) = (c.tactic, c.stance);
+    for a in all.iter_mut() {
+        match a["name"].as_str() {
+            Some("doom_policy") => {
+                *a = json!({ "name": "doom_policy", "description": "Your settings, kept till you change them. Give any to change them; none to hear them all and what each does.", "schema": s(json!({ "fight": { "type": "string", "enum": FIGHT_STYLES }, "hunt": { "type": "string", "enum": HUNT_STYLES }, "risk": { "type": "string", "enum": ["careful", "normal", "bold"] }, "powerups": { "type": "string", "enum": ["need", "now"] } }), &[]) });
+            }
+            Some("doom_fight") => {
+                *a = json!({ "name": "doom_fight", "description": format!("Your say in the fight, for a while; give any together. target: a rival in sight (rival) or a monster, to shoot first ({tactic:.0}s; none ends it). weapon: a gun you hold, used while it has a shot ({tactic:.0}s; auto ends it). fire: hold, or free ({tactic:.0}s). override_stance: how you fight, over your policy's ({stance:.0}s). retreat: fall back to cover now. cancel: drop all of these. seconds: a different length. None given: what's holding now."), "schema": s(json!({ "target": { "type": "string" }, "weapon": { "type": "string" }, "fire": { "type": "string", "enum": ["hold", "free"] }, "override_stance": { "type": "string", "enum": FIGHT_STYLES }, "retreat": { "type": "boolean" }, "cancel": { "type": "boolean" }, "seconds": { "type": "integer" } }), &[]) });
+            }
+            _ => {}
+        }
+    }
+    all.push(json!({ "name": "doom_hunt", "description": "hunt: go after your rivals by what you've seen and heard of them, the freshest first, till your next action. gear: take guns, ammo, armor and health till you're geared up to hunt.", "schema": s(json!({ "do": { "type": "string", "enum": ["hunt", "gear"] } }), &["do"]) }));
+}
+
 /// `doom_policy`'s word on instinct, in what it answers with nothing given: left out when it
 /// isn't hers to turn off.
 const INSTINCT_HELP: &str = " instinct: on (an action done, you carry on by yourself and are asked what next), off (you stand and wait).";
 
 pub use crate::control::directed::LOCKABLE;
-const POLICY_SETTINGS: &[&str] = &["stance", "save", "risk", "powerups", "explore", "instinct"];
+const POLICY_SETTINGS: &[&str] = &[
+    "stance", "save", "risk", "powerups", "explore", "instinct", "fight", "hunt",
+];
 const GOAL_SETTINGS: &[&str] = &["finish", "prefer"];
 
 const GOAL_FINISH: &str = "finish: when the level's done: out (by the first exit), kills, secrets or completionist (all of it: slow, asked first), each then out; none: you're asked.";
@@ -369,6 +395,10 @@ fn without(all: &mut Vec<Value>, locked: &std::collections::BTreeSet<&'static st
 const BRIEFING: &str = "You're playing Doom. Moving, fighting and taking spare health, armor and ammo you do by reflex; you choose where you go. \
 Ids come from doom_query; your names work as ids. \"NE 400\": north-east of you, 400 units away. (tally): counts for the items %. An action done, you carry on by instinct, not leaving the level, and you're asked what next (doom_policy instinct).";
 
+/// A deathmatch's rules (with `Team::brief`'s): no instinct, no exit.
+const BRIEFING_DM: &str = "You're playing Doom. Moving, fighting and dodging you do by reflex; you choose where you go. \
+Ids come from doom_query; your names work as ids. \"NE 400\": north-east of you, 400 units away. An action done, you stand and wait for your next.";
+
 impl Session {
     pub fn new(url: &str, c: &Directed) -> Session {
         let mut director = Director::new();
@@ -418,6 +448,7 @@ impl Session {
             off_since: None,
             off_forced: None,
             speaking: None,
+            deathmatch: false,
         }
     }
 
@@ -577,6 +608,18 @@ impl Session {
     }
 
     /// Instinct on or off from the start (`--instinct`): hers to change unless it's locked too.
+    /// A deathmatch: the rules, her actions and her settings its own (`deathmatch_actions`):
+    /// hunting and gearing up hers to order (`doom_hunt`), her policy's stance and hunting the
+    /// deathmatch styles, no exit, no goal, no game.
+    pub fn set_deathmatch(&mut self, on: bool) {
+        if self.deathmatch != on {
+            self.deathmatch = on;
+            self.policy_stale = true;
+            self.director.policy.deathmatch = on;
+            self.director.policy_due = true;
+        }
+    }
+
     pub fn set_instinct(&mut self, on: bool) {
         self.director.idle_auto = on.then_some(crate::control::directed::IDLE_AUTO);
     }
@@ -594,7 +637,9 @@ impl Session {
     /// The rules told her (silently), and the count since started again.
     fn brief(&mut self, tic: i64) {
         // (instinct not hers to turn off: its setting not named)
-        if !self.locked.contains("instinct") {
+        if self.deathmatch {
+            self.link.context(BRIEFING_DM, true);
+        } else if !self.locked.contains("instinct") {
             self.link.context(BRIEFING, true);
         } else {
             self.link
@@ -901,6 +946,9 @@ impl Session {
             .iter()
             .copied()
             .filter(|&a| match a {
+                // (a deathmatch: no exit, no goal for the level, no game to start; hunting hers)
+                "doom_exit" | "doom_goal" | "doom_game" if self.deathmatch => false,
+                "doom_hunt" => self.deathmatch,
                 "doom_exit" => exit,
                 "doom_game" => self.director.restart_allowed,
                 _ => true,
@@ -918,6 +966,9 @@ impl Session {
     /// ...with the settings locked from her still in them.
     fn all_actions(&self) -> Vec<Value> {
         let mut all = actions_timed(&self.director.clocks);
+        if self.deathmatch {
+            deathmatch_actions(&mut all, &self.director.clocks);
+        }
         if let (Some(c), Some(g)) = (
             &self.choices,
             all.iter_mut().find(|a| a["name"] == "doom_game"),
@@ -1427,7 +1478,12 @@ impl Session {
                 {
                     return (false, format!("{k}: not yours to change."));
                 }
-                for setting in ["stance", "save", "risk", "powerups", "explore"] {
+                let settings: &[&str] = if self.deathmatch {
+                    &["fight", "hunt", "risk", "powerups"]
+                } else {
+                    &["stance", "save", "risk", "powerups", "explore"]
+                };
+                for &setting in settings {
                     if let Some(v) = arg(setting) {
                         match self.director.set_policy(obs, setting, v) {
                             Ok(s) if s.starts_with("[ask") => return (true, s),
@@ -1446,15 +1502,17 @@ impl Session {
                 let now = format!("Your policy: {}. You {idle}.", self.director.policy.line());
                 // (none given: what each does with it; her action's description doesn't
                 // carry that, it'd sit in her context the whole game)
-                let asked = ["stance", "save", "risk", "powerups", "explore", "instinct"]
+                let asked = settings
                     .iter()
+                    .chain(&["instinct"])
                     .any(|k| args.get(*k).is_some());
                 if asked {
                     (true, now)
                 } else {
                     // (what's hers to set only; the console's hand hears of them all)
-                    let mut help: Vec<&str> = ["stance", "save", "risk", "powerups", "explore"]
-                        .into_iter()
+                    let mut help: Vec<&str> = settings
+                        .iter()
+                        .copied()
                         .filter(|k| self.hers(k))
                         .map(crate::control::directed::policy_help_for)
                         .collect();
@@ -1565,11 +1623,13 @@ impl Session {
                     None => None,
                 };
                 let stance = arg("override_stance");
-                if stance.is_some_and(|s| !["bold", "careful", "avoid", "steady"].contains(&s)) {
-                    return (
-                        false,
-                        "override_stance: bold, careful, avoid or steady.".into(),
-                    );
+                let stances: &[&str] = if self.deathmatch {
+                    &crate::tactical::styles::FIGHT_STYLES
+                } else {
+                    &["bold", "careful", "avoid", "steady"]
+                };
+                if stance.is_some_and(|s| !stances.contains(&s)) {
+                    return (false, format!("override_stance: {}.", stances.join(", ")));
                 }
                 // (each of her words in turn, as `Director::fight` has them: dropping what
                 // was hers first, falling back last)
@@ -1608,6 +1668,17 @@ impl Session {
                 }
             }
             "doom_status" => (true, self.director.status(agent, obs)),
+            "doom_hunt" if self.deathmatch => match arg("do") {
+                Some("hunt") => {
+                    self.director.order(Order::Hunt(false));
+                    (true, "Hunting your rivals.".into())
+                }
+                Some("gear") => {
+                    self.director.order(Order::Hunt(true));
+                    (true, "Gearing up.".into())
+                }
+                _ => (false, "do: hunt or gear.".into()),
+            },
             // (not one of hers any more: the stream console's "Why" button asks it)
             "doom_why" => (true, self.director.why(agent, obs)),
             "doom_goal" => {
@@ -1831,7 +1902,10 @@ mod tests {
     #[test]
     fn all_actions_named() {
         let named: std::collections::BTreeSet<&str> = super::ALL_ACTIONS.iter().copied().collect();
-        let had: Vec<String> = super::actions()
+        // (a deathmatch's actions are all of them: the others' with doom_hunt beside)
+        let mut all = super::actions();
+        super::deathmatch_actions(&mut all, &crate::tactical::tuning::Directed::default());
+        let had: Vec<String> = all
             .iter()
             .filter_map(|a| a["name"].as_str().map(str::to_string))
             .collect();

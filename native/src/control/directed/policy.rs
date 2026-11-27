@@ -52,6 +52,11 @@ pub struct Policy {
     /// exploring on instinct, and her explore orders: "normal" (new ground first, going back
     /// over what's done after), "methodical" (everything as it comes), "speedy" (new ground only)
     pub explore: &'static str,
+    /// a deathmatch: how she fights her rivals and how she hunts them (`tactical::styles`), in
+    /// place of the stance; saving for bosses and exploring aren't hers there
+    pub deathmatch: bool,
+    pub fight: &'static str,
+    pub hunt: &'static str,
 }
 
 impl Default for Policy {
@@ -62,6 +67,9 @@ impl Default for Policy {
             risk: "normal",
             powerups: "need",
             explore: "normal",
+            deathmatch: false,
+            fight: "steady",
+            hunt: "steady",
         }
     }
 }
@@ -75,6 +83,8 @@ pub fn value(setting: &str, v: &str) -> Option<&'static str> {
         "risk" => &["careful", "normal", "bold"],
         "powerups" => &["need", "now"],
         "explore" => &["normal", "methodical", "speedy"],
+        "fight" => &crate::tactical::styles::FIGHT_STYLES,
+        "hunt" => &crate::tactical::styles::HUNT_STYLES,
         _ => return None,
     };
     of.iter().copied().find(|o| *o == v)
@@ -82,7 +92,9 @@ pub fn value(setting: &str, v: &str) -> Option<&'static str> {
 
 /// One setting's line of `SETTINGS_HELP` ("explore: normal (...), methodical (...), speedy (...).").
 pub fn help_for(setting: &str) -> &'static str {
-    const SETTINGS: [&str; 5] = ["stance", "save", "risk", "powerups", "explore"];
+    const SETTINGS: [&str; 7] = [
+        "stance", "save", "risk", "powerups", "explore", "fight", "hunt",
+    ];
     let Some(start) = SETTINGS_HELP.find(&format!("{setting}: ")) else {
         return SETTINGS_HELP;
     };
@@ -95,7 +107,7 @@ pub fn help_for(setting: &str) -> &'static str {
     rest[..end].trim()
 }
 
-pub const SETTINGS_HELP: &str = "stance: careful (the default: backs off sooner); steady (stands and fights more); bold (fights more still, finishes fewer levels); avoid (keeps clear of fights, backing away from what comes close: to get past one, not to leave on); yolo (fights everything head on; asked first). save: cells (plasma and BFG kept for bosses), none. risk: careful, normal, bold (floors that hurt). powerups: need (spheres and invulnerability when they'd help), now (as they come). explore: normal (new ground first, back over what's done after), methodical (everything as it comes, secrets too: slow), speedy (new ground only, never back).";
+pub const SETTINGS_HELP: &str = "stance: careful (the default: backs off sooner); steady (stands and fights more); bold (fights more still, finishes fewer levels); avoid (keeps clear of fights, backing away from what comes close: to get past one, not to leave on); yolo (fights everything head on; asked first). save: cells (plasma and BFG kept for bosses), none. risk: careful, normal, bold (floors that hurt). powerups: need (spheres and invulnerability when they'd help), now (as they come). explore: normal (new ground first, back over what's done after), methodical (everything as it comes, secrets too: slow), speedy (new ground only, never back). fight: berserk (never falls back; rockets and plasma sprayed widest), aggressive, steady (the default), careful, evasive (keeps clear, falls back early, every shot aimed). hunt: when you're geared up enough to hunt and how far you go for word of a rival: relentless (any gun, any clue), eager, steady (the default), careful (well armed and armored first), passive (never on your own).";
 
 impl Policy {
     /// Going back over what's done, on instinct, as `explore` has it.
@@ -133,8 +145,13 @@ impl Policy {
                 }
             }
         };
-        put(stance_tuning(self.stance).unwrap_or_else(|| json!({})));
-        if self.save == "none" {
+        if self.deathmatch {
+            put(crate::tactical::styles::fight_style(self.fight).unwrap_or_else(|| json!({})));
+            put(crate::tactical::styles::hunt_style(self.hunt).unwrap_or_else(|| json!({})));
+        } else {
+            put(stance_tuning(self.stance).unwrap_or_else(|| json!({})));
+        }
+        if self.save == "none" && !self.deathmatch {
             put(json!({ "guns": { "save_from": 8 } }));
         }
         match self.risk {
@@ -151,6 +168,12 @@ impl Policy {
 
     /// In a line, as she's told it.
     pub fn line(&self) -> String {
+        if self.deathmatch {
+            return format!(
+                "fight {}, hunt {}, risk {}, powerups {}",
+                self.fight, self.hunt, self.risk, self.powerups
+            );
+        }
         format!(
             "stance {}, save {}, risk {}, powerups {}, explore {}",
             self.stance, self.save, self.risk, self.powerups, self.explore
@@ -161,13 +184,23 @@ impl Policy {
     pub fn changed(&self) -> String {
         let d = Policy::default();
         let mut out = Vec::new();
-        for (name, now, was) in [
-            ("stance", self.stance, d.stance),
-            ("save", self.save, d.save),
-            ("risk", self.risk, d.risk),
-            ("powerups", self.powerups, d.powerups),
-            ("explore", self.explore, d.explore),
-        ] {
+        let all = if self.deathmatch {
+            vec![
+                ("fight", self.fight, d.fight),
+                ("hunt", self.hunt, d.hunt),
+                ("risk", self.risk, d.risk),
+                ("powerups", self.powerups, d.powerups),
+            ]
+        } else {
+            vec![
+                ("stance", self.stance, d.stance),
+                ("save", self.save, d.save),
+                ("risk", self.risk, d.risk),
+                ("powerups", self.powerups, d.powerups),
+                ("explore", self.explore, d.explore),
+            ]
+        };
+        for (name, now, was) in all {
             if now != was {
                 out.push(format!("{name} {now}"));
             }
@@ -196,6 +229,7 @@ mod tests {
                     risk,
                     powerups,
                     explore: "normal",
+                    ..Policy::default()
                 };
                 Tuning::default()
                     .with(&p.tuning())
@@ -203,6 +237,22 @@ mod tests {
             }
             assert!(stance_tuning(stance).is_some());
         }
+        // (a deathmatch's: its fighting and hunting styles in place of the stance)
+        for fight in crate::tactical::styles::FIGHT_STYLES {
+            for hunt in crate::tactical::styles::HUNT_STYLES {
+                let p = Policy {
+                    deathmatch: true,
+                    fight,
+                    hunt,
+                    ..Policy::default()
+                };
+                Tuning::default()
+                    .with(&p.tuning())
+                    .unwrap_or_else(|e| panic!("{p:?}: {e}"));
+            }
+        }
+        assert_eq!(value("fight", "Berserk"), Some("berserk"));
+        assert!(super::help_for("hunt").starts_with("hunt: when"));
         assert_eq!(value("stance", "YOLO"), Some("yolo"));
         assert_eq!(value("save", "rockets"), None);
         assert_eq!(Policy::default().changed(), "");
