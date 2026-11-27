@@ -319,29 +319,6 @@ impl Director {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::Team;
-
-    /// Told who she is, and of a person among them if there is one.
-    #[test]
-    fn brief_names_the_person() {
-        let mut t = Team {
-            me: 1,
-            players: 2,
-            ..Team::default()
-        };
-        assert!(!t.brief().contains("person"));
-        t.human = Some(0);
-        let b = t.brief();
-        assert!(
-            b.contains("you're player 2 (indigo) of 2")
-                && b.contains("Player 1 (green) is a person, playing with you."),
-            "{b}"
-        );
-    }
-}
-
 /// A deathmatch's line in her status: the frags, best first, her own "you", the clock, and her
 /// hunting ("frags: player 1 (green) 7, you 5, player 3 (brown) 2; 4:12 left; hunting: a
 /// shotgun 600 off, 3s ago").
@@ -379,4 +356,27 @@ fn cap(s: &str) -> String {
     c.next().map_or(String::new(), |f| {
         f.to_uppercase().collect::<String>() + c.as_str()
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Team;
+
+    /// Told who she is, and of a person among them if there is one.
+    #[test]
+    fn brief_names_the_person() {
+        let mut t = Team {
+            me: 1,
+            players: 2,
+            ..Team::default()
+        };
+        assert!(!t.brief().contains("person"));
+        t.human = Some(0);
+        let b = t.brief();
+        assert!(
+            b.contains("you're player 2 (indigo) of 2")
+                && b.contains("Player 1 (green) is a person, playing with you."),
+            "{b}"
+        );
+    }
 }
