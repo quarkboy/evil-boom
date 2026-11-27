@@ -438,11 +438,24 @@ impl Fitter<'_> {
         let (f, b) = nav.map.sides(li);
         let is_wall = nav.walls.contains(&li);
         if is_wall {
-            // (a wall in the way unless it's open now)
-            return match (f, b) {
-                (Some(f), Some(b)) => !crossable_either_way(&self.heights(f), &self.heights(b)),
-                _ => true,
+            // (a wall in the way unless it's open now; a wall become a ledge is a ledge, below,
+            // in the way from its foot. Doom II MAP20's moat, lowered with the pillar beside it
+            // less far: the pillar's face, a wall at the start, could be dropped off from its
+            // top, and so wasn't in the way of a box down in the moat at all, and a path went
+            // down it the box's own width, stuck at its mouth for the rest of the level)
+            let (Some(f), Some(b)) = (f, b) else {
+                return true;
             };
+            let (fs, bs) = (self.heights(f), self.heights(b));
+            if !crossable_either_way(&fs, &bs) {
+                return true;
+            }
+            let open = fs
+                .iter()
+                .any(|&hf| bs.iter().any(|&hb| can_cross(hf, hb) && can_cross(hb, hf)));
+            if open {
+                return false;
+            }
         }
         let (Some(f), Some(b)) = (f, b) else {
             // (a one-sided line that isn't a wall or a drop: never in the way)
