@@ -7,6 +7,7 @@
 
 pub mod directed;
 pub mod game;
-pub mod names;
+// (what things are called to her: below everything that writes for her, `crate::names`)
+pub use crate::names;
 pub mod places;
 pub mod script;

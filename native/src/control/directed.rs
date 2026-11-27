@@ -1457,11 +1457,8 @@ pub fn key_name(k: crate::specials::Key) -> &'static str {
     }
 }
 
-/// A heading (degrees, 0 east, 90 north) as a compass point.
-pub fn compass(h: f64) -> &'static str {
-    const POINTS: [&str; 8] = ["E", "NE", "N", "NW", "W", "SW", "S", "SE"];
-    POINTS[((h.rem_euclid(360.0) + 22.5) / 45.0) as usize % 8]
-}
+// (a heading as a compass point: the domain's, below what's told her and what tells it)
+pub use crate::domain::compass;
 
 /// A compass point (n, ne, east, south-west, ...) as a heading.
 pub fn bearing(s: &str) -> Option<f64> {

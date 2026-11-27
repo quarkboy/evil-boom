@@ -651,7 +651,7 @@ impl Player {
             format!(
                 "; last of a rival: {} {} {:.0}, {:.0}s ago",
                 c.what,
-                crate::control::directed::compass(crate::domain::heading(obs.pos(), c.at)),
+                crate::domain::compass(crate::domain::heading(obs.pos(), c.at)),
                 dist(obs.pos(), c.at),
                 (obs.tic - c.tic) as f64 / 35.0
             )
@@ -1877,7 +1877,7 @@ impl Fight {
             let mut o = Objective::new(
                 Kind::Visit,
                 goal,
-                format!("see if the {} is back", crate::control::names::called(name)),
+                format!("see if the {} is back", crate::names::called(name)),
             );
             o.needed = true;
             self.checking.push((goal, key));
@@ -1926,7 +1926,7 @@ impl Fight {
             format!(
                 "hunt: {} {} ~{near:.0}, {age:.0}s ago",
                 c.what,
-                crate::control::directed::compass(crate::domain::heading(pos, c.at)),
+                crate::domain::compass(crate::domain::heading(pos, c.at)),
             ),
         );
         o.reveals = BTreeSet::from([c.id]);

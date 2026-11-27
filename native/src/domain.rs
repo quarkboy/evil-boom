@@ -244,6 +244,12 @@ pub fn heading(a: Point, b: Point) -> f64 {
     (b.1 - a.1).atan2(b.0 - a.0).to_degrees()
 }
 
+/// A heading (degrees, 0 east, 90 north) as a compass point.
+pub fn compass(h: f64) -> &'static str {
+    const POINTS: [&str; 8] = ["E", "NE", "N", "NW", "W", "SW", "S", "SE"];
+    POINTS[((h.rem_euclid(360.0) + 22.5) / 45.0) as usize % 8]
+}
+
 /// degrees a tic she turns running across sinking floors
 pub(crate) const RUN_TURN: f64 = 10.0;
 
