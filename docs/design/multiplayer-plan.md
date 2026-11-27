@@ -301,3 +301,7 @@ keeps it from level to level. What was new:
   refused for now.
 - **Pacing:** headless with Neuro runs at real speed (it's on the model's clock); the window
   always has.
+- **Small lifts, one at a time (0e57162):** a lift under 128 on its longer side with another
+  player on it is waited for off its edge (28 clear, 20 s at most). A box over a lift's edge
+  under a lower ceiling stops the lift rising at all (Plutonia MAP06's sector 146: all four
+  stuck behind two on it). Doors aren't lifts here: a wait in a doorway bought nothing.
