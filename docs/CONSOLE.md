@@ -52,6 +52,7 @@ form's changes first).
 | Instinct off from the start | `instinct_off` | directed: she stands and waits when an action's done (`--instinct off`), her starting settings' instinct made off to match |
 | **Multiplayer** (its own tab): Players, Kind of game | `players`, `multi` | 1 (Evil alone) to 4, each a bot of her own in one game (`--players`); `coop`, `deathmatch` or `altdeath` |
 | ...in a window of your own | `human_window` | your view in its own window, its keyboard and mouse yours (`--human-window`); the game's main window stays the stream's (every view, or the camera) for OBS; the sound stays yours whoever's on camera |
+| Your window's size, Full screen | `human_window_size`, `human_fullscreen` | that window's size as it opens ("" 960x720; it can be resized after), or the whole screen it's on at the desktop's resolution (`--human-window-size`, `--human-fullscreen`); the picture in it is drawn at the game rendering resolution |
 | You play too | `human` | player 1 is whoever's at the game's window, by its keyboard and mouse (`--human`); the Neuros, if they direct, players 2 on |
 | Camera | `camera` | what the window shows as the game begins: `grid` (every view) or a player's number (their view filling it, the sound theirs); switched from the Live tab as it plays |
 | Each bot (a deathmatch): Hunts, Hunting, Fighting | `no_hunt`, `hunt_styles`, `fight_styles` | per player in order, comma-separated: the ones that don't go looking, and each one's styles (`--hunt`, `--hunt-style`, `--fight-style`; steady unless set) |

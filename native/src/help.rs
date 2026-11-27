@@ -120,6 +120,9 @@ The game:
   --mouse DEG             degrees a mouse pixel turns you (0.1)
   --human-window          as --human, in a window of your own: the main window stays the
                           stream's (every view, or the camera), for OBS to take
+  --human-window-size WxH that window's size (960x720; it can be dragged to another; the
+                          picture in it is drawn at --render's)
+  --human-fullscreen      that window the whole screen it's on, the desktop's resolution
   --camera N|grid         with --players: player N's view filling the window, the sound
                           theirs (1-4 in the window switch it, 0 every view, C the next)
   --hunt all|none|N,M     in a deathmatch, the bots that gear up and then hunt the others by

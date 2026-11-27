@@ -181,6 +181,10 @@ pub struct WatchOptions {
     /// (`--human-window`) a person playing has a window of their own, the watcher's window the
     /// stream's (every view, or the camera)
     pub human_window: bool,
+    /// (`--human-window-size`, `--human-fullscreen`) that window's size (None: 960x720, or the
+    /// render's if bigger), or the whole screen it's on; the picture in it is `render`'s
+    pub human_window_size: Option<(usize, usize)>,
+    pub human_fullscreen: bool,
     /// (`--deathmatch`, `--altdeath`) with more than one player: 0 co-op, 1 deathmatch, 2
     /// altdeath
     pub deathmatch: i32,

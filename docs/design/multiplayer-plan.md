@@ -359,3 +359,6 @@ keeps it from level to level. What was new:
   wheel come apart (events 4-6) and the keyboard and mouse are read from it. The main window is
   the stream's again, every view or the camera, for OBS; the sound stays the person's whoever's
   on camera (one sound out of the machine: theirs to play by).
+  Its size (`--human-window-size`) and full screen (`--human-fullscreen`, `evil_play_fullscreen`,
+  the desktop's) are its own; the picture in it is the game's one render size for every player
+  (`--render`): a size of its own for one view would mean the engine drawing at two.

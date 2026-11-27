@@ -857,14 +857,15 @@ impl Coop {
         // (a person playing in a window of their own: their view, 4:3, as big as the render)
         if self.human.is_some() && o.human_window {
             let (w, h) = o.render.unwrap_or((640, 480));
-            self.play_window =
-                self.engine
-                    .game
-                    .play_open("evil-boom: you", w, h, (960.max(w), 720.max(h)));
+            let size = o.human_window_size.unwrap_or((960.max(w), 720.max(h)));
+            self.play_window = self.engine.game.play_open("evil-boom: you", w, h, size);
             if !self.play_window {
                 println!("--human-window: no window of your own to be had (an older engine?)");
             } else {
                 self.engine.game.listen(Some(HUMAN_SEAT));
+                if o.human_fullscreen && !self.engine.game.play_fullscreen(true) {
+                    println!("--human-fullscreen: your window can't be made full screen");
+                }
             }
         }
         let mut canvas = Canvas {

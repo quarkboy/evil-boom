@@ -371,6 +371,8 @@ header { gap: 8px 10px; } header h1 { font-size: 16px; letter-spacing: .18em; ga
         <label data-when="multi">Kind of game <select form="settings" name="multi"><option value="coop">co-op: all together, out by the exit</option><option value="deathmatch">deathmatch</option><option value="altdeath">deathmatch 2.0 (items come back)</option></select></label>
         <span class="check wide" data-when="multi" title="Player 1 is you, at the game's window: WASD, the mouse turns, Ctrl or click fires, Space, E or right click uses, 1-7 and the wheel change weapons, Shift walks. Esc lets the mouse go (click to take it again; Esc again ends the game); P pauses."><input form="settings" type="checkbox" name="human" id="m-human"><label for="m-human" class="check">You play too: player 1, at the game's window (keyboard and mouse)</label></span>
         <span class="check wide" data-when="human" title="Your view in a window of your own, its keyboard and mouse yours; the game's main window stays the stream's (every view, or the camera), for OBS to take. The sound is yours."><input form="settings" type="checkbox" name="human_window" id="m-human-window"><label for="m-human-window" class="check">In a window of your own (the main window stays the stream's, for OBS)</label></span>
+        <label data-when="human-window" title="Your window's size as it opens (it can be resized by dragging; the picture is scaled to fit, drawn at the game rendering resolution on the Setup tab)">Your window's size <select form="settings" name="human_window_size"><option value="">960x720 (its own)</option><option>640x480</option><option>800x600</option><option>1024x768</option><option>1280x960</option><option>1440x1080</option><option>1280x720</option><option>1600x900</option><option>1920x1080</option><option>2560x1440</option><option>3840x2160</option></select></label>
+        <span class="check" data-when="human-window" title="Your window the whole screen it's on, at the desktop's resolution, borderless. Drag it to another screen first if the main window's on this one."><input form="settings" type="checkbox" name="human_fullscreen" id="m-human-fullscreen"><label for="m-human-fullscreen" class="check">Full screen</label></span>
         <label data-when="multi" title="What the game's window shows as it begins: every view at once, or one player's filling it (the sound theirs). Switched from the Live tab as it plays.">Camera <select form="settings" name="camera"><option value="grid">every view at once</option><option value="1">player 1</option><option value="2">player 2</option><option value="3">player 3</option><option value="4">player 4</option></select></label>
         <label data-when="dm" title="The match is over when a player has this many frags. 0: no limit">Frag limit <input form="settings" type="number" name="frag_limit" min="0" max="999" step="1"></label>
         <label data-when="dm" title="The match is over after this long. 0: no limit">Time limit (minutes) <input form="settings" type="number" name="minutes" min="0" max="600" step="1"></label>
@@ -1197,6 +1199,7 @@ function applyWhen() {
     "multi-neuro-dm": multi && !coop && f.mode.value === "neuro",
     "multi-gpt": multi && f.mode.value === "gpt",
     human: multi && f.human.checked,
+    "human-window": multi && f.human.checked && f.human_window.checked,
   });
   for (const el of document.querySelectorAll("#settings [data-when], #sec-multi [data-when], #s-multi-note")) el.hidden = !on[el.dataset.when];
   if (Number(f.players.value) > 1 && f.multi.value !== "coop" && $("mp-rows").querySelectorAll("tr").length !== Number(f.players.value) + 1) buildRows();
@@ -1214,7 +1217,7 @@ function fillForm(s) {
       // (a SoundFont since taken out of soundfonts/: the default, as a start then has it)
       if (el.name === "soundfont" && ![...el.options].some((o) => o.value === v)) v = "";
       // (a size not in the list, set some other way: added, so it shows as it is)
-      if ((el.name === "window_size" || el.name === "render_size") && v && ![...el.options].some((o) => o.value === v)) {
+      if ((el.name === "window_size" || el.name === "render_size" || el.name === "human_window_size") && v && ![...el.options].some((o) => o.value === v)) {
         const o = document.createElement("option");
         o.value = o.textContent = v;
         el.append(o);

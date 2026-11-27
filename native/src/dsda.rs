@@ -395,6 +395,7 @@ pub struct Dsda {
     listen_fn: Option<unsafe extern "C" fn(c_int)>,
     play_open_fn: Option<unsafe extern "C" fn(*const c_char, c_int, c_int, c_int, c_int) -> c_int>,
     play_show_fn: Option<unsafe extern "C" fn(*const u32, c_int, c_int)>,
+    play_fullscreen_fn: Option<unsafe extern "C" fn(c_int) -> c_int>,
     coop: CoopFns,
     /// what a frame's drawn into, kept across frames
     draw_buffer: RefCell<Vec<u8>>,
@@ -648,6 +649,10 @@ impl Dsda {
             )
         }
         .ok();
+        // SAFETY: as above, `int evil_play_fullscreen(int)`; optional.
+        let play_fullscreen_fn =
+            unsafe { get::<unsafe extern "C" fn(c_int) -> c_int>(&lib, b"evil_play_fullscreen") }
+                .ok();
         let play_show_fn = unsafe {
             get::<unsafe extern "C" fn(*const u32, c_int, c_int)>(&lib, b"evil_play_show")
         }
@@ -727,6 +732,7 @@ impl Dsda {
             listen_fn,
             play_open_fn,
             play_show_fn,
+            play_fullscreen_fn,
             coop,
             draw_buffer: RefCell::new(Vec::new()),
             _argv: std::mem::ManuallyDrop::new(argv),
@@ -1386,6 +1392,14 @@ impl Dsda {
                 size.1 as c_int,
             ) != 0
         }
+    }
+
+    /// The play window the whole screen it's on (the desktop's resolution, borderless), or a
+    /// window again. False: not done (none open, or an older engine).
+    pub fn play_fullscreen(&self, on: bool) -> bool {
+        // SAFETY: an int in, an int out.
+        self.play_fullscreen_fn
+            .is_some_and(|f| unsafe { f(c_int::from(on)) } != 0)
     }
 
     /// A picture shown in the play window (0RGB, `w` by `h`).

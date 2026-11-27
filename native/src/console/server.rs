@@ -180,6 +180,10 @@ pub struct Settings {
     pub human: bool,
     /// ...in a window of their own, the game's main window the stream's (`--human-window`)
     pub human_window: bool,
+    /// ...that window's size ("" 960x720) and whether it's the whole screen
+    /// (`--human-window-size`, `--human-fullscreen`)
+    pub human_window_size: String,
+    pub human_fullscreen: bool,
     /// a deathmatch's bots, a player each in order (1 the first), comma-separated: how each
     /// hunts and fights (`tactical::styles`; "" the first's default, steady), and which don't
     /// hunt at all (their numbers)
@@ -253,6 +257,8 @@ impl Default for Settings {
             minutes: 10.0,
             human: false,
             human_window: false,
+            human_window_size: String::new(),
+            human_fullscreen: false,
             hunt_styles: String::new(),
             fight_styles: String::new(),
             no_hunt: String::new(),
@@ -286,6 +292,10 @@ impl Settings {
         if !self.render_size.trim().is_empty() {
             crate::dsda::WindowSpec::parse_size(&self.render_size, crate::dsda::MAX_RENDER)
                 .map_err(|e| format!("render_size: {e}, or empty"))?;
+        }
+        if !self.human_window_size.trim().is_empty() {
+            crate::dsda::WindowSpec::parse_size(&self.human_window_size, crate::dsda::MAX_WINDOW)
+                .map_err(|e| format!("human_window_size: {e}, or empty"))?;
         }
         if !self.music.is_empty() && crate::music::Recordings::parse(&self.music).is_none() {
             return Err("music: sc55, idkfa, or empty (MIDI)".into());
@@ -472,6 +482,17 @@ impl Settings {
                     }
                     .into(),
                 );
+                if self.human_window {
+                    if !self.human_window_size.trim().is_empty() {
+                        a.extend([
+                            "--human-window-size".into(),
+                            self.human_window_size.trim().to_string(),
+                        ]);
+                    }
+                    if self.human_fullscreen {
+                        a.push("--human-fullscreen".into());
+                    }
+                }
             }
             if self.camera != "grid" {
                 a.extend(["--camera".into(), self.camera.clone()]);
@@ -1786,7 +1807,19 @@ mod tests {
             "{}",
             line(&s)
         );
+        s.human_window_size = "1280x960".into();
+        s.human_fullscreen = true;
+        assert!(
+            line(&s).contains("--human-window --human-window-size 1280x960 --human-fullscreen"),
+            "{}",
+            line(&s)
+        );
+        s.human_window_size = "10x10".into();
+        assert!(s.check().is_err());
+        s.human_window_size = String::new();
+        s.human_fullscreen = false;
         s.human_window = false;
+        assert!(!line(&s).contains("--human-fullscreen"), "{}", line(&s));
         s.mode = "bot".into();
         s.fight_styles = "berserk,,evasive".into();
         s.no_hunt = "2".into();

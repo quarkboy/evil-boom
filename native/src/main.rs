@@ -981,6 +981,8 @@ fn watch_options(
         fight_style: Vec::new(),
         camera: None,
         human_window: false,
+        human_window_size: None,
+        human_fullscreen: false,
         window: evilboom::dsda::WindowSpec::default(),
         render: None,
         soundfont: evilboom::config::default_soundfont(),
@@ -1034,6 +1036,19 @@ fn watch_options(
             }
             "--human" => w.human = true,
             "--human-window" => {
+                w.human = true;
+                w.human_window = true;
+            }
+            "--human-window-size" => {
+                w.human_window_size = Some(evilboom::dsda::WindowSpec::parse_size(
+                    it.next().ok_or("--human-window-size WIDTHxHEIGHT")?,
+                    evilboom::dsda::MAX_WINDOW,
+                )?);
+                w.human = true;
+                w.human_window = true;
+            }
+            "--human-fullscreen" => {
+                w.human_fullscreen = true;
                 w.human = true;
                 w.human_window = true;
             }

@@ -1153,6 +1153,15 @@ EVIL_API void evil_play_show(const unsigned int *px, int w, int h)
   SDL_RenderPresent(evil_play_renderer);
 }
 
+/* The play window the whole screen it's on (the desktop's resolution, borderless), or a window
+ * again (`on` 0). Returns 1 if it's done. */
+EVIL_API int evil_play_fullscreen(int on)
+{
+  if (!evil_play_window)
+    return 0;
+  return SDL_SetWindowFullscreen(evil_play_window, on ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0) == 0;
+}
+
 static void evil_play_close(void)
 {
   if (evil_play_texture)
