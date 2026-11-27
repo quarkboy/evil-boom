@@ -1150,17 +1150,15 @@ EVIL_API int evil_window_events(int *out, int max)
 }
 
 /* The mouse kept in the window for a player (on) or let go: unseen, held inside it, its motion
- * relative. Relative mode by warping the pointer back to the window's middle: the system's own
- * kind doesn't take everywhere (XWayland, WSLg), and warping works wherever a pointer can be
- * moved. */
+ * relative. (Not by warping the pointer back to the window's middle: where the pointer can't be
+ * moved, WSLg's, each motion was then counted from the middle, a turn many times too far. Under
+ * WSLg the pointer is the Windows desktop's own, and none of this takes: it shows and leaves
+ * the window; the motion's still right.) */
 static int evil_grabbed;
 static void evil_grab(int on)
 {
   if (on)
-  {
-    SDL_SetHint(SDL_HINT_MOUSE_RELATIVE_MODE_WARP, "1");
     SDL_RaiseWindow(evil_window);
-  }
   SDL_SetWindowGrab(evil_window, on ? SDL_TRUE : SDL_FALSE);
   SDL_SetRelativeMouseMode(on ? SDL_TRUE : SDL_FALSE);
   SDL_ShowCursor(on ? SDL_DISABLE : SDL_ENABLE);
