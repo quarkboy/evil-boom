@@ -966,19 +966,36 @@ EVIL_API int evil_draw_at(unsigned char *out, int max, double between)
  * status bar theirs; the sound's listener and the game's own view (consoleplayer's) put back
  * after. Returns as evil_draw_at; `palette`, the palette that player's frame is in (as
  * evil_palette). */
+/* the player the game's sound is heard as (`evil_listen`): the console player unless set */
+static int evil_listener = -1;
+
 EVIL_API int evil_draw_as(int player, unsigned char *out, int max, double between, int *palette)
 {
   extern int st_palette;
-  int got;
+  int got, back;
   if (player < 0 || player >= evil_player_count || !playeringame[player])
     return 0;
   displayplayer = player;
   ST_EvilView(player);
   got = evil_draw_at(out, max, between);
   *palette = st_palette < 0 ? 0 : st_palette;
-  displayplayer = consoleplayer;
-  ST_EvilView(consoleplayer);
+  back = evil_listener >= 0 && evil_listener < evil_player_count && playeringame[evil_listener]
+             ? evil_listener
+             : consoleplayer;
+  displayplayer = back;
+  ST_EvilView(back);
   return got;
+}
+
+/* The game's sound heard as `player` hears it (a co-op or deathmatch game's camera on them),
+ * from now: the view the game itself shows theirs between draws. -1: the console player's. */
+EVIL_API void evil_listen(int player)
+{
+  evil_listener = player;
+  displayplayer = player >= 0 && player < evil_player_count && playeringame[player]
+                      ? player
+                      : consoleplayer;
+  ST_EvilView(displayplayer);
 }
 
 /* evil_draw_at the tic as it is. */

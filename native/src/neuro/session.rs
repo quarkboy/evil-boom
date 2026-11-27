@@ -589,12 +589,17 @@ impl Session {
     /// others passed over): each stays as it is, leaves her action's schema, and is refused
     /// if sent anyway. Instinct locked is instinct on.
     pub fn set_locked<S: AsRef<str>>(&mut self, names: &[S]) {
-        let new: std::collections::BTreeSet<&'static str> = LOCKABLE
+        let mut new: std::collections::BTreeSet<&'static str> = LOCKABLE
             .iter()
             .copied()
             .filter(|l| names.iter().any(|n| n.as_ref().trim() == *l))
             .collect();
-        if new.contains("instinct") {
+        // (a deathmatch: instinct locked off, whatever lock list comes: the console's sent with
+        // each game, its instinct locked on, had her carrying on by instinct)
+        if self.deathmatch {
+            new.insert("instinct");
+            self.director.idle_auto = None;
+        } else if new.contains("instinct") {
             self.director.idle_auto = Some(crate::control::directed::IDLE_AUTO);
         }
         let changed = |of: &[&str]| {
@@ -612,6 +617,10 @@ impl Session {
     /// hunting and gearing up hers to order (`doom_hunt`), her policy's stance and hunting the
     /// deathmatch styles, no exit, no goal, no game.
     pub fn set_deathmatch(&mut self, on: bool) {
+        if on {
+            self.locked.insert("instinct");
+            self.director.idle_auto = None;
+        }
         if self.deathmatch != on {
             self.deathmatch = on;
             self.policy_stale = true;
@@ -621,6 +630,8 @@ impl Session {
     }
 
     pub fn set_instinct(&mut self, on: bool) {
+        // (a deathmatch: off, always)
+        let on = on && !self.deathmatch;
         self.director.idle_auto = on.then_some(crate::control::directed::IDLE_AUTO);
     }
 

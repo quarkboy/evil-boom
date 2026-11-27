@@ -52,6 +52,8 @@ form's changes first).
 | Instinct off from the start | `instinct_off` | directed: she stands and waits when an action's done (`--instinct off`), her starting settings' instinct made off to match |
 | **Multiplayer** (its own tab): Players, Kind of game | `players`, `multi` | 1 (Evil alone) to 4, each a bot of her own in one game (`--players`); `coop`, `deathmatch` or `altdeath` |
 | You play too | `human` | player 1 is whoever's at the game's window, by its keyboard and mouse (`--human`); the Neuros, if they direct, players 2 on |
+| Camera | `camera` | what the window shows as the game begins: `grid` (every view) or a player's number (their view filling it, the sound theirs); switched from the Live tab as it plays |
+| Each bot (a deathmatch): Hunts, Hunting, Fighting | `no_hunt`, `hunt_styles`, `fight_styles` | per player in order, comma-separated: the ones that don't go looking, and each one's styles (`--hunt`, `--hunt-style`, `--fight-style`; steady unless set) |
 | Frag limit, Time limit (minutes) | `frag_limit`, `minutes` | a deathmatch over at so many frags, or after so long (20 and 10 unless set; 0: no limit) |
 | **Ultra instinct:** on or off, Deaths on a level before it's hers | `ultra`, `ultra_after` | once a level has killed her that often (3 unless set; 0: from its start), a death is undone and the fight searched for her in the game itself, for up to 30 s (60 after as many deaths again), got back as she plays. On unless turned off; only where she can die |
 | Seconds a death is undone, Game speed while it searches, Worker processes | `ultra_back`, `ultra_speed`, `ultra_workers` | how far back (5; 1 to 20), the game's pace meanwhile (0.5; up to 1), and the processes that search (8; 0: the game itself, the picture stopping for each look) |
@@ -70,6 +72,15 @@ instinct is always off (docs/NEURO.md). The GPT stand-in plays only alone. Doom'
 instinct and Evil choosing the game are left out; the window is co-op's own (each one's view,
 the map, their cards). From the page: pause, speed, sound, the picture, god mode, the exits, and
 Talk to Evil and her settings (to every one) work; Restart level and Go to level don't yet.
+
+The camera: on the Live tab (Players) and the Multiplayer tab's Now, a button for every view at
+once and one for each player, named as her Neuro reported herself on connecting; the window
+then shows that player's view large, the standings beside it, the others small, and the game's
+sound is heard as that player hears it. In the window itself 1-4 switch it, 0 every view, C the
+next. In a deathmatch the Evil tab's settings are hers there (fight, hunt, risk, powerups; no
+goal, no stance, no instinct: it's always off), kept for her start and sent to every one, over
+each bot's own on the Multiplayer tab; and the log has each frag ("frag: player 2 fragged
+player 1 (P1 0, P2 1)") and the match's end ("match over: player 2 won (...)") as events.
 
 Settings that apply only under others are shown only then: the Neuro URL for Neuro, Evil's for
 Neuro or GPT, the title card's choice with Doom's own screens, the column for the stream.

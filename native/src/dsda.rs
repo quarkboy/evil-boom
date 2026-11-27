@@ -388,6 +388,7 @@ pub struct Dsda {
     /// (none in a library from before it was added)
     window_icon_fn: Option<IconFn>,
     window_input_fn: Option<InputFn>,
+    listen_fn: Option<unsafe extern "C" fn(c_int)>,
     coop: CoopFns,
     /// what a frame's drawn into, kept across frames
     draw_buffer: RefCell<Vec<u8>>,
@@ -631,6 +632,8 @@ impl Dsda {
         // SAFETY: as above, evil_window_input's signature; optional (an older library: no
         // human player).
         let window_input_fn = unsafe { get::<InputFn>(&lib, b"evil_window_input") }.ok();
+        // SAFETY: as above, `void evil_listen(int)`; optional (an older library: player 1's ears).
+        let listen_fn = unsafe { get::<unsafe extern "C" fn(c_int)>(&lib, b"evil_listen") }.ok();
         let argv: Vec<CString> = std::iter::once("evil".to_string())
             .chain(args.iter().cloned())
             .map(CString::new)
@@ -703,6 +706,7 @@ impl Dsda {
             window_fns,
             window_icon_fn,
             window_input_fn,
+            listen_fn,
             coop,
             draw_buffer: RefCell::new(Vec::new()),
             _argv: std::mem::ManuallyDrop::new(argv),
@@ -1340,6 +1344,14 @@ impl Dsda {
             mouse: (mouse[0], mouse[1]),
             buttons: mouse[2],
         })
+    }
+
+    /// The game's sound heard as `player` hears it (0-based; None: the console player's).
+    pub fn listen(&self, player: Option<usize>) {
+        if let Some(f) = self.listen_fn {
+            // SAFETY: a number; one that's no player is taken as none.
+            unsafe { f(player.map_or(-1, |p| p as c_int)) };
+        }
     }
 
     pub fn window_close(&self) {

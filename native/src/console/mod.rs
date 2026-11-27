@@ -153,6 +153,12 @@ pub enum Command {
     Begin,
     /// close the game cleanly
     Quit,
+    /// a co-op or deathmatch game's camera: that player's view filling the window, the sound
+    /// heard as they hear it (1 the first); none: every view at once
+    Camera {
+        #[serde(default)]
+        player: Option<usize>,
+    },
 }
 
 /// What the game tells the console.
@@ -278,6 +284,9 @@ pub struct GameState {
     /// a co-op or deathmatch game's players, each (none alone)
     #[serde(default)]
     pub players: Vec<PlayerState>,
+    /// ...and whose the camera is (1 the first), if one's is; none: every view at once
+    #[serde(default)]
+    pub camera: Option<usize>,
 }
 
 /// One of a co-op or deathmatch game's players, as the console shows her.

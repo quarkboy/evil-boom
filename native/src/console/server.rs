@@ -178,6 +178,15 @@ pub struct Settings {
     /// with them: player 1 is whoever's at the game's window, its keyboard and mouse
     /// (`--human`); the rest the bots, or Neuros
     pub human: bool,
+    /// a deathmatch's bots, a player each in order (1 the first), comma-separated: how each
+    /// hunts and fights (`tactical::styles`; "" the first's default, steady), and which don't
+    /// hunt at all (their numbers)
+    pub hunt_styles: String,
+    pub fight_styles: String,
+    pub no_hunt: String,
+    /// the camera a co-op or deathmatch game begins with: "grid" (every view), or a player's
+    /// number (their view filling the window, the sound theirs)
+    pub camera: String,
 }
 
 impl Default for Settings {
@@ -241,6 +250,10 @@ impl Default for Settings {
             frag_limit: 20,
             minutes: 10.0,
             human: false,
+            hunt_styles: String::new(),
+            fight_styles: String::new(),
+            no_hunt: String::new(),
+            camera: "grid".into(),
         }
     }
 }
@@ -359,6 +372,44 @@ impl Settings {
         if !(0.0..=600.0).contains(&self.minutes) {
             return Err("minutes: 0 to 600".into());
         }
+        let list =
+            |v: &str| -> Vec<String> { v.split(',').map(|x| x.trim().to_lowercase()).collect() };
+        for (name, v, all) in [
+            (
+                "hunt_styles",
+                &self.hunt_styles,
+                &crate::tactical::styles::HUNT_STYLES[..],
+            ),
+            (
+                "fight_styles",
+                &self.fight_styles,
+                &crate::tactical::styles::FIGHT_STYLES[..],
+            ),
+        ] {
+            if let Some(bad) = list(v)
+                .iter()
+                .find(|x| !x.is_empty() && !all.contains(&x.as_str()))
+            {
+                return Err(format!("{name}: no style \"{bad}\" ({})", all.join(", ")));
+            }
+        }
+        if list(&self.no_hunt).iter().any(|x| {
+            !x.is_empty()
+                && x.parse::<usize>()
+                    .ok()
+                    .is_none_or(|n| !(1..=4).contains(&n))
+        }) {
+            return Err("no_hunt: player numbers, 1 to 4".into());
+        }
+        if self.camera != "grid"
+            && self
+                .camera
+                .parse::<usize>()
+                .ok()
+                .is_none_or(|n| !(1..=4).contains(&n))
+        {
+            return Err("camera: grid, or a player's number (1 to 4)".into());
+        }
         if self.multiplayer() && self.mode == "gpt" {
             return Err("the GPT stand-in plays alone: one player, or the bots or Neuro".into());
         }
@@ -411,6 +462,52 @@ impl Settings {
             a.extend(["--players".into(), self.players.to_string()]);
             if self.human {
                 a.push("--human".into());
+            }
+            if self.camera != "grid" {
+                a.extend(["--camera".into(), self.camera.clone()]);
+            }
+            // (a deathmatch's bots: each one's styles, the default steady; those that hunt)
+            if self.multi != "coop" {
+                let each = |v: &str| -> String {
+                    let mut v: Vec<String> =
+                        v.split(',').map(|x| x.trim().to_lowercase()).collect();
+                    v.resize(self.players, String::new());
+                    v.iter()
+                        .map(|x| {
+                            if x.is_empty() {
+                                "steady".to_string()
+                            } else {
+                                x.clone()
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join(",")
+                };
+                if self.hunt_styles.split(',').any(|x| !x.trim().is_empty()) {
+                    a.extend(["--hunt-style".into(), each(&self.hunt_styles)]);
+                }
+                if self.fight_styles.split(',').any(|x| !x.trim().is_empty()) {
+                    a.extend(["--fight-style".into(), each(&self.fight_styles)]);
+                }
+                let off: Vec<usize> = self
+                    .no_hunt
+                    .split(',')
+                    .filter_map(|x| x.trim().parse::<usize>().ok())
+                    .collect();
+                if !off.is_empty() {
+                    let on: Vec<String> = (1..=self.players)
+                        .filter(|p| !off.contains(p))
+                        .map(|p| p.to_string())
+                        .collect();
+                    a.extend([
+                        "--hunt".into(),
+                        if on.is_empty() {
+                            "none".into()
+                        } else {
+                            on.join(",")
+                        },
+                    ]);
+                }
             }
             if self.multi != "coop" {
                 a.extend([
@@ -1673,6 +1770,18 @@ mod tests {
         assert!(!a.contains("--instinct"), "{a}");
         s.human = true;
         assert!(line(&s).contains("--players 3 --human"), "{}", line(&s));
+        s.mode = "bot".into();
+        s.fight_styles = "berserk,,evasive".into();
+        s.no_hunt = "2".into();
+        s.camera = "2".into();
+        assert!(s.check().is_ok());
+        let a = line(&s);
+        assert!(a.contains("--fight-style berserk,steady,evasive"), "{a}");
+        assert!(a.contains("--hunt 1,3") && a.contains("--camera 2"), "{a}");
+        assert!(!a.contains("--hunt-style"), "{a}");
+        s.fight_styles = "bezerk".into();
+        assert!(s.check().is_err());
+        s.fight_styles = String::new();
         s.players = 5;
         assert!(s.check().is_err());
         s.evil_policy = Some(r#"{"instinct":"on","stance":"steady"}"#.into());

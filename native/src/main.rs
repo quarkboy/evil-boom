@@ -979,6 +979,7 @@ fn watch_options(
         hunt: None,
         hunt_style: Vec::new(),
         fight_style: Vec::new(),
+        camera: None,
         window: evilboom::dsda::WindowSpec::default(),
         render: None,
         soundfont: evilboom::config::default_soundfont(),
@@ -1031,6 +1032,19 @@ fn watch_options(
                 w.lives_shared = true;
             }
             "--human" => w.human = true,
+            "--camera" => {
+                w.camera = match it.next().map(String::as_str) {
+                    Some("grid") => None,
+                    Some(n) => Some(
+                        n.parse::<usize>()
+                            .ok()
+                            .filter(|n| (1..=4).contains(n))
+                            .map(|n| n - 1)
+                            .ok_or("--camera N|grid (the player whose view fills the window, 1 the first)")?,
+                    ),
+                    None => return Err("--camera N|grid".into()),
+                };
+            }
             "--hunt-style" | "--fight-style" => {
                 let hunt = a == "--hunt-style";
                 let (all, check): (&[&str], fn(&str) -> bool) = if hunt {

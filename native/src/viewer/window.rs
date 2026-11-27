@@ -14,7 +14,11 @@ pub(super) mod key {
     pub const SPACE: i32 = 32;
     pub const MINUS: i32 = 45;
     pub const EQUALS: i32 = 61;
+    pub const N0: i32 = 48;
+    pub const N1: i32 = 49;
+    pub const N4: i32 = 52;
     pub const A: i32 = 97;
+    pub const C: i32 = 99;
     pub const F: i32 = 102;
     pub const K: i32 = 107;
     pub const L: i32 = 108;

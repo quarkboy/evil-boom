@@ -175,6 +175,9 @@ pub struct WatchOptions {
     /// or one a player in order (the last for the rest); empty: the tuning's own
     pub hunt_style: Vec<String>,
     pub fight_style: Vec<String>,
+    /// (`--camera N`) a co-op or deathmatch game begun with the camera on player N (0-based):
+    /// their view filling the window, the sound theirs; None: every view at once
+    pub camera: Option<usize>,
     /// (`--deathmatch`, `--altdeath`) with more than one player: 0 co-op, 1 deathmatch, 2
     /// altdeath
     pub deathmatch: i32,

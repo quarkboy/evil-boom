@@ -130,6 +130,9 @@ struct Coop {
     console: Option<console::Link>,
     /// a deathmatch's styles, hunting and fighting, as given (for the report)
     styles: (Vec<String>, Vec<String>),
+    /// the camera: one player's view filling the window, the sound theirs (0-based); none:
+    /// every view at once
+    camera: Option<usize>,
 }
 
 /// The seat a person plays (`--human`): player 1, the game's own (whose the sound is).
@@ -162,6 +165,9 @@ pub fn watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(), String> 
     }
     let sound = o.sound && !o.headless;
     let mut coop = Coop::new(wad, map_name, o, sound)?;
+    if let Some(c) = o.camera {
+        coop.set_camera(Some(c));
+    }
     if o.headless {
         return coop.headless(o);
     }
@@ -269,6 +275,7 @@ impl Coop {
             sound_on: sound,
             console,
             styles: (o.hunt_style.clone(), o.fight_style.clone()),
+            camera: None,
         })
     }
 
@@ -669,6 +676,9 @@ impl Coop {
         if let Some(k) = self.console.as_mut() {
             k.new_level();
         }
+        // (the level begun again sets the game's view to the console player's: the camera's put
+        // back)
+        self.engine.game.listen(self.camera);
         println!("{} done: on to {next}", self.map_name);
         (self.m, self.nav, self.map_name) = (m, nav, next);
         self.began = self.engine.tic;
@@ -718,6 +728,11 @@ impl Coop {
         let tic = self.engine.tic;
         let exited = self.engine.exited();
         let final_frags = self.frags();
+        // (the console told the match's end now: on through the episode, the next level's begun
+        // before its next look would see this one over)
+        if exited && self.deathmatch > 0 {
+            self.console_match_over(&final_frags);
+        }
         for (n, s) in self
             .neuro
             .iter_mut()
@@ -876,7 +891,28 @@ impl Coop {
                     }
                     continue;
                 }
+                // (the camera: 1-4 a player's, 0 every view, C the next)
+                if let Some(p) = (key::N1..=key::N4)
+                    .contains(&k)
+                    .then(|| (k - key::N1) as usize)
+                {
+                    if p < self.seats.len() {
+                        self.set_camera(Some(p));
+                    }
+                    continue;
+                }
                 match k {
+                    key::N0 => {
+                        self.set_camera(None);
+                    }
+                    key::C => {
+                        let next = match self.camera {
+                            None => Some(0),
+                            Some(c) if c + 1 < self.seats.len() => Some(c + 1),
+                            Some(_) => None,
+                        };
+                        self.set_camera(next);
+                    }
                     key::ESCAPE => break 'frames,
                     key::SPACE => self.paused = !self.paused,
                     key::N | key::RIGHT if self.paused && !self.engine.exited() => self.tic(),
@@ -970,7 +1006,9 @@ impl Coop {
         c.clip = (0, 0, W, H);
         c.fill((0, 0, W, H), BG);
         let n = self.seats.len();
-        if self.human.is_some() {
+        if let (Some(cam), None) = (self.camera, &self.human) {
+            self.draw_camera(c, cam);
+        } else if self.human.is_some() {
             // (a person playing: their view large, 4:3; the others' small down the side, the
             // map under them if there's room)
             let (vw, vh) = (H * 4 / 3, H);
@@ -1015,6 +1053,66 @@ impl Coop {
         }
     }
 
+    /// The camera on player `p` (`set_camera`): their view 4:3 in the middle, the others in a
+    /// column of standings to the left (frags in a deathmatch) and small to the right.
+    fn draw_camera(&self, c: &mut Canvas, p: usize) {
+        let (vw, vh) = (H * 4 / 3, H);
+        let x0 = (W - vw) / 2;
+        self.draw_view(c, p, (x0, 0, vw, vh));
+        // (the standings: best first in a deathmatch, in turn in co-op)
+        let frags = (self.deathmatch > 0).then(|| self.frags());
+        let mut order: Vec<usize> = (0..self.seats.len()).collect();
+        if let Some(f) = &frags {
+            order.sort_by_key(|&i| std::cmp::Reverse(f[i]));
+        }
+        c.clip = (0, 0, x0, H);
+        let mut y = c.text(
+            if frags.is_some() { "FRAGS" } else { "PLAYERS" },
+            (12, 12),
+            HEAD,
+            2,
+        ) + 8;
+        for i in order {
+            let s = &self.seats[i];
+            let health = s.obs.as_ref().and_then(|o| o.health).unwrap_or(0.0);
+            let line = match &frags {
+                Some(f) => format!("P{} {:>3}", i + 1, f[i]),
+                None => format!("P{} {:>3}%", i + 1, health.round()),
+            };
+            if i == p {
+                c.fill((4, y - 2, x0 - 8, 22), (40, 40, 52));
+            }
+            y = c.text(&line, (12, y), COLOURS[i], 2) + 2;
+            let sub = if s.dead_since.is_some() {
+                "dead".to_string()
+            } else {
+                format!("health {:.0}", health)
+            };
+            y = c.text(&sub, (20, y), DIM, 1) + 8;
+        }
+        c.clip = (0, 0, W, H);
+        // (the others, small, to the right)
+        let side = (x0 + vw, W - x0 - vw);
+        let small = side.1 * 3 / 4;
+        let mut y = 0;
+        for i in (0..self.seats.len()).filter(|&i| i != p) {
+            self.draw_view(c, i, (side.0, y, side.1, small));
+            y += small;
+        }
+    }
+
+    /// The camera on player `p` (0-based), the game's sound heard as they hear it; None, every
+    /// view at once and the sound the first's. What's to be logged of it.
+    pub(super) fn set_camera(&mut self, p: Option<usize>) -> String {
+        let p = p.filter(|&p| p < self.seats.len());
+        self.camera = p;
+        self.engine.game.listen(p);
+        match p {
+            Some(p) => format!("console: camera on player {}", p + 1),
+            None => "console: every view at once".into(),
+        }
+    }
+
     /// Player i's view, scaled into r, her name over it.
     fn draw_view(&self, c: &mut Canvas, i: usize, r: Rect) {
         c.clip = r;
@@ -1038,13 +1136,26 @@ impl Coop {
             }
         }
         // (her name, in her colour, and a frame round the view)
+        // (who's playing it: the name her Neuro gave on connecting, as the SDK reported it)
+        let who = i
+            .checked_sub(self.neuro_from)
+            .and_then(|k| self.neuro.get(k))
+            .map(|n| n.link_state().2)
+            .filter(|w| !w.is_empty());
         let name = if i == HUMAN_SEAT && self.human.is_some() {
             format!("Player {} (you)", i + 1)
+        } else if let Some(w) = who {
+            format!("P{}: {w}", i + 1)
         } else {
             format!("Player {}", i + 1)
         };
-        c.fill((r.0, r.1, 8 * name.len() * 2 + 12, 22), (0, 0, 0));
-        c.text(&name, (r.0 + 6, r.1 + 3), COLOURS[i], 2);
+        // (smaller on a small view: the name whole)
+        let scale = if r.2 >= 600 { 2 } else { 1 };
+        c.fill(
+            (r.0, r.1, 8 * name.len() * scale + 12, 11 * scale),
+            (0, 0, 0),
+        );
+        c.text(&name, (r.0 + 6, r.1 + scale + 1), COLOURS[i], scale);
         if s.dead_since.is_some() {
             c.text(
                 "DEAD",

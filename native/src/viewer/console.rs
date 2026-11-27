@@ -540,6 +540,11 @@ impl Watch {
                         .push("console: Doom's own screens are off: nothing to begin".into()),
                 },
                 Command::Quit => frame = Frame::Quit,
+                Command::Camera { .. } => self
+                    .agent
+                    .x_mut()
+                    .log
+                    .push("console: one player: no camera to switch".into()),
             }
         }
         if let Some(why) = c.link.lost() {

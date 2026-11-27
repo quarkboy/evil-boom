@@ -24,6 +24,8 @@ pub(super) struct Link {
     /// orders given before the level had begun (what the console starts each with): given
     /// once every one has looked
     held: Vec<(String, Option<String>)>,
+    /// (a deathmatch) the frags as last told: who of whom
+    frags: Option<[[i32; 4]; 4]>,
 }
 
 impl Link {
@@ -33,6 +35,7 @@ impl Link {
             shown: Vec::new(),
             told: (String::new(), false, Vec::new()),
             held: Vec::new(),
+            frags: None,
         }
     }
 
@@ -125,6 +128,9 @@ impl Coop {
                 });
             }
             Command::Quit => *quit = true,
+            Command::Camera { player } => {
+                return Some(self.set_camera(player.and_then(|p| p.checked_sub(1))));
+            }
             // (to every player's Neuro: what's said, the link again, what's locked and forced)
             _ if self.neuro.is_empty() && neuros_only(&cmd) => {
                 return Some("console: not directed by Neuro".into());
@@ -237,8 +243,43 @@ impl Coop {
         let mut events = Vec::new();
         if now.0 != k.told.0 {
             events.push(format!("level {}", now.0));
+            k.frags = None;
         }
-        if now.1 && !k.told.1 {
+        // (a deathmatch: each frag, who of whom, with the score; the match's end with the winner)
+        if self.deathmatch > 0 {
+            let f = self.engine.frags();
+            let n = self.seats.len();
+            let score = self.frags();
+            let line = |score: &[i32]| -> String {
+                (0..n)
+                    .map(|p| format!("P{} {}", p + 1, score[p]))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            };
+            if let Some(was) = k.frags {
+                for by in 0..n {
+                    for of in 0..n {
+                        for _ in was[by][of]..f[by][of] {
+                            events.push(if by == of {
+                                format!(
+                                    "frag: player {} killed themselves ({})",
+                                    by + 1,
+                                    line(&score)
+                                )
+                            } else {
+                                format!(
+                                    "frag: player {} fragged player {} ({})",
+                                    by + 1,
+                                    of + 1,
+                                    line(&score)
+                                )
+                            });
+                        }
+                    }
+                }
+            }
+            k.frags = Some(f);
+        } else if now.1 && !k.told.1 {
             events.push("exited".into());
         }
         for (i, &d) in now.2.iter().enumerate() {
@@ -340,6 +381,7 @@ impl Coop {
             doing: players
                 .first()
                 .map_or_else(String::new, |p| p.doing.clone()),
+            camera: self.camera.map(|c| c + 1),
             ..GameState::default()
         };
         // (the top bar's player: the first)
@@ -399,6 +441,30 @@ impl Coop {
             let palette = self.palettes.get(*pal).unwrap_or(&self.palettes[0]);
             k.c.game_view(px, Some(&(*w, *h, f.clone())), palette);
         }
+    }
+}
+
+impl Coop {
+    /// A deathmatch over: the winner and the score, as an event (at its end, `level_over`).
+    pub(super) fn console_match_over(&mut self, score: &[i32]) {
+        let Some(k) = self.console.as_mut() else {
+            return;
+        };
+        let n = score.len();
+        let top = score.iter().copied().max().unwrap_or(0);
+        let won: Vec<String> = (0..n)
+            .filter(|&p| score[p] == top)
+            .map(|p| format!("player {}", p + 1))
+            .collect();
+        let line: Vec<String> = (0..n).map(|p| format!("P{} {}", p + 1, score[p])).collect();
+        k.c.link().send(FromGame::Event {
+            what: format!(
+                "match over: {} {} ({})",
+                won.join(" and "),
+                if won.len() > 1 { "drew" } else { "won" },
+                line.join(", ")
+            ),
+        });
     }
 }
 

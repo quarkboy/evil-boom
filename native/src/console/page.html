@@ -231,6 +231,9 @@ input[type=checkbox]:checked:not([data-lock]) { box-shadow: 0 0 10px -2px var(--
 .lock input[type=checkbox]:checked { filter: drop-shadow(0 0 5px #e0a83a99); }
 #stats { display: grid; gap: 8px; margin: 2px 0 12px; }
 #stats[hidden] { display: none; }
+/* (a deathmatch's settings or the rest: hidden whichever the game isn't, over a box's own display) */
+[data-dm][hidden] { display: none !important; }
+.cams button.on { border-color: var(--accent); color: var(--text); box-shadow: 0 0 10px -2px var(--accent); }
 #players-live, #players-multi { width: 100%; border-collapse: collapse; font-size: 14px; }
 .players th { text-align: left; color: var(--dim); font-weight: 600; padding: 4px 8px; border-bottom: 1px solid var(--line); }
 .players td { padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
@@ -367,8 +370,14 @@ header { gap: 8px 10px; } header h1 { font-size: 16px; letter-spacing: .18em; ga
         <label title="One: Evil alone, as always. Two to four: each player a bot of her own, in one game">Players <select form="settings" name="players"><option value="1">1 (Evil alone)</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label>
         <label data-when="multi">Kind of game <select form="settings" name="multi"><option value="coop">co-op: all together, out by the exit</option><option value="deathmatch">deathmatch</option><option value="altdeath">deathmatch 2.0 (items come back)</option></select></label>
         <span class="check wide" data-when="multi" title="Player 1 is you, at the game's window: WASD, the mouse turns, Ctrl or click fires, Space, E or right click uses, 1-7 and the wheel change weapons, Shift walks. Esc lets the mouse go (click to take it again; Esc again ends the game); P pauses."><input form="settings" type="checkbox" name="human" id="m-human"><label for="m-human" class="check">You play too: player 1, at the game's window (keyboard and mouse)</label></span>
+        <label data-when="multi" title="What the game's window shows as it begins: every view at once, or one player's filling it (the sound theirs). Switched from the Live tab as it plays.">Camera <select form="settings" name="camera"><option value="grid">every view at once</option><option value="1">player 1</option><option value="2">player 2</option><option value="3">player 3</option><option value="4">player 4</option></select></label>
         <label data-when="dm" title="The match is over when a player has this many frags. 0: no limit">Frag limit <input form="settings" type="number" name="frag_limit" min="0" max="999" step="1"></label>
         <label data-when="dm" title="The match is over after this long. 0: no limit">Time limit (minutes) <input form="settings" type="number" name="minutes" min="0" max="600" step="1"></label>
+      </fieldset>
+      <fieldset class="group wide" data-when="dm"><legend>Each bot</legend>
+        <p class="note wide">How each hunts (most aggressive first: relentless, eager, steady, careful, passive) and fights (berserk, aggressive, steady, careful, evasive: how it stands and falls back, how widely it sprays rockets and plasma), and whether it goes looking for the others at all. With Neuro directing, these are where each starts, unless her settings kept on the Evil tab say otherwise (those go to every one); she changes them herself (doom_policy fight, hunt).</p>
+        <input type="hidden" form="settings" name="hunt_styles"><input type="hidden" form="settings" name="fight_styles"><input type="hidden" form="settings" name="no_hunt">
+        <table class="players wide" id="mp-rows"></table>
       </fieldset>
       <fieldset class="group wide" data-when="multi"><legend>Who directs them</legend>
         <p class="note wide" data-when="multi-bot">Each player is the bot alone. For Neuro to direct them, choose Neuro under "Who directs her" on the Setup tab.</p>
@@ -387,6 +396,7 @@ header { gap: 8px 10px; } header h1 { font-size: 16px; letter-spacing: .18em; ga
     </div>
     <h2 class="sub">Now</h2>
     <p class="note" id="players-none">No game of more than one running.</p>
+    <div class="row cams" id="cam-multi"></div>
     <table class="players" id="players-multi"></table>
   </section>
 
@@ -550,6 +560,7 @@ header { gap: 8px 10px; } header h1 { font-size: 16px; letter-spacing: .18em; ga
 
   <section id="sec-players" data-tab="live" hidden>
     <h2>Players</h2>
+    <div class="row cams" id="cam-live"></div>
     <table class="players" id="players-live"></table>
   </section>
 
@@ -593,8 +604,9 @@ header { gap: 8px 10px; } header h1 { font-size: 16px; letter-spacing: .18em; ga
       <div class="ev-col">
         <div class="ev-box">
           <h3>Goal</h3>
-          <div class="row mid"><b class="grow" id="ev-goal">none</b></div>
-          <div class="row end">
+          <p class="note" data-dm="dm">A deathmatch has no goal: she hunts or gears up by doom_hunt.</p>
+          <div class="row mid" data-dm="nodm"><b class="grow" id="ev-goal">none</b></div>
+          <div class="row end" data-dm="nodm">
             <div class="set"><div class="set-head"><span>finish</span><label class="lock" title="Locked: it stays as it is, is taken out of her doom_goal, and is refused if she sends it. You can still change it here. Kept for the next game."><input type="checkbox" data-lock="finish" aria-label="lock finish"></label></div><select id="ev-goalsel" class="fit" aria-label="finish">
               <option value="out">out</option><option value="kills">kills</option><option value="secrets">secrets</option>
               <option value="completionist">completionist</option>
@@ -611,12 +623,14 @@ header { gap: 8px 10px; } header h1 { font-size: 16px; letter-spacing: .18em; ga
         <div class="ev-box">
           <h3>Her settings</h3>
           <div class="ev-sets">
-            <div class="set"><div class="set-head"><span>stance</span><label class="lock" title="Locked: it stays as it is, is taken out of her doom_policy, and is refused if she sends it. You can still change it here. Kept for the next game."><input type="checkbox" data-lock="stance" aria-label="lock stance"></label></div><select data-p="stance" aria-label="stance"><option>careful</option><option>steady</option><option>bold</option><option>avoid</option><option>yolo</option></select></div>
-            <div class="set"><div class="set-head"><span>explore</span><label class="lock" title="Locked: it stays as it is, is taken out of her doom_policy, and is refused if she sends it. You can still change it here. Kept for the next game."><input type="checkbox" data-lock="explore" aria-label="lock explore"></label></div><select data-p="explore" aria-label="explore"><option>normal</option><option>methodical</option><option>speedy</option></select></div>
+            <div class="set" data-dm="dm"><div class="set-head"><span>fight</span><label class="lock" title="Locked: it stays as it is, is taken out of her doom_policy, and is refused if she sends it. You can still change it here. Kept for the next game."><input type="checkbox" data-lock="fight" aria-label="lock fight"></label></div><select data-p="fight" aria-label="fight" title="A deathmatch: how she fights her rivals, most aggressive first"><option>berserk</option><option>aggressive</option><option selected>steady</option><option>careful</option><option>evasive</option></select></div>
+            <div class="set" data-dm="dm"><div class="set-head"><span>hunt</span><label class="lock" title="Locked: it stays as it is, is taken out of her doom_policy, and is refused if she sends it. You can still change it here. Kept for the next game."><input type="checkbox" data-lock="hunt" aria-label="lock hunt"></label></div><select data-p="hunt" aria-label="hunt" title="A deathmatch: when she's geared up enough to hunt, and how far she goes for word of a rival"><option>relentless</option><option>eager</option><option selected>steady</option><option>careful</option><option>passive</option></select></div>
+            <div class="set" data-dm="nodm"><div class="set-head"><span>stance</span><label class="lock" title="Locked: it stays as it is, is taken out of her doom_policy, and is refused if she sends it. You can still change it here. Kept for the next game."><input type="checkbox" data-lock="stance" aria-label="lock stance"></label></div><select data-p="stance" aria-label="stance"><option>careful</option><option>steady</option><option>bold</option><option>avoid</option><option>yolo</option></select></div>
+            <div class="set" data-dm="nodm"><div class="set-head"><span>explore</span><label class="lock" title="Locked: it stays as it is, is taken out of her doom_policy, and is refused if she sends it. You can still change it here. Kept for the next game."><input type="checkbox" data-lock="explore" aria-label="lock explore"></label></div><select data-p="explore" aria-label="explore"><option>normal</option><option>methodical</option><option>speedy</option></select></div>
             <div class="set"><div class="set-head"><span>risk</span><label class="lock" title="Locked: it stays as it is, is taken out of her doom_policy, and is refused if she sends it. You can still change it here. Kept for the next game."><input type="checkbox" data-lock="risk" aria-label="lock risk"></label></div><select data-p="risk" aria-label="risk"><option>careful</option><option>normal</option><option>bold</option></select></div>
-            <div class="set"><div class="set-head"><span>save</span><label class="lock" title="Locked: it stays as it is, is taken out of her doom_policy, and is refused if she sends it. You can still change it here. Kept for the next game."><input type="checkbox" data-lock="save" aria-label="lock save"></label></div><select data-p="save" aria-label="save"><option>cells</option><option>none</option></select></div>
+            <div class="set" data-dm="nodm"><div class="set-head"><span>save</span><label class="lock" title="Locked: it stays as it is, is taken out of her doom_policy, and is refused if she sends it. You can still change it here. Kept for the next game."><input type="checkbox" data-lock="save" aria-label="lock save"></label></div><select data-p="save" aria-label="save"><option>cells</option><option>none</option></select></div>
             <div class="set"><div class="set-head"><span>powerups</span><label class="lock" title="Locked: it stays as it is, is taken out of her doom_policy, and is refused if she sends it. You can still change it here. Kept for the next game."><input type="checkbox" data-lock="powerups" aria-label="lock powerups"></label></div><select data-p="powerups" aria-label="powerups"><option>need</option><option>now</option></select></div>
-            <div class="set"><div class="set-head"><span>instinct</span><label class="lock" title="Locked: it stays as it is, is taken out of her doom_policy, and is refused if she sends it. You can still change it here. Kept for the next game."><input type="checkbox" data-lock="instinct" aria-label="lock instinct"></label></div><select data-p="instinct" aria-label="instinct"><option>on</option><option>off</option></select></div>
+            <div class="set" data-dm="nodm"><div class="set-head"><span>instinct</span><label class="lock" title="Locked: it stays as it is, is taken out of her doom_policy, and is refused if she sends it. You can still change it here. Kept for the next game."><input type="checkbox" data-lock="instinct" aria-label="lock instinct"></label></div><select data-p="instinct" aria-label="instinct"><option>on</option><option>off</option></select></div>
           </div>
           <div class="row"><button id="ev-setapply" class="primary">Apply as hers</button><span class="note mid" id="ev-policy"></span></div>
           <p class="note lead">A padlock shut: locked from her. You can still change it here.</p>
@@ -880,16 +894,70 @@ function render(p) {
   showChatBox(p.state);
   for (const name of ["map", "game", "stream"]) showView(name, (p.views || {})[name]);
   renderEvil(p.connected && st && st.evil, n, p);
-  renderPlayers(p.connected && st ? st.players || [] : []);
+  renderPlayers(p.connected && st ? st.players || [] : [], st && st.camera);
+  // (a deathmatch set up: her settings and goal as a deathmatch has them)
+  const set = p.settings || {}, dm = set.players > 1 && set.multi && set.multi !== "coop";
+  for (const el of document.querySelectorAll("[data-dm]")) el.hidden = (el.dataset.dm === "dm") !== dm;
   addLog(p.log);
 }
+// A deathmatch's bots, a row each: how each hunts and fights, and whether it hunts at all (kept in
+// the form's hidden fields as comma lists, a player each in order).
+const HUNT_STYLES = ["relentless", "eager", "steady", "careful", "passive"], FIGHT_STYLES = ["berserk", "aggressive", "steady", "careful", "evasive"];
+function buildRows() {
+  const f = $("settings").elements, n = Number(f.players.value) || 1;
+  const hunt = (f.hunt_styles.value || "").split(","), fight = (f.fight_styles.value || "").split(",");
+  const off = (f.no_hunt.value || "").split(",").map((x) => x.trim());
+  const head = document.createElement("tr");
+  for (const h of ["Player", "Hunts", "Hunting", "Fighting"]) { const th = document.createElement("th"); th.textContent = h; head.append(th); }
+  const rows = [];
+  for (let i = 1; i <= n; i++) {
+    const tr = document.createElement("tr"), td = () => { const d = document.createElement("td"); tr.append(d); return d; };
+    const who = td(); who.textContent = i + " (" + PLAYER_NAMES[i - 1] + ")";
+    const sw = document.createElement("span"); sw.className = "swatch"; sw.style.background = PLAYER_COLOURS[i - 1]; who.prepend(sw);
+    const on = document.createElement("input"); on.type = "checkbox"; on.checked = !off.includes(String(i)); on.dataset.row = i; on.dataset.k = "hunts"; td().append(on);
+    for (const [k, list, now] of [["hunt", HUNT_STYLES, hunt[i - 1]], ["fight", FIGHT_STYLES, fight[i - 1]]]) {
+      const sel = document.createElement("select"); sel.dataset.row = i; sel.dataset.k = k;
+      sel.replaceChildren(...list.map((v) => { const o = document.createElement("option"); o.value = o.textContent = v; return o; }));
+      sel.value = (now || "").trim() || "steady"; td().append(sel);
+    }
+    rows.push(tr);
+  }
+  $("mp-rows").replaceChildren(head, ...rows);
+}
+$("mp-rows").addEventListener("change", () => {
+  const f = $("settings").elements, rows = [...$("mp-rows").querySelectorAll("[data-row]")];
+  const of = (k) => rows.filter((e) => e.dataset.k === k);
+  f.hunt_styles.value = of("hunt").map((e) => e.value).join(",");
+  f.fight_styles.value = of("fight").map((e) => e.value).join(",");
+  f.no_hunt.value = of("hunts").filter((e) => !e.checked).map((e) => e.dataset.row).join(",");
+  formDirty = true; $("s-dirty").hidden = false; $("m-dirty").hidden = false;
+});
+
 // Each player of a co-op or deathmatch game: on the Live tab, and the Multiplayer tab's Now.
 const PLAYER_COLOURS = ["#50dc50", "#9696ff", "#d2a05a", "#f05050"], PLAYER_NAMES = ["green", "indigo", "brown", "red"];
 let playersKey = "";
-function renderPlayers(ps) {
-  const key = JSON.stringify(ps);
+function renderPlayers(ps, camera) {
+  const key = JSON.stringify(ps) + "|" + camera;
   if (key === playersKey) return;
   playersKey = key;
+  // (the camera: every view, or one player's, the sound theirs)
+  for (const id of ["cam-live", "cam-multi"]) {
+    const box = $(id), buttons = [];
+    if (ps.length) {
+      const b = document.createElement("button"); b.textContent = "All views"; b.classList.toggle("on", !camera);
+      b.title = "Every player's view at once, the sound player 1's";
+      b.onclick = () => cmd({ cmd: "camera" }); buttons.push(b);
+      for (const x of ps) {
+        const c = document.createElement("button");
+        c.textContent = "Camera P" + x.player + (x.neuro && x.neuro.who ? ": " + x.neuro.who : "");
+        c.style.borderLeft = "4px solid " + (PLAYER_COLOURS[x.player - 1] || "#888");
+        c.classList.toggle("on", camera === x.player);
+        c.title = "Player " + x.player + "'s view filling the window, the sound theirs";
+        c.onclick = () => cmd({ cmd: "camera", player: x.player }); buttons.push(c);
+      }
+    }
+    box.replaceChildren(...buttons);
+  }
   $("sec-players").hidden = !ps.length;
   $("players-none").hidden = !!ps.length;
   $("players-multi").hidden = !ps.length;
@@ -1129,6 +1197,7 @@ function applyWhen() {
     "multi-gpt": multi && f.mode.value === "gpt",
   });
   for (const el of document.querySelectorAll("#settings [data-when], #sec-multi [data-when], #s-multi-note")) el.hidden = !on[el.dataset.when];
+  if (Number(f.players.value) > 1 && f.multi.value !== "coop" && $("mp-rows").querySelectorAll("tr").length !== Number(f.players.value) + 1) buildRows();
 }
 function fillForm(s) {
   const f = $("settings");
@@ -1151,6 +1220,7 @@ function fillForm(s) {
       el.value = v;
     }
   }
+  buildRows();
   applyWhen();
 }
 function readForm() {
@@ -1233,7 +1303,7 @@ for (const el of document.querySelectorAll("[data-lock]")) el.addEventListener("
 });
 $("ev-setapply").onclick = async () => {
   const data = {};
-  for (const el of document.querySelectorAll("[data-p]")) if (!el.disabled) data[el.dataset.p] = el.value;
+  for (const el of document.querySelectorAll("[data-p]")) if (!el.disabled && !el.closest("[hidden]")) data[el.dataset.p] = el.value;
   if (await order("doom_policy", data)) setsDirty = false;
 };
 function gotoMap(map) {
