@@ -731,9 +731,14 @@ impl Coop {
                 let by: Vec<String> = (0..self.seats.len())
                     .map(|j| format!("{}", f[i][j]))
                     .collect();
+                let hunts = self.seats[i]
+                    .agent
+                    .player()
+                    .is_some_and(|p| p.hunt_state_on());
                 println!(
-                    "  player {}: frags {} (kills of players 1-{}: {}) deaths {}",
+                    "  player {}{}: frags {} (kills of players 1-{}: {}) deaths {}",
                     i + 1,
+                    if hunts { " (hunts)" } else { "" },
                     frags[i],
                     self.seats.len(),
                     by.join(" "),
@@ -1124,6 +1129,11 @@ fn load(w: &Wad, name: &str, o: &WatchOptions) -> Result<(Arc<MapData>, Rc<Navig
     Ok((m, Rc::new(nav)))
 }
 
+/// Whether player `i` (0-based) hunts the others in a deathmatch (`--hunt`).
+fn hunts(o: &WatchOptions, i: usize) -> bool {
+    o.hunt.as_ref().is_none_or(|h| h.contains(&i))
+}
+
 /// The players for a level, each in it afresh as a watch starts her.
 fn seats(nav: &Rc<Navigator>, map_name: &str, o: &WatchOptions) -> Result<Vec<Seat>, String> {
     let tune = Tuning::from(o.tuning.as_deref())?;
@@ -1153,6 +1163,11 @@ fn seats(nav: &Rc<Navigator>, map_name: &str, o: &WatchOptions) -> Result<Vec<Se
             }
             if o.deathmatch > 0 {
                 agent.x_mut().exit_held_back = true;
+                if hunts(o, i)
+                    && let Some(p) = agent.player_mut()
+                {
+                    p.set_hunting(o.fight > 0);
+                }
             }
             if o.keys {
                 agent.keys_only();

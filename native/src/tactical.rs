@@ -8,5 +8,6 @@ pub mod arbiter;
 pub mod combat;
 pub mod icon;
 pub mod player;
+pub mod rivals;
 pub mod sound;
 pub mod tuning;

@@ -118,6 +118,8 @@ The game:
                           use, 1-7 and the wheel weapons, Shift walk; Esc lets the mouse go,
                           again quits; P pauses). With --neuro: one Neuro for each of the rest
   --mouse DEG             degrees a mouse pixel turns you (0.1)
+  --hunt all|none|N,M     in a deathmatch, the bots that gear up and then hunt the others by
+                          what they see and hear (all unless told); the rest roam as before
   --speed X               play speed (1: real time; the sound plays only at 1)
   --mute                  no sound
   --log full|brief|off    how much of the log is kept in out/watch/: all of it (her fight's

@@ -102,6 +102,9 @@ struct Fight {
     /// a co-op game (`watch --players`): where the level puts things down (a gun put down
     /// stays there when picked up, and one she has already can't be: `left_lying`)
     coop: Option<BTreeSet<(i32, i32)>>,
+    /// a deathmatch she hunts the others in (`watch --deathmatch`, `--hunt`): what she knows of
+    /// them, and whether she's geared up to go after them (`tactical/rivals.rs`)
+    rivals: Option<super::rivals::Rivals>,
     /// the numbers she judges by (the fight's are the same)
     tune: Rc<Tuning>,
     /// what the hooks had to say (logged once the explorer's done)
@@ -385,6 +388,7 @@ impl Player {
                 combat: Combat::new(nav, Rc::clone(&tune)),
                 going_on: false,
                 coop: None,
+                rivals: None,
                 tune: Rc::clone(&tune),
                 pending_log: Vec::new(),
                 offered: BTreeSet::new(),
@@ -542,6 +546,37 @@ impl Player {
 
     pub fn going_on(&self) -> bool {
         self.fight.going_on
+    }
+
+    /// A deathmatch she hunts the others in: gearing up first, then going after them by what
+    /// she's seen and heard (`monsters`: there are monsters in the game too, whose guns and
+    /// doors sound as a player's do).
+    pub fn set_hunting(&mut self, monsters: bool) {
+        self.fight.rivals = Some(super::rivals::Rivals::new(monsters));
+    }
+
+    /// Whether she hunts the others (`set_hunting`).
+    pub fn hunt_state_on(&self) -> bool {
+        self.fight.rivals.is_some()
+    }
+
+    /// The hunting's state for the log and the console: gearing up or hunting, and the best
+    /// clue there is. None if she doesn't hunt.
+    pub fn hunt_state(&self, obs: &Observation) -> Option<String> {
+        let r = self.fight.rivals.as_ref()?;
+        let tune = &self.fight.tune.deathmatch;
+        let clue = r.best(obs.tic, obs.pos(), tune).map_or(String::new(), |c| {
+            format!(
+                ", {} {:.0} off, {:.0}s ago",
+                c.what,
+                dist(obs.pos(), c.at),
+                (obs.tic - c.tic) as f64 / 35.0
+            )
+        });
+        Some(format!(
+            "{}{clue}",
+            if r.hunting { "hunting" } else { "gearing up" }
+        ))
     }
 
     /// What she'd take with her into the next level, of what she's seen lying about and could
@@ -1000,6 +1035,7 @@ impl Player {
         timed("player.notice_things", || self.notice_things(obs));
         let seen = timed("player.percept", || self.percept(obs));
         let obs = &seen;
+        self.sense_rivals(obs);
         timed("player.consult", || self.consult(obs));
         self.plight = timed("player.plight", || self.plight_now(obs));
         timed("player.keep_trail", || self.keep_trail(obs));
@@ -1025,6 +1061,52 @@ impl Player {
         let c = self.decide_on(obs, last, Some(turn));
         std::mem::swap(&mut self.explorer.follower, &mut self.boss.route);
         c
+    }
+
+    /// A deathmatch: what's new of the others, and whether she's geared up to hunt them now
+    /// (a hunter too weak goes back to gearing up).
+    fn sense_rivals(&mut self, obs: &Observation) {
+        let Some(r) = self.fight.rivals.as_mut() else {
+            return;
+        };
+        let tune = Rc::clone(&self.fight.tune);
+        let t = &tune.deathmatch;
+        let heard = &self.explorer.knowledge.heard;
+        let movers: Vec<_> = heard[r.heard_seen.min(heard.len())..]
+            .iter()
+            .filter(|h| self.explorer.worth_a_look(h))
+            .copied()
+            .collect();
+        r.heard_seen = heard.len();
+        let lines = r.sense(
+            obs,
+            &self.fight.combat.visible,
+            &movers,
+            &self.explorer.nav,
+            tune.senses.fov,
+            t,
+        );
+        self.explorer.log.extend(lines);
+        let was = r.hunting;
+        r.hunting = if was {
+            !super::rivals::weak(obs, t)
+        } else {
+            super::rivals::geared(obs, t, false)
+        };
+        if r.hunting != was {
+            r.offered = None; // (a hunt to choose again for)
+            self.explorer.log.push(format!(
+                "tic {}: {} (health {:.0}, armor {:.0})",
+                obs.tic,
+                if r.hunting {
+                    "geared up: hunting the others"
+                } else {
+                    "too weak to hunt: gearing up again"
+                },
+                obs.health.unwrap_or(0.0),
+                obs.armor.unwrap_or(0.0)
+            ));
+        }
     }
 
     /// The fight and the route between them. `icon`: the Icon of Sin's business has the route
@@ -1672,6 +1754,92 @@ impl Fight {
     }
 }
 
+impl Fight {
+    /// A deathmatch: the others to go after, where the best clue of them is (from `reach`:
+    /// what she can get to), geared up; or half geared up, for a fresh clue near her.
+    fn hunt(
+        &self,
+        x: &Explorer,
+        obs: &Observation,
+        reach: &BTreeSet<usize>,
+        pos: Point,
+    ) -> Option<Objective> {
+        let r = self.rivals.as_ref()?;
+        let t = &self.tune.deathmatch;
+        let c = r.best(obs.tic, pos, t)?;
+        let age = (obs.tic - c.tic) as f64 / crate::domain::TICRATE;
+        let near = dist(pos, c.at);
+        let go = r.hunting
+            || (age <= t.fresh_secs && near <= t.fresh_near && super::rivals::geared(obs, t, true));
+        if !go {
+            return None;
+        }
+        let nav = &x.nav;
+        let goal = match nav.poly_at(c.at).filter(|p| reach.contains(p)) {
+            Some(_) => c.at,
+            None => {
+                let pi = reach
+                    .iter()
+                    .copied()
+                    .filter(|&pi| dist(nav.poly_center(pi), c.at) < self.tune.errands.hunt_near)
+                    .min_by(|&a, &b| {
+                        dist(nav.poly_center(a), c.at).total_cmp(&dist(nav.poly_center(b), c.at))
+                    })?;
+                nav.poly_center(pi)
+            }
+        };
+        let mut o = Objective::new(
+            Kind::Hunt,
+            x.stand_spot_for(goal, reach),
+            format!(
+                "hunt: {} {} ~{near:.0}, {age:.0}s ago",
+                c.what,
+                crate::control::directed::compass(crate::domain::heading(pos, c.at)),
+            ),
+        );
+        o.reveals = BTreeSet::from([c.id]);
+        o.needed = true;
+        Some(o)
+    }
+
+    /// A deathmatch: news of the others to choose again for (a clue better than the one she's
+    /// after, or one at all if she's after something else, once each; geared up just now).
+    fn hunt_news(&mut self, obs: &Observation, obj: &Objective) -> bool {
+        let Some(r) = self.rivals.as_mut() else {
+            return false;
+        };
+        let t = &self.tune.deathmatch;
+        let Some(best) = r.best(obs.tic, obs.pos(), t) else {
+            return false;
+        };
+        let (id, tic) = (best.id, best.tic);
+        if r.offered == Some(id) || obs.tic - r.interrupted < 35 {
+            return false;
+        }
+        // (none she'd go after now: no news to her)
+        let age = (obs.tic - tic) as f64 / crate::domain::TICRATE;
+        if !r.hunting
+            && !(age <= t.fresh_secs
+                && dist(obs.pos(), best.at) <= t.fresh_near
+                && super::rivals::geared(obs, t, true))
+        {
+            return false;
+        }
+        r.offered = Some(id);
+        // (after it already, or after one as fresh: nothing new)
+        if obj.kind == Kind::Hunt && obj.thing.is_none() {
+            let after = obj.reveals.iter().find_map(|&k| r.by_id(k));
+            if after.is_none_or(|c| {
+                c.id == id || ((tic - c.tic) as f64) < t.newer_secs * crate::domain::TICRATE
+            }) {
+                return false;
+            }
+        }
+        r.interrupted = obs.tic;
+        true
+    }
+}
+
 impl Hooks for Fight {
     fn unarmed(&self, obs: &Observation) -> bool {
         !self.combat.armed(obs)
@@ -1728,6 +1896,7 @@ impl Hooks for Fight {
             .collect();
         let mut out = self.supplies(x, obs, reach, pos);
         out.extend(self.barrels(x, obs, pos));
+        out.extend(self.hunt(x, obs, reach, pos));
         if let Some((at, what)) = self.charge.clone().filter(|_| self.combat.now.invulnerable) {
             let mut o = Objective::new(
                 Kind::Visit,
@@ -1808,6 +1977,19 @@ impl Hooks for Fight {
     }
 
     fn hunted_in_vain(&mut self, obj: &Objective) {
+        // (a clue gone after and no one there: done with, and those about it)
+        if obj.thing.is_none()
+            && let Some(r) = self.rivals.as_mut()
+        {
+            let at = obj
+                .reveals
+                .iter()
+                .find_map(|&id| r.by_id(id))
+                .map_or(obj.goal, |c| c.at);
+            r.spent(at, &self.tune.deathmatch);
+            r.spent(obj.goal, &self.tune.deathmatch);
+            return;
+        }
         if let Some(id) = obj.thing {
             self.hunted_spots
                 .insert((id, obj.goal.0.round() as i64, obj.goal.1.round() as i64));
@@ -1826,9 +2008,14 @@ impl Hooks for Fight {
                         .find(|x| x.id == t)
                         .is_some_and(|x| self.left_lying(obs, x))
             }),
-            Kind::Hunt => obj
-                .thing
-                .is_none_or(|t| !self.combat.remaining().iter().any(|s| s.id == t)),
+            Kind::Hunt => match obj.thing {
+                Some(t) => !self.combat.remaining().iter().any(|s| s.id == t),
+                // (a clue of the others': gone when it is, or she's no longer after them)
+                None => self.rivals.as_ref().is_none_or(|r| {
+                    obj.reveals.iter().all(|&id| r.by_id(id).is_none())
+                        || !(r.hunting || super::rivals::geared(obs, &self.tune.deathmatch, true))
+                }),
+            },
             Kind::Barrel => obj
                 .look_at
                 .is_none_or(|b| crate::motor::follower::barrel_now(obs, b).is_none()),
@@ -1906,6 +2093,29 @@ impl Hooks for Fight {
     /// if twice as far (unless she's short). More of the same won't change the odds; what might
     /// is somewhere not yet seen, or a door not yet tried (another gun, armor, cover).
     fn weigh(&mut self, obs: &Observation, obj: &Objective) -> f64 {
+        // A deathmatch: a hunt before her errands; hunting, what she doesn't need after it;
+        // gearing up, a better gun first.
+        if let Some(r) = &self.rivals {
+            let t = &self.tune.deathmatch;
+            if obj.kind == Kind::Hunt && obj.thing.is_none() {
+                return t.hunt_weigh;
+            }
+            if obj.kind == Kind::Item {
+                let item = obj
+                    .thing
+                    .and_then(|id| obs.things.iter().flatten().find(|t| t.id == id));
+                if r.hunting && !obj.needed && !obj.urgent {
+                    return t.item_weigh;
+                }
+                if !r.hunting
+                    && item.is_some_and(|i| {
+                        weapon_item(i.name).is_some() && self.better_gun(obs, i.name)
+                    })
+                {
+                    return t.gun_weigh;
+                }
+            }
+        }
         // A better gun in sight that she can't get to: a switch, which changes floors and opens
         // doors, is the likeliest way there, so it's pressed before the rest.
         if obj.kind == Kind::Switch && self.gun_out_of_reach {
@@ -1972,6 +2182,9 @@ impl Hooks for Fight {
     /// she's short): go for it now (once for each).
     fn interrupt(&mut self, x: &Explorer, obs: &Observation, obj: &Objective) -> bool {
         if std::mem::take(&mut self.rethink) {
+            return true;
+        }
+        if self.hunt_news(obs, obj) {
             return true;
         }
         // About to do again what she died after doing (her way sets it off, and she's near

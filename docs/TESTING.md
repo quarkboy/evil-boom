@@ -214,6 +214,16 @@ Each run writes its log to `out/explore/<IWAD>_<MAP>.txt` (kept as well under a 
 which [DEBUGGING.md](DEBUGGING.md) explains how to read. For a fight, use `--fight SKILL
 --mortal --lives 1` and several seeds: the fight is where randomness matters.
 
+## Co-op and deathmatch
+
+- `tools/coop/run.sh NAME`: the co-op test, 8 levels of four bots (exits, game time, deaths,
+  friendly fire, stuck).
+- `tools/dm/run.sh NAME`: deathmatches of two, the hunting bot against the bot before it
+  (`--hunt N`), each level and seed played with the hunter in either seat; frags run for run.
+  `HUNT=none` / `HUNT=all`: both as before / both hunting, for how often they meet (frags a
+  minute). The levels are deathmatch-sized ones (DOOM II MAP01, 07, 11, 16, DOOM E1M1): the
+  big ones meet too seldom to tell anything.
+
 ## Arenas
 
 `arenas/*.txt` set up fights on real maps: a place, monsters, a loadout, a time limit.

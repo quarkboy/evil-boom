@@ -33,6 +33,7 @@ pub struct Tuning {
     pub deaths: Deaths,
     pub hand: Hand,
     pub directed: Directed,
+    pub deathmatch: Deathmatch,
 }
 
 impl Tuning {
@@ -1128,5 +1129,64 @@ mod tests {
     #[test]
     fn a_misspelt_field_is_an_error() {
         assert!(serde_json::from_str::<Tuning>(r#"{"engage": {"leave_bee": 20.0}}"#).is_err());
+    }
+}
+
+/// A deathmatch (`tactical/rivals.rs`): when she's equipped enough to go looking for the others,
+/// and how she goes by what she's heard of them.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Deathmatch {
+    /// geared up, to hunt: a gun past the pistol with this much for it (shells for either
+    /// shotgun, bullets for the chaingun, rockets, cells for the plasma rifle or the BFG)
+    pub shells: i32,
+    pub bullets: i32,
+    pub rockets: i32,
+    pub cells: i32,
+    /// and this much health; or `armored_health` with `armor` armor
+    pub health: f64,
+    pub armored_health: f64,
+    pub armor: f64,
+    /// hunting, she goes back to gearing up below this much health, or with no gun past the
+    /// pistol with anything in it
+    pub weak_health: f64,
+    /// a clue this fresh (s) and this near (as the crow flies) is gone after half geared up (a
+    /// gun past the pistol with half the above for it, health over `weak_health`)
+    pub fresh_secs: f64,
+    pub fresh_near: f64,
+    /// a clue's no clue after this long (s)
+    pub clue_secs: f64,
+    /// on her way to one clue, another this much fresher (s) is gone after instead
+    pub newer_secs: f64,
+    /// a hunt counts as this much of its way (the less, the sooner before her other errands);
+    /// hunting, a pickup she doesn't need counts as this many times its way
+    pub hunt_weigh: f64,
+    pub item_weigh: f64,
+    /// gearing up, a better gun counts as this much of its way
+    pub gun_weigh: f64,
+    /// a clue she's been to with no one there takes the others within this with it
+    pub spent_near: f64,
+}
+
+impl Default for Deathmatch {
+    fn default() -> Self {
+        Deathmatch {
+            shells: 20,
+            bullets: 100,
+            rockets: 5,
+            cells: 40,
+            health: 60.0,
+            armored_health: 40.0,
+            armor: 50.0,
+            weak_health: 40.0,
+            fresh_secs: 5.0,
+            fresh_near: 640.0,
+            clue_secs: 20.0,
+            newer_secs: 3.0,
+            hunt_weigh: 0.3,
+            item_weigh: 2.0,
+            gun_weigh: 0.5,
+            spent_near: 256.0,
+        }
     }
 }

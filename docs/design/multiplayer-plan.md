@@ -317,3 +317,14 @@ keeps it from level to level. What was new:
   others' down the side. Each Neuro is told "Player 1 (green) is a person, playing with you."
   Their own window, for OBS to take the co-op window apart, is next (SDL can have two; the
   `evil_window_*` functions keep one).
+- **Deathmatch hunting (2026-11-27, `tactical/rivals.rs`):** gear up (a gun past the pistol with
+  20 shells / 100 bullets / 5 rockets / 40 cells, health 60 or 40 with 50 armor), then hunt by
+  what's seen and heard: sounds only a player makes (super shotgun, chainsaw, fist, BFG, a
+  player's grunts and death), and with no monsters a pistol, shotgun, rocket, plasma, teleport,
+  or a door or lift she didn't set going; placed by loudness and ear, the mirror one dropped if
+  in view. Back to gearing up under 40 health or with only the pistol. No automap of the others
+  (Doom's deathmatch shows none). `--hunt N` sets one bot against the old one. Measured on
+  five deathmatch maps, 8 seeds: frags a minute both hunting 2.32 -> 2.86; head to head the
+  hunter +0.47 a match (s.e. 0.68). Ambushing ruled out (the maintainer: cheap, no fun on
+  stream). Open: hunts route through hurting floors (MAP11's slime), costing the health that
+  ends the hunt.

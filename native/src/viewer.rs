@@ -168,6 +168,9 @@ pub struct WatchOptions {
     pub human: bool,
     /// (`--mouse DEG`) degrees a mouse pixel turns a person playing
     pub mouse_sens: f64,
+    /// (`--hunt all|none|N,M`) in a deathmatch, the bots that hunt the others once geared up
+    /// (0-based; None: all of them), the rest as before: for setting one against the other
+    pub hunt: Option<Vec<usize>>,
     /// (`--deathmatch`, `--altdeath`) with more than one player: 0 co-op, 1 deathmatch, 2
     /// altdeath
     pub deathmatch: i32,

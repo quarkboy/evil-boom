@@ -976,6 +976,7 @@ fn watch_options(
         instinct_off: false,
         human: false,
         mouse_sens: 0.1,
+        hunt: None,
         window: evilboom::dsda::WindowSpec::default(),
         render: None,
         soundfont: evilboom::config::default_soundfont(),
@@ -1028,6 +1029,19 @@ fn watch_options(
                 w.lives_shared = true;
             }
             "--human" => w.human = true,
+            "--hunt" => {
+                let v = it.next().ok_or("--hunt all|none|N,M (the players who hunt, 1 the first)")?;
+                w.hunt = match v.as_str() {
+                    "all" => None,
+                    "none" => Some(Vec::new()),
+                    list => Some(
+                        list.split(',')
+                            .map(|n| n.trim().parse::<usize>().ok().filter(|&n| (1..=4).contains(&n)).map(|n| n - 1))
+                            .collect::<Option<Vec<_>>>()
+                            .ok_or("--hunt all|none|N,M (the players who hunt, 1 to 4)")?,
+                    ),
+                };
+            }
             "--mouse" => {
                 w.mouse_sens = it
                     .next()

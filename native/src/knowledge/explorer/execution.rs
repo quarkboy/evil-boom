@@ -126,7 +126,7 @@ impl Explorer {
     }
 
     /// A sound she couldn't see the source of, not one she'd expect, not background.
-    pub(super) fn worth_a_look(&self, h: &Heard) -> bool {
+    pub(crate) fn worth_a_look(&self, h: &Heard) -> bool {
         !h.seen && !self.knowledge.expected(h) && !self.ambient(h)
     }
 
