@@ -373,7 +373,7 @@ header { gap: 8px 10px; } header h1 { font-size: 16px; letter-spacing: .18em; ga
       <fieldset class="group wide" data-when="multi"><legend>Who directs them</legend>
         <p class="note wide" data-when="multi-bot">Each player is the bot alone. For Neuro to direct them, choose Neuro under "Who directs her" on the Setup tab.</p>
         <p class="note wide" data-when="multi-neuro">Each player has her own Neuro: the first at the Neuro URL set on the Setup tab, the next at the next port up, and so on (8000, 8001, 8002, 8003); if you play too, player 2 is the first. Each must be running before the game starts: <code>tools/neuro/garys.sh N</code> starts that many Garys on those ports.</p>
-        <p class="note wide" data-when="multi-neuro-dm">Neuro can't direct a deathmatch yet: choose co-op, or the bot alone on the Setup tab.</p>
+        <p class="note wide" data-when="multi-neuro-dm">Each player has her own Neuro, as in co-op. In a deathmatch her instinct is always off: she hunts and gears up by doom_hunt, and sets her fighting and hunting styles by doom_policy.</p>
         <p class="note wide" data-when="multi-gpt">The GPT stand-in plays alone: choose the bot alone or Neuro on the Setup tab.</p>
       </fieldset>
       <fieldset class="group wide" data-when="multi"><legend>Not in a game of more than one</legend>
@@ -1124,7 +1124,7 @@ function applyWhen() {
     multi,
     dm: multi && !coop,
     "multi-bot": multi && f.mode.value === "bot",
-    "multi-neuro": multi && coop && f.mode.value === "neuro",
+    "multi-neuro": multi && f.mode.value === "neuro",
     "multi-neuro-dm": multi && !coop && f.mode.value === "neuro",
     "multi-gpt": multi && f.mode.value === "gpt",
   });

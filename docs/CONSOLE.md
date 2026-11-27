@@ -64,9 +64,9 @@ form's changes first).
 | **Picture:** Brightness, View (FOV) | `brightness`, `fov` | how bright the game's frame is shown (0, Doom's own, to 10: a gamma curve, the dark lifted most), and how wide its view in degrees (60 to 120; Doom's own is 90). Both change as it plays and are kept for the next game. A wider view makes movement look slower; the weapon is drawn the same |
 | Red flash, Gold flash, Green tint | `flash_red`, `flash_gold`, `flash_green` | how strong the game's screen flashes are shown, 0 (none) to 100 (Doom's own); 50 unless set: the red of being hurt and of the berserk pack, the gold of a pickup, the green of the radiation suit |
 
-More than one player: each directed by Neuro in co-op, player 1 at the Neuro URL and each next
-one at the port after (`tools/neuro/garys.sh N` starts that many Garys); a deathmatch is the bots
-alone, and the GPT stand-in plays only alone. Doom's own screens, the stream layout, the ultra
+More than one player: each directed by her own Neuro, player 1 at the Neuro URL and each next
+one at the port after (`tools/neuro/garys.sh N` starts that many Garys); in a deathmatch her
+instinct is always off (docs/NEURO.md). The GPT stand-in plays only alone. Doom's own screens, the stream layout, the ultra
 instinct and Evil choosing the game are left out; the window is co-op's own (each one's view,
 the map, their cards). From the page: pause, speed, sound, the picture, god mode, the exits, and
 Talk to Evil and her settings (to every one) work; Restart level and Go to level don't yet.

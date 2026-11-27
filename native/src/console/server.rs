@@ -362,9 +362,6 @@ impl Settings {
         if self.multiplayer() && self.mode == "gpt" {
             return Err("the GPT stand-in plays alone: one player, or the bots or Neuro".into());
         }
-        if self.multiplayer() && self.multi != "coop" && self.mode == "neuro" {
-            return Err("Neuro in a deathmatch: not yet (co-op, or the bots alone)".into());
-        }
         let name = self.console_name.trim();
         if name.is_empty() || name.chars().count() > 32 || name.chars().any(char::is_control) {
             return Err("console_name: a name, at most 32 characters".into());
@@ -470,9 +467,7 @@ impl Settings {
             a.push("--fullscreen".into());
         }
         match self.mode.as_str() {
-            "neuro" if !(multi && self.multi != "coop") => {
-                a.extend(["--neuro".into(), self.neuro_url.clone()]);
-            }
+            "neuro" => a.extend(["--neuro".into(), self.neuro_url.clone()]),
             "gpt" => a.push("--gpt".into()),
             _ => {}
         }
@@ -1665,7 +1660,12 @@ mod tests {
             assert!(!a.contains(gone), "{gone}: {a}");
         }
         s.multi = "deathmatch".into();
-        assert!(s.check().is_err(), "Neuro in a deathmatch");
+        assert!(s.check().is_ok(), "Neuro in a deathmatch");
+        assert!(
+            line(&s).contains("--deathmatch") && line(&s).contains("--neuro"),
+            "{}",
+            line(&s)
+        );
         s.mode = "bot".into();
         assert!(s.check().is_ok());
         let a = line(&s);
