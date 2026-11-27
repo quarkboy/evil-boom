@@ -359,6 +359,9 @@ pub struct RouteFollower {
     dash_until: i64,
     /// a lift on its way round across her path: which, as last seen, and since when
     lift_back: Option<(usize, Heights, i64)>,
+    /// co-op: a lift too small for two that another player's on, waited off since then
+    /// (`lift_taken`)
+    lift_queue: Option<(usize, i64)>,
     settle_logged: i64,
     cross_ready: bool,
     cross_wait_logged: bool,
@@ -491,6 +494,7 @@ impl RouteFollower {
             edge_wait: false,
             dash_until: -1,
             lift_back: None,
+            lift_queue: None,
             settle_logged: -1,
             cross_ready: false,
             cross_wait_logged: false,

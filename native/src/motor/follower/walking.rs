@@ -174,6 +174,9 @@ impl RouteFollower {
         if let Some(c) = self.check_blocked(obs) {
             return c;
         }
+        if let Some(c) = self.lift_taken(obs) {
+            return c;
+        }
         let end = track.pts[track.pts.len() - 1];
         let last = self.seg_i == self.segments.len() - 1;
         let stop = seg.end == SegEnd::Jump || (last && stops(step.action));
@@ -577,6 +580,122 @@ impl RouteFollower {
             heading(m.pos(), pos) // (at her way's start: straight away)
         };
         Some(self.unstick(obs))
+    }
+
+    /// A co-op game: her way onto a lift too small for two (neither side 128) that another
+    /// player is on: she waits off it, clear of its edge, till it's free, as players take a
+    /// small lift one at a time. Clear: a box over its edge stops it coming back up wherever
+    /// the ceiling over that edge is lower than the lift's top (Plutonia MAP06's sector 146,
+    /// 64 square: one player over its edge by 2, under sector 143's ceiling at -118, the lift's
+    /// top -109; the lift never rose, the other on it waited for it 80 s, all four stuck by
+    /// them). Not past `LIFT_QUEUE_MOST`: one on it for good isn't waited out.
+    fn lift_taken(&mut self, obs: &Observation) -> Option<Controls> {
+        /// a lift this long on its longer side takes two
+        const FOR_TWO: f64 = 128.0;
+        /// waited for, near the lift's edge as this
+        const NEAR: f64 = 96.0;
+        /// she stands at least this far off its edge (her radius and some)
+        const CLEAR: f64 = 28.0;
+        const LIFT_QUEUE_MOST: i64 = 20 * 35;
+        if obs.mates.is_empty() {
+            return None;
+        }
+        let view = Rc::clone(&self.view);
+        let mesh = &view.nav.mesh;
+        let path = self.step().path.clone()?;
+        let pos = obs.pos();
+        let upto = (self.poly_i + 6).min(path.polys.len().saturating_sub(1));
+        let mut ahead = None;
+        for j in self.poly_i..upto {
+            let (cur, nxt) = (path.polys[j], path.polys[j + 1]);
+            let (cs, ns) = (mesh.poly(cur).sector, mesh.poly(nxt).sector);
+            if cs == ns {
+                continue;
+            }
+            if self.lift_sectors.contains(&cs) {
+                break; // (on one already: hers to ride)
+            }
+            // (a floor that goes up and down: a door's doesn't)
+            let floors = self.states[ns].iter().map(|h| h.floor);
+            let (low, high) = floors.fold((f64::MAX, f64::MIN), |(l, h), f| (l.min(f), h.max(f)));
+            if !self.lift_sectors.contains(&ns) || high - low <= MAX_STEP {
+                continue;
+            }
+            let portal = self.walk_portal(cur, nxt).map(|pi| &mesh.portals[pi])?;
+            let edge = closest_on_portal(pos, portal.p1, portal.p2);
+            if dist(edge, pos) <= NEAR {
+                ahead = Some((ns, edge, mesh.poly(cur).center));
+            }
+            break;
+        }
+        let Some((lift, edge, back)) = ahead else {
+            self.lift_queue = None;
+            return None;
+        };
+        let (mut lo, mut hi) = ((f64::MAX, f64::MAX), (f64::MIN, f64::MIN));
+        for v in mesh
+            .polys
+            .iter()
+            .flatten()
+            .filter(|p| p.sector == lift)
+            .flat_map(|p| p.vertices.iter())
+        {
+            lo = (lo.0.min(v.0), lo.1.min(v.1));
+            hi = (hi.0.max(v.0), hi.1.max(v.1));
+        }
+        if (hi.0 - lo.0).max(hi.1 - lo.1) >= FOR_TWO {
+            return None;
+        }
+        // (on it: any part of the box over it)
+        let on = |m: &crate::domain::Mate| {
+            [
+                (0.0, 0.0),
+                (-16.0, -16.0),
+                (-16.0, 16.0),
+                (16.0, -16.0),
+                (16.0, 16.0),
+            ]
+            .iter()
+            .any(|(dx, dy)| {
+                mesh.poly_at((m.x + dx, m.y + dy))
+                    .is_some_and(|p| mesh.poly(p).sector == lift)
+            })
+        };
+        let Some(m) = obs.mates.iter().find(|m| m.alive && on(m)) else {
+            self.lift_queue = None;
+            return None;
+        };
+        let since = match self.lift_queue {
+            Some((s, since)) if s == lift => since,
+            _ => {
+                self.log.add(
+                    obs.tic,
+                    format!(
+                        "player {} on lift sector {lift}, too small for two: waiting off it",
+                        m.index + 1
+                    ),
+                );
+                self.lift_queue = Some((lift, obs.tic));
+                obs.tic
+            }
+        };
+        if obs.tic - since > LIFT_QUEUE_MOST {
+            return None;
+        }
+        self.progress_tic = obs.tic;
+        self.step_tic = obs.tic;
+        let look = heading(pos, m.pos());
+        let off = dist(edge, pos);
+        if off < CLEAR {
+            // (back from the edge, the way she came onto it)
+            let away = if dist(back, pos) > 4.0 {
+                heading(pos, back)
+            } else {
+                heading(edge, pos)
+            };
+            return Some(self.motion.go(obs, away, 8.0, Some(look)));
+        }
+        Some(self.motion.hold(obs, (0.0, 0.0), Some(look)))
     }
 
     /// Nowhere for `STUCK_TICS`: back off and try again; after a couple of those (or at once
