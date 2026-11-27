@@ -31,6 +31,7 @@
 //! Keys: space pause, N a tic while paused, +/- speed, M mute, Esc quit.
 
 mod console;
+mod human;
 
 use std::rc::Rc;
 use std::sync::Arc;
@@ -102,8 +103,13 @@ struct Coop {
     map_name: String,
     engine: Engine,
     seats: Vec<Seat>,
-    /// (co-op directed by Neuro) each player's own link, kept from level to level
+    /// (co-op directed by Neuro) each player's own link, kept from level to level: the
+    /// first's, or (a person playing, player 1) the second's on
     neuro: Vec<Session>,
+    /// the seat the first of `neuro` directs (1 with a person playing, else 0)
+    neuro_from: usize,
+    /// (`--human`) a person playing, player 1, at the window's keyboard and mouse
+    human: Option<human::Human>,
     /// PLAYPAL's palettes, made ours (brightened as the watch's are)
     palettes: Vec<Vec<u32>>,
     /// the tic the level began at (its time is from here)
@@ -123,6 +129,9 @@ struct Coop {
     /// the stream console's link (`--control`)
     console: Option<console::Link>,
 }
+
+/// The seat a person plays (`--human`): player 1, the game's own (whose the sound is).
+const HUMAN_SEAT: usize = 0;
 
 /// A co-op game of `o.players` watched in a window (or played through headless).
 pub fn watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(), String> {
@@ -146,6 +155,9 @@ pub fn watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(), String> 
     ];
     if let Some((_, what)) = unsupported.iter().find(|(is, _)| *is) {
         return Err(format!("--players: not yet with {what}"));
+    }
+    if o.human && (o.players < 2 || o.headless) {
+        return Err("--human: with --players N (2 to 4), in the window".into());
     }
     if o.deathmatch > 0 && o.players < 2 {
         return Err("--deathmatch: two players at least (--players N)".into());
@@ -209,7 +221,9 @@ impl Coop {
         let mut neuro = Vec::new();
         if let Some(spec) = o.neuro.as_deref() {
             let clocks = Tuning::from(o.tuning.as_deref())?.directed.clone();
-            for (i, url) in neuro_urls(spec, o.players)?.iter().enumerate() {
+            let directed = o.players - usize::from(o.human);
+            for (k, url) in neuro_urls(spec, directed)?.iter().enumerate() {
+                let i = k + usize::from(o.human);
                 let mut n = Session::new(url, &clocks);
                 n.set_locked(&o.locked);
                 if o.instinct_off {
@@ -236,6 +250,8 @@ impl Coop {
             engine,
             seats,
             neuro,
+            neuro_from: usize::from(o.human),
+            human: o.human.then(|| human::Human::new(o.mouse_sens)),
             palettes,
             began,
             seed: o.seed,
@@ -308,7 +324,10 @@ impl Coop {
                         pos: obs.pos(),
                         alive: s.dead_since.is_none(),
                         health: obs.health.unwrap_or(0.0) as i32,
-                        fighting: self.neuro[j].director.now.fighting(),
+                        fighting: j
+                            .checked_sub(self.neuro_from)
+                            .and_then(|k| self.neuro.get(k))
+                            .is_some_and(|n| n.director.now.fighting()),
                     })
                 })
                 .collect()
@@ -316,9 +335,11 @@ impl Coop {
         // (what each has done the others are told of: who, what)
         let mut news: Vec<(usize, String)> = Vec::new();
         let mut cs = Vec::with_capacity(self.seats.len());
+        let from = self.neuro_from;
         for (i, s) in self.seats.iter_mut().enumerate() {
             self.engine.as_player(i);
             let tic = self.engine.tic;
+            let person = i == HUMAN_SEAT && self.human.is_some();
             if self.engine.dead() {
                 let newly = s.dead_since.is_none();
                 let since = *s.dead_since.get_or_insert_with(|| {
@@ -329,7 +350,7 @@ impl Coop {
                         .push(format!("tic {tic}: died (death {})", s.deaths));
                     tic
                 });
-                if let Some(n) = self.neuro.get_mut(i) {
+                if let Some(n) = i.checked_sub(from).and_then(|k| self.neuro.get_mut(k)) {
                     if newly {
                         n.director.died(tic, false, &std::mem::take(&mut s.hits));
                         news.push((i, format!("{} died.", who(i))));
@@ -337,11 +358,18 @@ impl Coop {
                     let said = n.dead(tic);
                     s.agent.x_mut().log.extend(said);
                 }
-                // (the use key, pressed and let go: Doom wants it pressed again for each go)
+                if newly && person {
+                    news.push((i, format!("{} died.", who(i))));
+                }
+                // (the use key, pressed and let go: Doom wants it pressed again for each go; a
+                // person's own, when they press it)
                 let press = tic - since >= REBIRTH_WAIT && (tic - since) % 2 == 0;
-                cs.push(Controls {
-                    use_: press,
-                    ..Controls::default()
+                cs.push(match self.human.as_mut().filter(|_| person) {
+                    Some(h) => h.controls(None),
+                    None => Controls {
+                        use_: press,
+                        ..Controls::default()
+                    },
                 });
                 s.controls = None;
                 continue;
@@ -355,7 +383,7 @@ impl Coop {
                     .x_mut()
                     .log
                     .push(format!("tic {tic}: born again at the start"));
-                if self.neuro.get(i).is_some() {
+                if i.checked_sub(from).is_some_and(|k| k < self.neuro.len()) {
                     crate::control::directed::Director::take_over(&mut s.agent);
                 }
             }
@@ -374,6 +402,24 @@ impl Coop {
                 }
             }
             let obs = self.engine.observe();
+            // (a person: their own controls, nothing of the bot's; their keys told the others)
+            if let Some(h) = self.human.as_mut().filter(|_| person) {
+                let keys = obs.keys.unwrap_or_default();
+                for k in keys.iter().filter(|&k| !s.keys_had.has(k)) {
+                    news.push((
+                        i,
+                        format!(
+                            "{} got the {}.",
+                            who(i),
+                            crate::control::directed::key_name(k)
+                        ),
+                    ));
+                }
+                s.keys_had = keys;
+                cs.push(h.controls(Some(&obs)));
+                s.obs = Some(obs);
+                continue;
+            }
             // (what the others are at, as of their choices this tic: hers and her director's
             // to leave to them)
             if self.deathmatch == 0 {
@@ -386,7 +432,7 @@ impl Coop {
             }
             s.secrets_seen =
                 crate::run::secret_found(&self.engine, &mut s.agent, &obs, s.secrets_seen);
-            if let Some(n) = self.neuro.get_mut(i) {
+            if let Some(n) = i.checked_sub(from).and_then(|k| self.neuro.get_mut(k)) {
                 // (told as she's back, what she had and can take again: her last look alive,
                 // `s.obs`, says what that was)
                 if reborn {
@@ -416,6 +462,7 @@ impl Coop {
                 d.gibbed = self.engine.gibbed();
                 let team = crate::control::directed::Team {
                     me: i,
+                    human: self.human.is_some().then_some(HUMAN_SEAT),
                     players,
                     mates: mates.iter().filter(|m| m.player != i).cloned().collect(),
                 };
@@ -430,8 +477,8 @@ impl Coop {
         }
         let tic = self.engine.tic;
         for (from, text) in news {
-            for (j, n) in self.neuro.iter_mut().enumerate() {
-                if j != from {
+            for (k, n) in self.neuro.iter_mut().enumerate() {
+                if k + self.neuro_from != from {
                     n.director.mate_news(tic, text.clone());
                 }
             }
@@ -627,7 +674,11 @@ impl Coop {
     fn level_over(&mut self) {
         let tic = self.engine.tic;
         let exited = self.engine.exited();
-        for (n, s) in self.neuro.iter_mut().zip(self.seats.iter_mut()) {
+        for (n, s) in self
+            .neuro
+            .iter_mut()
+            .zip(self.seats.iter_mut().skip(self.neuro_from))
+        {
             if exited {
                 n.director.level_done();
             }
@@ -738,14 +789,32 @@ impl Coop {
             if self.console_frame() {
                 break 'frames;
             }
+            let mut esc = false;
             for event in window::Window::events(&self.engine.game) {
                 use window::key;
                 let WindowEvent::Key(k) = event else {
-                    if matches!(event, WindowEvent::Close) {
-                        break 'frames;
+                    match event {
+                        WindowEvent::Close => break 'frames,
+                        WindowEvent::Wheel(by) => {
+                            if let Some(h) = self.human.as_mut() {
+                                h.wheel(by);
+                            }
+                        }
+                        WindowEvent::Key(_) => {}
                     }
                     continue;
                 };
+                // (a person playing: Space is theirs to use with, Esc lets the mouse go first;
+                // P pauses)
+                if self.human.is_some() {
+                    match k {
+                        key::ESCAPE => esc = true,
+                        key::P | key::PAUSE => self.paused = !self.paused,
+                        key::M => self.muted = !self.muted,
+                        _ => {}
+                    }
+                    continue;
+                }
                 match k {
                     key::ESCAPE => break 'frames,
                     key::SPACE => self.paused = !self.paused,
@@ -755,6 +824,11 @@ impl Coop {
                     key::M => self.muted = !self.muted,
                     _ => {}
                 }
+            }
+            if let Some(h) = self.human.as_mut()
+                && matches!(h.frame(&self.engine.game, esc), human::Asked::Quit)
+            {
+                break 'frames;
             }
             let sound =
                 self.sound && !self.muted && !self.paused && (self.speed - 1.0).abs() < 1e-9;
@@ -835,7 +909,31 @@ impl Coop {
         c.clip = (0, 0, W, H);
         c.fill((0, 0, W, H), BG);
         let n = self.seats.len();
-        if n <= 2 {
+        if self.human.is_some() {
+            // (a person playing: their view large, 4:3; the others' small down the side, the
+            // map under them if there's room)
+            let (vw, vh) = (H * 4 / 3, H);
+            self.draw_view(c, HUMAN_SEAT, (0, 0, vw, vh));
+            let col = (vw, 0, W - vw, H);
+            let small = col.2 * 3 / 4;
+            let mut y = 0;
+            for i in (0..n).filter(|&i| i != HUMAN_SEAT) {
+                self.draw_view(c, i, (col.0, y, col.2, small));
+                y += small;
+            }
+            if H - y >= 150 {
+                self.draw_overview(c, (col.0, y, col.2, H - y));
+            }
+            if let Some(h) = &self.human
+                && !h.grabbed()
+            {
+                let note = "click to play  (Esc: let the mouse go; again: quit)";
+                let w = note.len() * 8 * 2 + 16;
+                let x = (H * 4 / 3).saturating_sub(w) / 2;
+                c.fill((x, 34, w, 26), (0, 0, 0));
+                c.text(note, (x + 8, 37), HEAD, 2);
+            }
+        } else if n <= 2 {
             for i in 0..n {
                 let x = i * (W / 2);
                 self.draw_view(c, i, (x, 0, W / 2, 600));
@@ -879,7 +977,11 @@ impl Coop {
             }
         }
         // (her name, in her colour, and a frame round the view)
-        let name = format!("Player {}", i + 1);
+        let name = if i == HUMAN_SEAT && self.human.is_some() {
+            format!("Player {} (you)", i + 1)
+        } else {
+            format!("Player {}", i + 1)
+        };
         c.fill((r.0, r.1, 8 * name.len() * 2 + 12, 22), (0, 0, 0));
         c.text(&name, (r.0 + 6, r.1 + 3), COLOURS[i], 2);
         if s.dead_since.is_some() {
@@ -1029,7 +1131,7 @@ fn seats(nav: &Rc<Navigator>, map_name: &str, o: &WatchOptions) -> Result<Vec<Se
         && (crate::run::next_map(map_name, false).is_some()
             || crate::run::next_map(map_name, true).is_some());
     Ok((0..o.players)
-        .map(|_| {
+        .map(|i| {
             let mut knowledge = Knowledge::new(Rc::clone(nav), o.mortal, !o.peek);
             knowledge.charmed = o.charmed;
             // (a gun the level put down stays when picked up: co-op's, and classic deathmatch's;
@@ -1055,7 +1157,7 @@ fn seats(nav: &Rc<Navigator>, map_name: &str, o: &WatchOptions) -> Result<Vec<Se
             if o.keys {
                 agent.keys_only();
             }
-            if o.neuro.is_some() {
+            if o.neuro.is_some() && !(o.human && i == HUMAN_SEAT) {
                 crate::control::directed::Director::take_over(&mut agent);
             }
             Seat {

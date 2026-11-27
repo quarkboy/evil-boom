@@ -194,7 +194,11 @@ impl Coop {
     /// An action as if each one's own, from the console (`Command::Order`: what the console
     /// starts them with, her settings and her goal), and what came of it in each one's log.
     fn order(&mut self, action: &str, data: Option<&str>) {
-        for (n, s) in self.neuro.iter_mut().zip(self.seats.iter_mut()) {
+        for (n, s) in self
+            .neuro
+            .iter_mut()
+            .zip(self.seats.iter_mut().skip(self.neuro_from))
+        {
             let Some(obs) = s.obs.as_ref() else { continue };
             let (ok, msg) = n.console_action(&mut s.agent, obs, action, data);
             let lines = [
@@ -277,7 +281,10 @@ impl Coop {
                 kills: kills[i],
                 doing: if s.dead_since.is_some() {
                     "dead: back in a moment".into()
-                } else if let Some(nr) = self.neuro.get(i) {
+                } else if let Some(nr) = i
+                    .checked_sub(self.neuro_from)
+                    .and_then(|k| self.neuro.get(k))
+                {
                     nr.director.doing(&s.agent)
                 } else {
                     s.agent
@@ -286,14 +293,17 @@ impl Coop {
                         .as_ref()
                         .map_or_else(|| "-".into(), |o| o.label.clone())
                 },
-                neuro: self.neuro.get(i).map(|nr| {
-                    let (url, connected, who) = nr.link_state();
-                    NeuroState {
-                        url: url.to_string(),
-                        connected,
-                        who: who.to_string(),
-                    }
-                }),
+                neuro: i
+                    .checked_sub(self.neuro_from)
+                    .and_then(|k| self.neuro.get(k))
+                    .map(|nr| {
+                        let (url, connected, who) = nr.link_state();
+                        NeuroState {
+                            url: url.to_string(),
+                            connected,
+                            who: who.to_string(),
+                        }
+                    }),
             })
             .collect();
         let mut s = GameState {

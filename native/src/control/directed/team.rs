@@ -18,6 +18,8 @@ pub const COLOUR_NAMES: [&str; 4] = ["green", "indigo", "brown", "red"];
 pub struct Team {
     /// her own number (0-based), and how many there are
     pub me: usize,
+    /// the player who's a person, not a bot, if one is
+    pub human: Option<usize>,
     pub players: usize,
     pub mates: Vec<Mate>,
 }
@@ -45,8 +47,14 @@ pub fn who(player: usize) -> String {
 impl Team {
     /// Told her with the rules: who she is in this game.
     pub fn brief(&self) -> String {
+        let person = self.human.map_or(String::new(), |h| {
+            format!(
+                " Player{} is a person, playing with you.",
+                &who(h)["player".len()..]
+            )
+        });
         format!(
-            "Co-op: you're {} of {}. The others are players like you; their status is in yours. \
+            "Co-op: you're {} of {}. The others are players like you; their status is in yours.{person} \
              Your bullets hurt them.",
             who(self.me),
             self.players
@@ -192,5 +200,28 @@ impl Director {
             text: format!("You're back at your start with a pistol. The level's as it was.{known}"),
             event: Event::Reborn,
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Team;
+
+    /// Told who she is, and of a person among them if there is one.
+    #[test]
+    fn brief_names_the_person() {
+        let mut t = Team {
+            me: 1,
+            players: 2,
+            ..Team::default()
+        };
+        assert!(!t.brief().contains("person"));
+        t.human = Some(0);
+        let b = t.brief();
+        assert!(
+            b.contains("you're player 2 (indigo) of 2")
+                && b.contains("Player 1 (green) is a person, playing with you."),
+            "{b}"
+        );
     }
 }

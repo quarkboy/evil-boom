@@ -1149,6 +1149,39 @@ EVIL_API int evil_window_events(int *out, int max)
   return n;
 }
 
+/* The keyboard and mouse as a player at the window has them: `keys` (n of them, by SDL
+ * scancode) 1 where a key's held; mouse[0], [1] its motion since last asked (right and down
+ * positive), mouse[2] its buttons held (bit 0 left, 1 middle, 2 right). Nothing while the
+ * window hasn't the keyboard. grab 1: the mouse kept in the window, unseen, its motion relative
+ * (as a game has it); 0: let go; -1: as it is. Returns 1 if the window has the keyboard. */
+EVIL_API int evil_window_input(unsigned char *keys, int n, int *mouse, int grab)
+{
+  const Uint8 *state;
+  int count = 0, i, x = 0, y = 0;
+  Uint32 buttons;
+  memset(keys, 0, n);
+  mouse[0] = mouse[1] = mouse[2] = 0;
+  if (!evil_window)
+    return 0;
+  if (grab >= 0 && (SDL_GetRelativeMouseMode() == SDL_TRUE) != (grab == 1))
+  {
+    SDL_SetRelativeMouseMode(grab == 1 ? SDL_TRUE : SDL_FALSE);
+    SDL_GetRelativeMouseState(NULL, NULL); /* (what moved before, not counted) */
+  }
+  SDL_PumpEvents();
+  buttons = SDL_GetRelativeMouseState(&x, &y);
+  if (SDL_GetKeyboardFocus() != evil_window)
+    return 0;
+  state = SDL_GetKeyboardState(&count);
+  for (i = 0; i < n && i < count; i++)
+    keys[i] = state[i] ? 1 : 0;
+  mouse[0] = x;
+  mouse[1] = y;
+  mouse[2] = ((buttons & SDL_BUTTON_LMASK) ? 1 : 0) | ((buttons & SDL_BUTTON_MMASK) ? 2 : 0) |
+             ((buttons & SDL_BUTTON_RMASK) ? 4 : 0);
+  return 1;
+}
+
 EVIL_API void evil_window_title(const char *title)
 {
   if (evil_window)

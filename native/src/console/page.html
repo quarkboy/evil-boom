@@ -366,12 +366,13 @@ header { gap: 8px 10px; } header h1 { font-size: 16px; letter-spacing: .18em; ga
       <fieldset class="group wide"><legend>Game</legend>
         <label title="One: Evil alone, as always. Two to four: each player a bot of her own, in one game">Players <select form="settings" name="players"><option value="1">1 (Evil alone)</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label>
         <label data-when="multi">Kind of game <select form="settings" name="multi"><option value="coop">co-op: all together, out by the exit</option><option value="deathmatch">deathmatch</option><option value="altdeath">deathmatch 2.0 (items come back)</option></select></label>
+        <span class="check wide" data-when="multi" title="Player 1 is you, at the game's window: WASD, the mouse turns, Ctrl or click fires, Space, E or right click uses, 1-7 and the wheel change weapons, Shift walks. Esc lets the mouse go (click to take it again; Esc again ends the game); P pauses."><input form="settings" type="checkbox" name="human" id="m-human"><label for="m-human" class="check">You play too: player 1, at the game's window (keyboard and mouse)</label></span>
         <label data-when="dm" title="The match is over when a player has this many frags. 0: no limit">Frag limit <input form="settings" type="number" name="frag_limit" min="0" max="999" step="1"></label>
         <label data-when="dm" title="The match is over after this long. 0: no limit">Time limit (minutes) <input form="settings" type="number" name="minutes" min="0" max="600" step="1"></label>
       </fieldset>
       <fieldset class="group wide" data-when="multi"><legend>Who directs them</legend>
         <p class="note wide" data-when="multi-bot">Each player is the bot alone. For Neuro to direct them, choose Neuro under "Who directs her" on the Setup tab.</p>
-        <p class="note wide" data-when="multi-neuro">Each player has her own Neuro: player 1 at the Neuro URL set on the Setup tab, player 2 at the next port up, and so on (8000, 8001, 8002, 8003). Each must be running before the game starts: <code>tools/neuro/garys.sh N</code> starts that many Garys on those ports.</p>
+        <p class="note wide" data-when="multi-neuro">Each player has her own Neuro: the first at the Neuro URL set on the Setup tab, the next at the next port up, and so on (8000, 8001, 8002, 8003); if you play too, player 2 is the first. Each must be running before the game starts: <code>tools/neuro/garys.sh N</code> starts that many Garys on those ports.</p>
         <p class="note wide" data-when="multi-neuro-dm">Neuro can't direct a deathmatch yet: choose co-op, or the bot alone on the Setup tab.</p>
         <p class="note wide" data-when="multi-gpt">The GPT stand-in plays alone: choose the bot alone or Neuro on the Setup tab.</p>
       </fieldset>

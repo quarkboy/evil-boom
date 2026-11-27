@@ -163,6 +163,11 @@ pub struct WatchOptions {
     /// (`--players N`) a co-op game of N players (2 to 4), each a bot of her own (see
     /// viewer::coop); 1: the single-player watch
     pub players: usize,
+    /// (`--human`) with more than one player: the last is a person at the window's keyboard
+    /// and mouse (viewer::coop::human), not a bot
+    pub human: bool,
+    /// (`--mouse DEG`) degrees a mouse pixel turns a person playing
+    pub mouse_sens: f64,
     /// (`--deathmatch`, `--altdeath`) with more than one player: 0 co-op, 1 deathmatch, 2
     /// altdeath
     pub deathmatch: i32,

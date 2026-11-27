@@ -310,3 +310,10 @@ keeps it from level to level. What was new:
   picture, god mode, the exits, and what's said and set to every Neuro. Restart level and Go to
   level aren't there yet (each needs every seat started afresh, as `next_level` does). The Evil
   panel stays empty: there are four of her; the players table is what's shown instead.
+- **A person playing (`--human`, 2026-11-26):** player 1, at the co-op window's keyboard and
+  mouse (`viewer/coop/human.rs`; `evil_window_input` in `evil_api.c` reads SDL's key state and
+  relative mouse). Player 1 because the game's sound and its own view are the console player's;
+  the Neuros direct players 2 on (`neuro_from`). Their view is the window's left 1200x900, the
+  others' down the side. Each Neuro is told "Player 1 (green) is a person, playing with you."
+  Their own window, for OBS to take the co-op window apart, is next (SDL can have two; the
+  `evil_window_*` functions keep one).

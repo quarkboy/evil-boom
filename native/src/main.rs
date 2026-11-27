@@ -974,6 +974,8 @@ fn watch_options(
         lives_shared: false,
         locked: Vec::new(),
         instinct_off: false,
+        human: false,
+        mouse_sens: 0.1,
         window: evilboom::dsda::WindowSpec::default(),
         render: None,
         soundfont: evilboom::config::default_soundfont(),
@@ -1024,6 +1026,14 @@ fn watch_options(
                     .and_then(|v| v.parse().ok())
                     .ok_or("--episode-lives N (her lives for all the levels played on through)")?;
                 w.lives_shared = true;
+            }
+            "--human" => w.human = true,
+            "--mouse" => {
+                w.mouse_sens = it
+                    .next()
+                    .and_then(|v| v.parse::<f64>().ok())
+                    .filter(|v| *v > 0.0 && *v <= 5.0)
+                    .ok_or("--mouse DEG (degrees a mouse pixel turns you, over 0 to 5; 0.1 unless set)")?;
             }
             "--instinct" => {
                 w.instinct_off = match it.next().map(String::as_str) {

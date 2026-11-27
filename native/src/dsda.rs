@@ -272,6 +272,30 @@ pub struct WindowInfo {
     pub refresh: i32,
 }
 
+/// SDL's scancodes kept of the keyboard (the keys a game uses are all well under it).
+const INPUT_KEYS: usize = 512;
+
+type InputFn = unsafe extern "C" fn(*mut u8, c_int, *mut c_int, c_int) -> c_int;
+
+/// The keyboard and mouse at the window (`Dsda::window_input`).
+#[derive(Clone, Debug, Default)]
+pub struct Input {
+    /// the window has the keyboard
+    pub focused: bool,
+    /// by SDL scancode: 1 held
+    pub keys: Vec<u8>,
+    /// moved since last asked (right and down positive)
+    pub mouse: (i32, i32),
+    /// held: bit 0 left, 1 middle, 2 right
+    pub buttons: i32,
+}
+
+impl Input {
+    pub fn held(&self, scancode: usize) -> bool {
+        self.keys.get(scancode).is_some_and(|&k| k != 0)
+    }
+}
+
 /// What happened at the watcher's window.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WindowEvent {
@@ -363,6 +387,7 @@ pub struct Dsda {
     window_fns: Option<WindowFns>,
     /// (none in a library from before it was added)
     window_icon_fn: Option<IconFn>,
+    window_input_fn: Option<InputFn>,
     coop: CoopFns,
     /// what a frame's drawn into, kept across frames
     draw_buffer: RefCell<Vec<u8>>,
@@ -603,6 +628,9 @@ impl Dsda {
         .ok();
         // SAFETY: as above, evil_window_icon's signature; optional.
         let window_icon_fn = unsafe { get::<IconFn>(&lib, b"evil_window_icon") }.ok();
+        // SAFETY: as above, evil_window_input's signature; optional (an older library: no
+        // human player).
+        let window_input_fn = unsafe { get::<InputFn>(&lib, b"evil_window_input") }.ok();
         let argv: Vec<CString> = std::iter::once("evil".to_string())
             .chain(args.iter().cloned())
             .map(CString::new)
@@ -674,6 +702,7 @@ impl Dsda {
             draw_at_fn,
             window_fns,
             window_icon_fn,
+            window_input_fn,
             coop,
             draw_buffer: RefCell::new(Vec::new()),
             _argv: std::mem::ManuallyDrop::new(argv),
@@ -1285,6 +1314,32 @@ impl Dsda {
             // SAFETY: the call reads `w * h` pixels, which `px` has, and keeps none of them.
             unsafe { f(px.as_ptr(), w as c_int, h as c_int) };
         }
+    }
+
+    /// The keyboard and mouse as a player at the window has them (`grab`: the mouse kept in
+    /// the window, its motion relative, or let go; None: as it is). None: the library can't say;
+    /// all let go while the window hasn't the keyboard.
+    pub fn window_input(&self, grab: Option<bool>) -> Option<Input> {
+        let f = self.window_input_fn?;
+        let mut keys = vec![0u8; INPUT_KEYS];
+        let mut mouse = [0 as c_int; 3];
+        let grab = grab.map_or(-1, c_int::from);
+        // SAFETY: room for INPUT_KEYS keys and 3 mouse numbers, as many as it's told it may
+        // write.
+        let focused = unsafe {
+            f(
+                keys.as_mut_ptr(),
+                INPUT_KEYS as c_int,
+                mouse.as_mut_ptr(),
+                grab,
+            )
+        } != 0;
+        Some(Input {
+            focused,
+            keys,
+            mouse: (mouse[0], mouse[1]),
+            buttons: mouse[2],
+        })
     }
 
     pub fn window_close(&self) {

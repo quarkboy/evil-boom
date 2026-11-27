@@ -51,6 +51,7 @@ form's changes first).
 | She goes on to the next level herself; She may restart a level | `evil_next`, `evil_restart` | hers while she directs: from the tally (else it goes on after 30 s); after 90 s with nothing new |
 | Instinct off from the start | `instinct_off` | directed: she stands and waits when an action's done (`--instinct off`), her starting settings' instinct made off to match |
 | **Multiplayer** (its own tab): Players, Kind of game | `players`, `multi` | 1 (Evil alone) to 4, each a bot of her own in one game (`--players`); `coop`, `deathmatch` or `altdeath` |
+| You play too | `human` | player 1 is whoever's at the game's window, by its keyboard and mouse (`--human`); the Neuros, if they direct, players 2 on |
 | Frag limit, Time limit (minutes) | `frag_limit`, `minutes` | a deathmatch over at so many frags, or after so long (20 and 10 unless set; 0: no limit) |
 | **Ultra instinct:** on or off, Deaths on a level before it's hers | `ultra`, `ultra_after` | once a level has killed her that often (3 unless set; 0: from its start), a death is undone and the fight searched for her in the game itself, for up to 30 s (60 after as many deaths again), got back as she plays. On unless turned off; only where she can die |
 | Seconds a death is undone, Game speed while it searches, Worker processes | `ultra_back`, `ultra_speed`, `ultra_workers` | how far back (5; 1 to 20), the game's pace meanwhile (0.5; up to 1), and the processes that search (8; 0: the game itself, the picture stopping for each look) |

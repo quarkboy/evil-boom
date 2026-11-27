@@ -175,6 +175,9 @@ pub struct Settings {
     /// a deathmatch over at this many frags, or after this many minutes (0: no limit)
     pub frag_limit: i32,
     pub minutes: f64,
+    /// with them: player 1 is whoever's at the game's window, its keyboard and mouse
+    /// (`--human`); the rest the bots, or Neuros
+    pub human: bool,
 }
 
 impl Default for Settings {
@@ -237,6 +240,7 @@ impl Default for Settings {
             multi: "coop".into(),
             frag_limit: 20,
             minutes: 10.0,
+            human: false,
         }
     }
 }
@@ -408,6 +412,9 @@ impl Settings {
         }
         if multi {
             a.extend(["--players".into(), self.players.to_string()]);
+            if self.human {
+                a.push("--human".into());
+            }
             if self.multi != "coop" {
                 a.extend([
                     format!("--{}", self.multi),
@@ -1664,6 +1671,8 @@ mod tests {
         let a = line(&s);
         assert!(a.contains("--deathmatch --frags 20 --minutes 10"), "{a}");
         assert!(!a.contains("--instinct"), "{a}");
+        s.human = true;
+        assert!(line(&s).contains("--players 3 --human"), "{}", line(&s));
         s.players = 5;
         assert!(s.check().is_err());
         s.evil_policy = Some(r#"{"instinct":"on","stance":"steady"}"#.into());

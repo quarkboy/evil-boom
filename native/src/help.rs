@@ -113,6 +113,11 @@ The game:
                           stay, respawns); --altdeath for its second kind (everything comes
                           back). Monsters in with --fight N, none without
   --frags N, --minutes M  a deathmatch over at N frags (20) or after M minutes (10); 0: none
+  --human                 with --players: you're the last player, at the window's keyboard
+                          and mouse (WASD, mouse turns, Ctrl/click fire, Space/E/right click
+                          use, 1-7 and the wheel weapons, Shift walk; Esc lets the mouse go,
+                          again quits; P pauses). With --neuro: one Neuro for each of the rest
+  --mouse DEG             degrees a mouse pixel turns you (0.1)
   --speed X               play speed (1: real time; the sound plays only at 1)
   --mute                  no sound
   --log full|brief|off    how much of the log is kept in out/watch/: all of it (her fight's

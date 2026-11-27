@@ -20,9 +20,11 @@ pub(super) mod key {
     pub const L: i32 = 108;
     pub const M: i32 = 109;
     pub const N: i32 = 110;
+    pub const P: i32 = 112;
     pub const T: i32 = 116;
     pub const U: i32 = 117;
     pub const RIGHT: i32 = 0x4000_004F;
+    pub const PAUSE: i32 = 0x4000_0048;
     pub const KP_MINUS: i32 = 0x4000_0056;
     pub const KP_PLUS: i32 = 0x4000_0057;
 }
