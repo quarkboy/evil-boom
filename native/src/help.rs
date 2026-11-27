@@ -120,6 +120,10 @@ The game:
   --mouse DEG             degrees a mouse pixel turns you (0.1)
   --hunt all|none|N,M     in a deathmatch, the bots that gear up and then hunt the others by
                           what they see and hear (all unless told); the rest roam as before
+  --hunt-style S[,S...]   how they hunt, most aggressive first: relentless, eager, steady,
+                          careful, passive (one for all, or one a player in order)
+  --fight-style S[,S...]  how they fight: berserk, aggressive, steady, careful, evasive (how
+                          they stand and fall back, how widely rockets and plasma are sprayed)
   --speed X               play speed (1: real time; the sound plays only at 1)
   --mute                  no sound
   --log full|brief|off    how much of the log is kept in out/watch/: all of it (her fight's

@@ -1166,6 +1166,13 @@ pub struct Deathmatch {
     pub gun_weigh: f64,
     /// a clue she's been to with no one there takes the others within this with it
     pub spent_near: f64,
+    /// rockets and plasma at a rival spread across this much (0-1) of the ground they could
+    /// dodge across in the shot's flight (0: each at the one spot reckoned, as at a monster)
+    pub spray: f64,
+    /// how fast a rival dodges, units a tic (a player runs 16, strafes a little faster)
+    pub dodge_speed: f64,
+    /// plasma swept side to side and back in this many tics
+    pub sweep_tics: f64,
 }
 
 impl Default for Deathmatch {
@@ -1187,6 +1194,9 @@ impl Default for Deathmatch {
             item_weigh: 2.0,
             gun_weigh: 0.5,
             spent_near: 256.0,
+            spray: 0.5,
+            dodge_speed: 16.0,
+            sweep_tics: 18.0,
         }
     }
 }

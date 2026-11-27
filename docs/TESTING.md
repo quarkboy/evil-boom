@@ -221,8 +221,10 @@ which [DEBUGGING.md](DEBUGGING.md) explains how to read. For a fight, use `--fig
 - `tools/dm/run.sh NAME`: deathmatches of two, the hunting bot against the bot before it
   (`--hunt N`), each level and seed played with the hunter in either seat; frags run for run.
   `HUNT=none` / `HUNT=all`: both as before / both hunting, for how often they meet (frags a
-  minute). The levels are deathmatch-sized ones (DOOM II MAP01, 07, 11, 16, DOOM E1M1): the
-  big ones meet too seldom to tell anything.
+  minute). `ALT=1`: deathmatch 2.0. The levels are deathmatch-sized ones (DOOM II MAP01, 07,
+  11, 16, DOOM E1M1): the big ones meet too seldom to tell anything.
+- `tools/dm/styles.sh NAME hunt|fight A B`: one deathmatch style against another
+  (`tactical/styles.rs`), head to head, seats in turn: A's frags less B's a match, by level.
 
 ## Arenas
 

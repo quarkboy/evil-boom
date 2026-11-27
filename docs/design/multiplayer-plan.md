@@ -335,3 +335,15 @@ keeps it from level to level. What was new:
   and once its 30 s are up she goes to see whether it's there when she needs it (health hurt,
   armor short, the big ones whenever). Against the old knowledge, 80 matches seat for seat:
   -0.68 frags a match (s.e. 0.88): the knowledge she shouldn't have had bought nothing.
+- **Spraying and styles (2026-11-27):** a rival dodges, so rockets and plasma at one are spread
+  across where they could be by the shot's landing (`deathmatch.spray`, 0.5 of a runner's
+  ground in the flight): rockets the middle, then either side, then half way; plasma swept;
+  fired as each comes round, rounds not given up on for missing. Seat for seat against aimed
+  shots: +0.38 a match over five levels (s.e. 0.56), but on MAP07, where rockets and plasma are
+  most of it, +3.59 (s.e. 1.01, 32 matches; at 1.0 wide +2.62). Styles (`tactical/styles.rs`,
+  numbers over the tuning as stances are), most aggressive first: hunting relentless, eager,
+  steady (the tuning's own), careful, passive; fighting berserk, aggressive, steady, careful,
+  evasive (the stances' standing and falling back, and the spray wide to none). Against
+  steady, 40 matches each, none clearly stronger (hunting +0.70, +1.35, -0.65, -1.43; fighting
+  -1.35, -0.42, -0.72, -0.33, s.e. about 0.9): they're flavours, for a deathmatch policy and
+  Evil's stances later. `--hunt-style`, `--fight-style`.

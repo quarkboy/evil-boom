@@ -171,6 +171,10 @@ pub struct WatchOptions {
     /// (`--hunt all|none|N,M`) in a deathmatch, the bots that hunt the others once geared up
     /// (0-based; None: all of them), the rest as before: for setting one against the other
     pub hunt: Option<Vec<usize>>,
+    /// (`--hunt-style`, `--fight-style`) a deathmatch's styles (`tactical::styles`): one for all,
+    /// or one a player in order (the last for the rest); empty: the tuning's own
+    pub hunt_style: Vec<String>,
+    pub fight_style: Vec<String>,
     /// (`--deathmatch`, `--altdeath`) with more than one player: 0 co-op, 1 deathmatch, 2
     /// altdeath
     pub deathmatch: i32,

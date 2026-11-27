@@ -128,6 +128,8 @@ struct Coop {
     sound_on: bool,
     /// the stream console's link (`--control`)
     console: Option<console::Link>,
+    /// a deathmatch's styles, hunting and fighting, as given (for the report)
+    styles: (Vec<String>, Vec<String>),
 }
 
 /// The seat a person plays (`--human`): player 1, the game's own (whose the sound is).
@@ -264,6 +266,7 @@ impl Coop {
             muted: false,
             sound_on: sound,
             console,
+            styles: (o.hunt_style.clone(), o.fight_style.clone()),
         })
     }
 
@@ -735,8 +738,18 @@ impl Coop {
                     .agent
                     .player()
                     .is_some_and(|p| p.hunt_state_on());
+                let style = |v: &[String]| v.get(i).or_else(|| v.last()).cloned();
+                let styles: Vec<String> = [style(&self.styles.0), style(&self.styles.1)]
+                    .into_iter()
+                    .flatten()
+                    .collect();
+                let styles = if styles.is_empty() {
+                    String::new()
+                } else {
+                    format!(" [{}]", styles.join(" "))
+                };
                 println!(
-                    "  player {}{}: frags {} (kills of players 1-{}: {}) deaths {}",
+                    "  player {}{}{styles}: frags {} (kills of players 1-{}: {}) deaths {}",
                     i + 1,
                     if hunts { " (hunts)" } else { "" },
                     frags[i],
@@ -1129,6 +1142,23 @@ fn load(w: &Wad, name: &str, o: &WatchOptions) -> Result<(Arc<MapData>, Rc<Navig
     Ok((m, Rc::new(nav)))
 }
 
+/// Player `i`'s numbers: the run's, a deathmatch's styles over them (`--hunt-style`,
+/// `--fight-style`: one for all, or one a player, the last for the rest).
+fn style_tuning(base: &Rc<Tuning>, o: &WatchOptions, i: usize) -> Result<Rc<Tuning>, String> {
+    let pick = |v: &[String]| v.get(i).or_else(|| v.last()).cloned();
+    let mut t = (**base).clone();
+    if o.deathmatch > 0 {
+        if let Some(h) = pick(&o.hunt_style).and_then(|n| crate::tactical::styles::hunt_style(&n)) {
+            t = t.with(&h)?;
+        }
+        if let Some(f) = pick(&o.fight_style).and_then(|n| crate::tactical::styles::fight_style(&n))
+        {
+            t = t.with(&f)?;
+        }
+    }
+    Ok(Rc::new(t))
+}
+
 /// Whether player `i` (0-based) hunts the others in a deathmatch (`--hunt`).
 fn hunts(o: &WatchOptions, i: usize) -> bool {
     o.hunt.as_ref().is_none_or(|h| h.contains(&i))
@@ -1136,7 +1166,11 @@ fn hunts(o: &WatchOptions, i: usize) -> bool {
 
 /// The players for a level, each in it afresh as a watch starts her.
 fn seats(nav: &Rc<Navigator>, map_name: &str, o: &WatchOptions) -> Result<Vec<Seat>, String> {
-    let tune = Tuning::from(o.tuning.as_deref())?;
+    let base = Tuning::from(o.tuning.as_deref())?;
+    // (each player's own, a deathmatch's styles over the run's numbers)
+    let tunes: Vec<Rc<Tuning>> = (0..o.players)
+        .map(|i| style_tuning(&base, o, i))
+        .collect::<Result<_, _>>()?;
     let going_on = o.episode
         && (crate::run::next_map(map_name, false).is_some()
             || crate::run::next_map(map_name, true).is_some());
@@ -1154,7 +1188,7 @@ fn seats(nav: &Rc<Navigator>, map_name: &str, o: &WatchOptions) -> Result<Vec<Se
             } else {
                 o.fight
             };
-            let mut agent = Agent::new(nav, knowledge, fight, false, o.lives, Rc::clone(&tune));
+            let mut agent = Agent::new(nav, knowledge, fight, false, o.lives, Rc::clone(&tunes[i]));
             if let Some(p) = agent.player_mut() {
                 p.set_going_on(going_on && o.deathmatch == 0);
                 if o.deathmatch != 2 {

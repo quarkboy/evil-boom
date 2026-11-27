@@ -69,6 +69,9 @@ pub struct Trigger {
     /// the way she faces 8 tics later)
     pub(super) rocket_facing: Option<f64>,
     pub(super) held_fire: Option<HeldFire>,
+    /// a deathmatch's spray (`deathmatch.spray`): the rival, her rounds as last counted, and
+    /// the shots of it so far (each the next across where they could dodge to)
+    pub(super) spray: Option<(i32, i32, u32)>,
 }
 
 /// The missiles she's getting out of the way of, and the way.

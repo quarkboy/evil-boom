@@ -511,6 +511,7 @@ impl Combat {
                 last_shot: None,
                 rocket_facing: None,
                 held_fire: None,
+                spray: None,
             },
             damage: Vec::new(),
             floor_damage: Vec::new(),

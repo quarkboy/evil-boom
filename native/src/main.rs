@@ -977,6 +977,8 @@ fn watch_options(
         human: false,
         mouse_sens: 0.1,
         hunt: None,
+        hunt_style: Vec::new(),
+        fight_style: Vec::new(),
         window: evilboom::dsda::WindowSpec::default(),
         render: None,
         soundfont: evilboom::config::default_soundfont(),
@@ -1029,6 +1031,24 @@ fn watch_options(
                 w.lives_shared = true;
             }
             "--human" => w.human = true,
+            "--hunt-style" | "--fight-style" => {
+                let hunt = a == "--hunt-style";
+                let (all, check): (&[&str], fn(&str) -> bool) = if hunt {
+                    (&evilboom::tactical::styles::HUNT_STYLES, |n| evilboom::tactical::styles::hunt_style(n).is_some())
+                } else {
+                    (&evilboom::tactical::styles::FIGHT_STYLES, |n| evilboom::tactical::styles::fight_style(n).is_some())
+                };
+                let v = it.next().ok_or_else(|| format!("{a} NAME[,NAME...] ({})", all.join(", ")))?;
+                let names: Vec<String> = v.split(',').map(|n| n.trim().to_lowercase()).collect();
+                if let Some(bad) = names.iter().find(|n| !check(n)) {
+                    return Err(format!("{a}: no style {bad} ({})", all.join(", ")));
+                }
+                if hunt {
+                    w.hunt_style = names;
+                } else {
+                    w.fight_style = names;
+                }
+            }
             "--hunt" => {
                 let v = it.next().ok_or("--hunt all|none|N,M (the players who hunt, 1 the first)")?;
                 w.hunt = match v.as_str() {

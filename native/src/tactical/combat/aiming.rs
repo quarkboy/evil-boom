@@ -230,10 +230,22 @@ impl Combat {
             ax += vx * tof;
             ay += vy * tof;
         }
+        // A rival player dodges: rockets and plasma not each at the one spot reckoned, but spread
+        // across where they could be by the time it gets there, shot after shot, fired as each
+        // comes round (`deathmatch.spray`: how wide, of the ground a runner covers in the
+        // flight). Rounds aren't saved: in a deathmatch she's dead before they'd count.
+        let spray = self.spray_point(obs, t, held, &w, (ax, ay), d);
+        let spraying = spray.is_some();
+        if let Some((p, _)) = spray {
+            (ax, ay) = p;
+        }
         let aim = heading(pos, (ax, ay));
         let leeway = (info.radius * 0.7 - off).max(info.radius * 0.15);
-        let tolerance =
+        let mut tolerance =
             (if off > 0.0 { 0.5 } else { 1.5f64 }).max(leeway.atan2(d.max(1.0)).to_degrees());
+        if let Some((_, band)) = spray {
+            tolerance = tolerance.max(band);
+        }
         let on = norm(aim - obs.angle).abs() < tolerance;
         // A missile gun's rounds gone at one standing where it is and it none the worse: they aren't getting there,
         // whatever the reckoning says. (`projectile_reaches` goes by the missile's middle, on
@@ -300,7 +312,7 @@ impl Combat {
             .filter(|&&(tic, _, _)| tic >= since)
             .map_or(begun, |&(_, _, n)| n.min(begun));
         let gone = f64::from(begun - landed) / f64::from(w.ammo_per_shot.max(1)) * w.damage;
-        if !w.hitscan && gone >= self.tune.aim.wasted {
+        if !w.hitscan && gone >= self.tune.aim.wasted && !spraying {
             self.trigger.no_effect = Some((t.id, pos, obs.tic + self.tune.aim.wasted_tics));
             self.trigger.shot_at = None;
             // (and it's one she can't get at, to the rest of the fight: not stood to, not
@@ -345,7 +357,7 @@ impl Combat {
             Some(HeldFire::OutOfReach)
         } else if held == 5 && (!self.rocket_safe(obs, t) || blocked) {
             Some(HeldFire::RocketNotSafe)
-        } else if no_effect && (!w.hitscan || held == 3) {
+        } else if no_effect && (!w.hitscan || held == 3) && !spraying {
             Some(HeldFire::NoEffect)
         } else if plasma_blocked {
             Some(HeldFire::PlasmaBlocked)
@@ -383,6 +395,63 @@ impl Combat {
             self.trigger.held_fire = held_fire;
         }
         (aim, on && held_fire.is_none(), weapon)
+    }
+
+    /// A deathmatch's spray of rockets or plasma at a rival (`deathmatch.spray`; none at 0, at a
+    /// monster, with another gun): the point across where they could dodge to for this shot,
+    /// about `lead` (where they'd be going straight on), and how far off it (degrees) the shot
+    /// still goes. Rockets one a shot at the middle, then either side, then half way; plasma
+    /// swept side to side as it streams. A point whose lane isn't clear is the middle's.
+    fn spray_point(
+        &mut self,
+        obs: &Observation,
+        t: &Thing,
+        held: i32,
+        w: &crate::bestiary::Weapon,
+        lead: Point,
+        d: f64,
+    ) -> Option<(Point, f64)> {
+        let dm = &self.tune.deathmatch;
+        if t.name != "Opponent" || !(held == 5 || held == 6) || dm.spray <= 0.0 || w.speed <= 0.0 {
+            self.trigger.spray = None;
+            return None;
+        }
+        let pos = obs.pos();
+        let ammo = Self::ammo(obs, held);
+        let n = match self.trigger.spray {
+            Some((id, was, n)) if id == t.id => n + u32::from(ammo < was),
+            _ => {
+                self.log.push(format!(
+                    "tic {}: spraying {} across where {} {} could dodge to",
+                    obs.tic,
+                    if held == 5 { "rockets" } else { "plasma" },
+                    t.name,
+                    t.id
+                ));
+                0
+            }
+        };
+        self.trigger.spray = Some((t.id, ammo, n));
+        let flight = d / w.speed + if held == 5 { ROCKET_DELAY } else { 0.0 };
+        let width = dm.spray * (dm.dodge_speed * flight).min(d * 0.6);
+        let off = if held == 5 {
+            [0.0, 1.0, -1.0, 0.5, -0.5][n as usize % 5]
+        } else {
+            (obs.tic as f64 * std::f64::consts::TAU / dm.sweep_tics).sin()
+        };
+        let len = dist(pos, lead).max(1.0);
+        let (px, py) = (-(lead.1 - pos.1) / len, (lead.0 - pos.0) / len);
+        let at = (lead.0 + px * off * width, lead.1 + py * off * width);
+        let mut there = t.clone();
+        (there.x, there.y) = at;
+        let clear = if held == 5 {
+            self.rocket_lane_clear(obs, &there)
+        } else {
+            self.projectile_reaches(obs, &there, pos, PLASMA_RADIUS)
+        };
+        let at = if clear { at } else { lead };
+        let band = ((width * 0.5 + 16.0) / d.max(1.0)).atan().to_degrees();
+        Some((at, band))
     }
 
     /// Would a shot at t get to it, as Doom aims one (not too steep, nothing in the way); else out

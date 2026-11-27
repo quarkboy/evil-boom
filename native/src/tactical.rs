@@ -10,4 +10,5 @@ pub mod icon;
 pub mod player;
 pub mod rivals;
 pub mod sound;
+pub mod styles;
 pub mod tuning;
