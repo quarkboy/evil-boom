@@ -349,6 +349,9 @@ impl Coop {
         };
         // (what each has done the others are told of: who, what)
         let mut news: Vec<(usize, String)> = Vec::new();
+        // (each player by the name their Neuro gave on connecting, as the others are told)
+        let names = self.names();
+        let who = |i: usize| crate::control::directed::team::who_named(i, &names[i]);
         let mut cs = Vec::with_capacity(self.seats.len());
         let from = self.neuro_from;
         // (a deathmatch: the score and the clock, as each is told them)
@@ -501,6 +504,7 @@ impl Coop {
                     human: self.human.is_some().then_some(HUMAN_SEAT),
                     players,
                     mates: mates.iter().filter(|m| m.player != i).cloned().collect(),
+                    names: names.clone(),
                 };
                 d.set_team(&s.agent, &obs, team);
                 let said = n.tic(&mut s.agent, &obs);
@@ -571,6 +575,18 @@ impl Coop {
     }
 
     /// Each player's frags: the others she's killed, less the times she's killed herself.
+    /// Each player's name, as their Neuro gave it on connecting ("" a bot, a person, or a Neuro
+    /// not connected yet).
+    fn names(&self) -> Vec<String> {
+        (0..self.seats.len())
+            .map(|i| {
+                i.checked_sub(self.neuro_from)
+                    .and_then(|k| self.neuro.get(k))
+                    .map_or(String::new(), |n| n.display_name().to_string())
+            })
+            .collect()
+    }
+
     fn frags(&self) -> Vec<i32> {
         let f = self.engine.frags();
         (0..self.seats.len())
@@ -1427,11 +1443,6 @@ fn seats(nav: &Rc<Navigator>, map_name: &str, o: &WatchOptions) -> Result<Vec<Se
 /// s cut to `width` characters.
 fn clip(s: &str, width: usize) -> String {
     s.chars().take(width).collect()
-}
-
-/// "player 2 (indigo)"
-fn who(i: usize) -> String {
-    crate::control::directed::team::who(i)
 }
 
 /// No game of hers to start, nor a level to go on to or begin again: the co-op game's the

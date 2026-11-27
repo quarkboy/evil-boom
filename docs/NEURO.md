@@ -184,6 +184,10 @@ one, her own link, director, actions and context. On top of that she's told:
 - **where the others are** in her status: "team: player 2 (indigo) in area-14 NW 323, health 100,
   fighting". Area ids are the same in every player's names, since they're built from the map.
 - **what they do that a player would say aloud**, as moments: a death, a key taken.
+- **the others by name:** a player whose Neuro has connected is named as it introduced itself
+  (the startup's `displayName`), with the player and colour: "Evil Neuro (player 2, indigo) died."
+  A bot, a person, or a Neuro not yet connected is "player 2 (indigo)". The same in a deathmatch's
+  score and frags.
 - **her own death and rebirth:** her death as in single-player, then "You're back at your start
   with a pistol. The level's as it was." There's no restart of the level and no `doom_game`. The
   game is the watch's: one level, or `--episode`.

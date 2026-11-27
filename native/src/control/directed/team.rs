@@ -40,6 +40,9 @@ pub struct Team {
     pub human: Option<usize>,
     pub players: usize,
     pub mates: Vec<Mate>,
+    /// each player's name, as their Neuro gave it on connecting ("" none: a bot, a person, or
+    /// not connected yet)
+    pub names: Vec<String>,
 }
 
 /// Another player, as she'd be told.
@@ -62,7 +65,25 @@ pub fn who(player: usize) -> String {
     )
 }
 
+/// "Evil Neuro (player 2, indigo)": a player by the name their Neuro gave, if any (else `who`).
+pub fn who_named(player: usize, name: &str) -> String {
+    if name.trim().is_empty() {
+        return who(player);
+    }
+    format!(
+        "{} (player {}, {})",
+        name.trim(),
+        player + 1,
+        COLOUR_NAMES.get(player).copied().unwrap_or("?")
+    )
+}
+
 impl Team {
+    /// Another player, by their name if their Neuro gave one.
+    pub fn name(&self, player: usize) -> String {
+        who_named(player, self.names.get(player).map_or("", String::as_str))
+    }
+
     /// Told her with the rules: who she is in this game.
     pub fn brief(&self) -> String {
         if let Some(m) = &self.rivals {
@@ -116,7 +137,7 @@ impl Director {
             let mut parts = Vec::new();
             for m in &team.mates {
                 if !m.alive {
-                    parts.push(format!("{} dead", who(m.player)));
+                    parts.push(format!("{} dead", team.name(m.player)));
                     continue;
                 }
                 let area = self
@@ -125,7 +146,7 @@ impl Director {
                 let fighting = if m.fighting { ", fighting" } else { "" };
                 parts.push(format!(
                     "{}{area} {} {:.0}, health {}{fighting}",
-                    who(m.player),
+                    team.name(m.player),
                     compass(heading(pos, m.pos)),
                     dist(pos, m.pos),
                     m.health
@@ -145,7 +166,13 @@ impl Director {
     pub fn frag_news(&mut self, tic: i64, by: usize, of: usize, frags: &[i32]) {
         let Some(team) = &self.team else { return };
         let me = team.me;
-        let name = |p: usize| if p == me { "you".to_string() } else { who(p) };
+        let name = |p: usize| {
+            if p == me {
+                "you".to_string()
+            } else {
+                team.name(p)
+            }
+        };
         let text = if by == of {
             format!(
                 "{} died by {} own hand.",
@@ -153,11 +180,11 @@ impl Director {
                 if by == me { "your" } else { "their" }
             )
         } else if by == me {
-            format!("You fragged {}.", who(of))
+            format!("You fragged {}.", team.name(of))
         } else if of == me {
-            format!("{} fragged you.", cap(&who(by)))
+            format!("{} fragged you.", cap(&team.name(by)))
         } else {
-            format!("{} fragged {}.", cap(&who(by)), who(of))
+            format!("{} fragged {}.", cap(&team.name(by)), team.name(of))
         };
         let mine = frags.get(me).copied().unwrap_or(0);
         let best = (0..frags.len())
@@ -196,7 +223,7 @@ impl Director {
         } else {
             format!(
                 "Match over: {} won with {top}; you had {mine}.",
-                who(winners[0])
+                team.name(winners[0])
             )
         };
         self.reports.push(Report {
@@ -331,7 +358,7 @@ fn standings(team: &Team, m: &Match) -> String {
             let name = if p == team.me {
                 "you".to_string()
             } else {
-                who(p)
+                team.name(p)
             };
             format!("{name} {}", m.frags[p])
         })
@@ -377,6 +404,28 @@ mod tests {
             b.contains("you're player 2 (indigo) of 2")
                 && b.contains("Player 1 (green) is a person, playing with you."),
             "{b}"
+        );
+    }
+
+    /// The others by the name their Neuro gave on connecting, if one did.
+    #[test]
+    fn others_by_their_names() {
+        let t = Team {
+            me: 0,
+            players: 3,
+            names: vec![String::new(), "Evil Neuro".into(), String::new()],
+            ..Team::default()
+        };
+        assert_eq!(t.name(1), "Evil Neuro (player 2, indigo)");
+        assert_eq!(t.name(2), "player 3 (brown)");
+        let m = super::Match {
+            frags: vec![1, 4, 0],
+            ..super::Match::default()
+        };
+        let line = super::standings(&t, &m);
+        assert!(
+            line.starts_with("frags: Evil Neuro (player 2, indigo) 4, you 1, player 3 (brown) 0"),
+            "{line}"
         );
     }
 }

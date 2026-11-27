@@ -32,6 +32,8 @@ pub struct Session {
     /// connected now, and who to (the startup's acknowledgement)
     connected: bool,
     who: String,
+    /// the name alone (the startup's `displayName`), as the others are told of her
+    display: String,
     character: Character,
     pub director: Director,
     /// the force out, if one is (`Forcing`: one at a time); the question last forced
@@ -408,6 +410,7 @@ impl Session {
             url: url.to_string(),
             connected: false,
             who: String::new(),
+            display: String::new(),
             character: Character::Unknown,
             director,
             forced: Forcing::new(
@@ -701,6 +704,7 @@ impl Session {
                 Incoming::Hello { character, display } => {
                     log.push(format!("neuro: playing with {display} ({character})"));
                     self.who = format!("{display} ({character})");
+                    self.display = display.trim().to_string();
                     self.character = Character::of(&character);
                 }
                 Incoming::Lost(why) => {
@@ -1182,6 +1186,7 @@ impl Session {
                 Incoming::Hello { character, display } => {
                     log.push(format!("neuro: playing with {display} ({character})"));
                     self.who = format!("{display} ({character})");
+                    self.display = display.trim().to_string();
                     self.character = Character::of(&character);
                 }
                 Incoming::Lost(why) => {
@@ -1282,6 +1287,11 @@ impl Session {
     /// telling one differently from the other.
     pub fn character(&self) -> &Character {
         &self.character
+    }
+
+    /// The name she gave on connecting (the startup's `displayName`; "" none yet).
+    pub fn display_name(&self) -> &str {
+        &self.display
     }
 
     /// (Neuro's address, connected, who's playing)
