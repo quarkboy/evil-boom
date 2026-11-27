@@ -178,6 +178,8 @@ pub struct Settings {
     /// with them: player 1 is whoever's at the game's window, its keyboard and mouse
     /// (`--human`); the rest the bots, or Neuros
     pub human: bool,
+    /// ...in a window of their own, the game's main window the stream's (`--human-window`)
+    pub human_window: bool,
     /// a deathmatch's bots, a player each in order (1 the first), comma-separated: how each
     /// hunts and fights (`tactical::styles`; "" the first's default, steady), and which don't
     /// hunt at all (their numbers)
@@ -250,6 +252,7 @@ impl Default for Settings {
             frag_limit: 20,
             minutes: 10.0,
             human: false,
+            human_window: false,
             hunt_styles: String::new(),
             fight_styles: String::new(),
             no_hunt: String::new(),
@@ -461,7 +464,14 @@ impl Settings {
         if multi {
             a.extend(["--players".into(), self.players.to_string()]);
             if self.human {
-                a.push("--human".into());
+                a.push(
+                    if self.human_window {
+                        "--human-window"
+                    } else {
+                        "--human"
+                    }
+                    .into(),
+                );
             }
             if self.camera != "grid" {
                 a.extend(["--camera".into(), self.camera.clone()]);
@@ -1770,6 +1780,13 @@ mod tests {
         assert!(!a.contains("--instinct"), "{a}");
         s.human = true;
         assert!(line(&s).contains("--players 3 --human"), "{}", line(&s));
+        s.human_window = true;
+        assert!(
+            line(&s).contains("--players 3 --human-window"),
+            "{}",
+            line(&s)
+        );
+        s.human_window = false;
         s.mode = "bot".into();
         s.fight_styles = "berserk,,evasive".into();
         s.no_hunt = "2".into();

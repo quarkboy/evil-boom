@@ -354,3 +354,8 @@ keeps it from level to level. What was new:
   place of the stance; exit, goal and game not offered; status the score, the clock, the last
   word of a rival; frags and the match's end told as Doom's messages tell every player. NEURO.md
   has the whole of it.
+- **Your own window (2026-11-27, `--human-window`):** the person playing has a second SDL window
+  (`evil_play_open`/`_show` in evil_api.c, no vsync: the main one keeps the time); its keys and
+  wheel come apart (events 4-6) and the keyboard and mouse are read from it. The main window is
+  the stream's again, every view or the camera, for OBS; the sound stays the person's whoever's
+  on camera (one sound out of the machine: theirs to play by).

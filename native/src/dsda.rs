@@ -305,6 +305,10 @@ pub enum WindowEvent {
     Wheel(i32),
     /// shut, or the program asked to quit
     Close,
+    /// the play window's (`play_open`): a key, the wheel, shut
+    PlayKey(i32),
+    PlayWheel(i32),
+    PlayClose,
 }
 
 /// The screen as the game has it (evil_screen): Doom's own screens, the stream's.
@@ -389,6 +393,8 @@ pub struct Dsda {
     window_icon_fn: Option<IconFn>,
     window_input_fn: Option<InputFn>,
     listen_fn: Option<unsafe extern "C" fn(c_int)>,
+    play_open_fn: Option<unsafe extern "C" fn(*const c_char, c_int, c_int, c_int, c_int) -> c_int>,
+    play_show_fn: Option<unsafe extern "C" fn(*const u32, c_int, c_int)>,
     coop: CoopFns,
     /// what a frame's drawn into, kept across frames
     draw_buffer: RefCell<Vec<u8>>,
@@ -634,6 +640,18 @@ impl Dsda {
         let window_input_fn = unsafe { get::<InputFn>(&lib, b"evil_window_input") }.ok();
         // SAFETY: as above, `void evil_listen(int)`; optional (an older library: player 1's ears).
         let listen_fn = unsafe { get::<unsafe extern "C" fn(c_int)>(&lib, b"evil_listen") }.ok();
+        // SAFETY: as above, the play window's (evil_play_open, evil_play_show); optional.
+        let play_open_fn = unsafe {
+            get::<unsafe extern "C" fn(*const c_char, c_int, c_int, c_int, c_int) -> c_int>(
+                &lib,
+                b"evil_play_open",
+            )
+        }
+        .ok();
+        let play_show_fn = unsafe {
+            get::<unsafe extern "C" fn(*const u32, c_int, c_int)>(&lib, b"evil_play_show")
+        }
+        .ok();
         let argv: Vec<CString> = std::iter::once("evil".to_string())
             .chain(args.iter().cloned())
             .map(CString::new)
@@ -707,6 +725,8 @@ impl Dsda {
             window_icon_fn,
             window_input_fn,
             listen_fn,
+            play_open_fn,
+            play_show_fn,
             coop,
             draw_buffer: RefCell::new(Vec::new()),
             _argv: std::mem::ManuallyDrop::new(argv),
@@ -1300,6 +1320,9 @@ impl Dsda {
                 1 => Some(WindowEvent::Key(e[1])),
                 2 => Some(WindowEvent::Wheel(e[1])),
                 3 => Some(WindowEvent::Close),
+                4 => Some(WindowEvent::PlayKey(e[1])),
+                5 => Some(WindowEvent::PlayWheel(e[1])),
+                6 => Some(WindowEvent::PlayClose),
                 _ => None,
             })
             .collect()
@@ -1344,6 +1367,33 @@ impl Dsda {
             mouse: (mouse[0], mouse[1]),
             buttons: mouse[2],
         })
+    }
+
+    /// A second window, for a person playing (`w` by `h` their view, the window `size`, 0 0 the
+    /// view's): their keys and wheel come as `PlayKey`, `PlayWheel`, and their keyboard and mouse
+    /// are read from it (`window_input`). False: none to be had.
+    pub fn play_open(&self, title: &str, w: usize, h: usize, size: (usize, usize)) -> bool {
+        let (Some(f), Ok(t)) = (self.play_open_fn, CString::new(title)) else {
+            return false;
+        };
+        // SAFETY: a string the call only reads, and sizes.
+        unsafe {
+            f(
+                t.as_ptr(),
+                w as c_int,
+                h as c_int,
+                size.0 as c_int,
+                size.1 as c_int,
+            ) != 0
+        }
+    }
+
+    /// A picture shown in the play window (0RGB, `w` by `h`).
+    pub fn play_show(&self, px: &[u32], w: usize, h: usize) {
+        if let Some(f) = self.play_show_fn.filter(|_| px.len() >= w * h) {
+            // SAFETY: the call reads `w * h` pixels, which `px` has.
+            unsafe { f(px.as_ptr(), w as c_int, h as c_int) };
+        }
     }
 
     /// The game's sound heard as `player` hears it (0-based; None: the console player's).

@@ -1013,6 +1013,12 @@ static SDL_Renderer *evil_renderer;
 static SDL_Texture *evil_texture;
 static int evil_texture_w, evil_texture_h;
 static Uint32 evil_window_id;
+/* a second window, for a person playing (`evil_play_open`): their own view, their keys */
+static SDL_Window *evil_play_window;
+static SDL_Renderer *evil_play_renderer;
+static SDL_Texture *evil_play_texture;
+static int evil_play_w, evil_play_h;
+static Uint32 evil_play_id;
 #define EVIL_EVENTS 64
 static int evil_events[EVIL_EVENTS * 2];
 static int evil_event_count;
@@ -1033,7 +1039,8 @@ static void evil_event(int kind, int value)
 }
 
 /* (each event as it comes in, before anyone polls: the window's kept for the caller (1 a key
- * pressed, its SDL keycode; 2 the wheel, up positive; 3 closed or quit) and taken out) */
+ * pressed, its SDL keycode; 2 the wheel, up positive; 3 closed or quit; the play window's 4, 5,
+ * 6 the same) and taken out) */
 static int SDLCALL evil_event_filter(void *data, SDL_Event *e)
 {
   Uint32 id = 0;
@@ -1046,8 +1053,13 @@ static int SDLCALL evil_event_filter(void *data, SDL_Event *e)
     case SDL_KEYDOWN:
     case SDL_KEYUP:
       id = e->key.windowID;
-      if (id == evil_window_id && e->type == SDL_KEYDOWN && !e->key.repeat)
-        evil_event(1, e->key.keysym.sym);
+      if (e->type == SDL_KEYDOWN && !e->key.repeat)
+      {
+        if (id == evil_window_id)
+          evil_event(1, e->key.keysym.sym);
+        else if (evil_play_id && id == evil_play_id)
+          evil_event(4, e->key.keysym.sym);
+      }
       break;
     case SDL_TEXTINPUT:
       id = e->text.windowID;
@@ -1064,18 +1076,95 @@ static int SDLCALL evil_event_filter(void *data, SDL_Event *e)
       break;
     case SDL_MOUSEWHEEL:
       id = e->wheel.windowID;
-      if (id == evil_window_id && e->wheel.y)
-        evil_event(2, e->wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -e->wheel.y : e->wheel.y);
+      if ((id == evil_window_id || (evil_play_id && id == evil_play_id)) && e->wheel.y)
+        evil_event(id == evil_window_id ? 2 : 5,
+                   e->wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -e->wheel.y : e->wheel.y);
       break;
     case SDL_WINDOWEVENT:
       id = e->window.windowID;
-      if (id == evil_window_id && e->window.event == SDL_WINDOWEVENT_CLOSE)
-        evil_event(3, 0);
+      if (e->window.event == SDL_WINDOWEVENT_CLOSE)
+      {
+        if (id == evil_window_id)
+          evil_event(3, 0);
+        else if (evil_play_id && id == evil_play_id)
+          evil_event(6, 0);
+      }
       break;
     default:
       return 1;
   }
-  return id != evil_window_id;
+  return id != evil_window_id && !(evil_play_id && id == evil_play_id);
+}
+
+/* The window a person plays in, beside the watcher's (`evil_window_open` first): their view,
+ * `w` by `h` (the picture's size), the window `window_w` by `window_h` (0: the picture's), no
+ * vsync (the watcher's window keeps the time). Its keys and wheel are told apart (4, 5, 6), and
+ * the keyboard and mouse a player has are read from it (`evil_window_input`). 1 if it's open. */
+EVIL_API int evil_play_open(const char *title, int w, int h, int window_w, int window_h)
+{
+  if (evil_play_window)
+    return 1;
+  if (!evil_window)
+    return 0;
+  evil_play_window = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                                      window_w > 0 ? window_w : w, window_h > 0 ? window_h : h,
+                                      SDL_WINDOW_RESIZABLE);
+  if (!evil_play_window)
+  {
+    lprintf(LO_WARN, "evil_play_open: %s\n", SDL_GetError());
+    return 0;
+  }
+  evil_play_renderer = SDL_CreateRenderer(evil_play_window, -1, SDL_RENDERER_ACCELERATED);
+  if (!evil_play_renderer)
+    evil_play_renderer = SDL_CreateRenderer(evil_play_window, -1, 0);
+  if (!evil_play_renderer)
+  {
+    lprintf(LO_WARN, "evil_play_open: %s\n", SDL_GetError());
+    SDL_DestroyWindow(evil_play_window);
+    evil_play_window = NULL;
+    return 0;
+  }
+  SDL_RenderSetLogicalSize(evil_play_renderer, w, h);
+  evil_play_id = SDL_GetWindowID(evil_play_window);
+  return 1;
+}
+
+/* A picture shown in the play window (0RGB, a row of `w` after another). */
+EVIL_API void evil_play_show(const unsigned int *px, int w, int h)
+{
+  if (!evil_play_renderer)
+    return;
+  if (!evil_play_texture || evil_play_w != w || evil_play_h != h)
+  {
+    if (evil_play_texture)
+      SDL_DestroyTexture(evil_play_texture);
+    evil_play_texture = SDL_CreateTexture(evil_play_renderer, SDL_PIXELFORMAT_ARGB8888,
+                                          SDL_TEXTUREACCESS_STREAMING, w, h);
+    evil_play_w = w;
+    evil_play_h = h;
+    SDL_RenderSetLogicalSize(evil_play_renderer, w, h);
+  }
+  if (!evil_play_texture)
+    return;
+  SDL_UpdateTexture(evil_play_texture, NULL, px, w * 4);
+  SDL_SetRenderDrawColor(evil_play_renderer, 0, 0, 0, 255);
+  SDL_RenderClear(evil_play_renderer);
+  SDL_RenderCopy(evil_play_renderer, evil_play_texture, NULL, NULL);
+  SDL_RenderPresent(evil_play_renderer);
+}
+
+static void evil_play_close(void)
+{
+  if (evil_play_texture)
+    SDL_DestroyTexture(evil_play_texture);
+  if (evil_play_renderer)
+    SDL_DestroyRenderer(evil_play_renderer);
+  if (evil_play_window)
+    SDL_DestroyWindow(evil_play_window);
+  evil_play_texture = NULL;
+  evil_play_renderer = NULL;
+  evil_play_window = NULL;
+  evil_play_id = 0;
 }
 
 /* The window opened for a picture `w` by `h`, the window `window_w` by `window_h` (0: the
@@ -1172,11 +1261,16 @@ EVIL_API int evil_window_events(int *out, int max)
  * WSLg the pointer is the Windows desktop's own, and none of this takes: it shows and leaves
  * the window; the motion's still right.) */
 static int evil_grabbed;
+/* the window a person plays in: the play window if there's one, else the watcher's */
+static SDL_Window *evil_input_window(void)
+{
+  return evil_play_window ? evil_play_window : evil_window;
+}
 static void evil_grab(int on)
 {
   if (on)
-    SDL_RaiseWindow(evil_window);
-  SDL_SetWindowGrab(evil_window, on ? SDL_TRUE : SDL_FALSE);
+    SDL_RaiseWindow(evil_input_window());
+  SDL_SetWindowGrab(evil_input_window(), on ? SDL_TRUE : SDL_FALSE);
   SDL_SetRelativeMouseMode(on ? SDL_TRUE : SDL_FALSE);
   SDL_ShowCursor(on ? SDL_DISABLE : SDL_ENABLE);
   SDL_GetRelativeMouseState(NULL, NULL); /* (what moved before, not counted) */
@@ -1199,7 +1293,7 @@ EVIL_API int evil_window_input(unsigned char *keys, int n, int *mouse, int grab)
   if (!evil_window)
     return 0;
   SDL_PumpEvents();
-  focused = SDL_GetKeyboardFocus() == evil_window;
+  focused = SDL_GetKeyboardFocus() == evil_input_window();
   if (grab == 0 && evil_grabbed)
     evil_grab(0);
   /* (grabbed or not as asked; let go of while the window's lost the keyboard, as the system
@@ -1245,6 +1339,7 @@ EVIL_API void evil_window_close(void)
 {
   if (evil_window && evil_grabbed)
     evil_grab(0);
+  evil_play_close();
   SDL_SetEventFilter(NULL, NULL);
   if (evil_texture)
     SDL_DestroyTexture(evil_texture);

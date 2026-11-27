@@ -178,6 +178,9 @@ pub struct WatchOptions {
     /// (`--camera N`) a co-op or deathmatch game begun with the camera on player N (0-based):
     /// their view filling the window, the sound theirs; None: every view at once
     pub camera: Option<usize>,
+    /// (`--human-window`) a person playing has a window of their own, the watcher's window the
+    /// stream's (every view, or the camera)
+    pub human_window: bool,
     /// (`--deathmatch`, `--altdeath`) with more than one player: 0 co-op, 1 deathmatch, 2
     /// altdeath
     pub deathmatch: i32,
@@ -1117,6 +1120,10 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
                     continue;
                 }
                 WindowEvent::Key(k) => k,
+                // (no play window here)
+                WindowEvent::PlayKey(_) | WindowEvent::PlayWheel(_) | WindowEvent::PlayClose => {
+                    continue
+                }
             };
             match k {
                 key::ESCAPE => break 'frames,

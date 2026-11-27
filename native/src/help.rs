@@ -118,6 +118,8 @@ The game:
                           use, 1-7 and the wheel weapons, Shift walk; Esc lets the mouse go,
                           again quits; P pauses). With --neuro: one Neuro for each of the rest
   --mouse DEG             degrees a mouse pixel turns you (0.1)
+  --human-window          as --human, in a window of your own: the main window stays the
+                          stream's (every view, or the camera), for OBS to take
   --camera N|grid         with --players: player N's view filling the window, the sound
                           theirs (1-4 in the window switch it, 0 every view, C the next)
   --hunt all|none|N,M     in a deathmatch, the bots that gear up and then hunt the others by

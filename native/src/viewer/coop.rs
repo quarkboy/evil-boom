@@ -133,6 +133,8 @@ struct Coop {
     /// the camera: one player's view filling the window, the sound theirs (0-based); none:
     /// every view at once
     camera: Option<usize>,
+    /// (`--human-window`) the person playing has a window of their own, open
+    play_window: bool,
 }
 
 /// The seat a person plays (`--human`): player 1, the game's own (whose the sound is).
@@ -276,6 +278,7 @@ impl Coop {
             console,
             styles: (o.hunt_style.clone(), o.fight_style.clone()),
             camera: None,
+            play_window: false,
         })
     }
 
@@ -851,6 +854,19 @@ impl Coop {
     fn show(&mut self, o: &WatchOptions) -> Result<(), String> {
         let title = format!("evil-boom {}: {}", self.kind(), self.map_name);
         let mut window = window::Window::open(&self.engine.game, &title, (W, H), o.window)?;
+        // (a person playing in a window of their own: their view, 4:3, as big as the render)
+        if self.human.is_some() && o.human_window {
+            let (w, h) = o.render.unwrap_or((640, 480));
+            self.play_window =
+                self.engine
+                    .game
+                    .play_open("evil-boom: you", w, h, (960.max(w), 720.max(h)));
+            if !self.play_window {
+                println!("--human-window: no window of your own to be had (an older engine?)");
+            } else {
+                self.engine.game.listen(Some(HUMAN_SEAT));
+            }
+        }
         let mut canvas = Canvas {
             px: vec![0; W * H],
             width: W,
@@ -868,21 +884,30 @@ impl Coop {
             let mut esc = false;
             for event in window::Window::events(&self.engine.game) {
                 use window::key;
+                // (a person playing in a window of their own: theirs are its keys and wheel; the
+                // watcher's window's are the stream's, the camera's)
+                let (play, event) = match event {
+                    WindowEvent::PlayKey(k) => (true, WindowEvent::Key(k)),
+                    WindowEvent::PlayWheel(by) => (true, WindowEvent::Wheel(by)),
+                    WindowEvent::PlayClose => (true, WindowEvent::Close),
+                    e => (false, e),
+                };
+                let theirs = self.human.is_some() && (play || !self.play_window);
                 let WindowEvent::Key(k) = event else {
                     match event {
                         WindowEvent::Close => break 'frames,
                         WindowEvent::Wheel(by) => {
-                            if let Some(h) = self.human.as_mut() {
+                            if let Some(h) = self.human.as_mut().filter(|_| theirs) {
                                 h.wheel(by);
                             }
                         }
-                        WindowEvent::Key(_) => {}
+                        _ => {}
                     }
                     continue;
                 };
                 // (a person playing: Space is theirs to use with, Esc lets the mouse go first;
                 // P pauses)
-                if self.human.is_some() {
+                if theirs {
                     match k {
                         key::ESCAPE => esc = true,
                         key::P | key::PAUSE => self.paused = !self.paused,
@@ -979,6 +1004,13 @@ impl Coop {
             self.draw(&mut canvas);
             let painted = Instant::now();
             window.show(&self.engine.game, &canvas.px, W, H);
+            if self.play_window
+                && let Some((fw, fh, px, pal)) = &self.seats[HUMAN_SEAT].frame
+            {
+                let palette = self.palettes.get(*pal).unwrap_or(&self.palettes[0]);
+                let rgb: Vec<u32> = px.iter().map(|&p| palette[usize::from(p)]).collect();
+                self.engine.game.play_show(&rgb, *fw, *fh);
+            }
             self.console_views(&canvas.px);
             if let Some(f) = frames.as_mut() {
                 let picture = self.seats[0].frame.as_ref().map_or(&[][..], |f| &f.2[..]);
@@ -1006,9 +1038,11 @@ impl Coop {
         c.clip = (0, 0, W, H);
         c.fill((0, 0, W, H), BG);
         let n = self.seats.len();
-        if let (Some(cam), None) = (self.camera, &self.human) {
+        // (a person playing in a window of their own: this one's the stream's)
+        let stream = self.human.is_none() || self.play_window;
+        if let Some(cam) = self.camera.filter(|_| stream) {
             self.draw_camera(c, cam);
-        } else if self.human.is_some() {
+        } else if !stream {
             // (a person playing: their view large, 4:3; the others' small down the side, the
             // map under them if there's room)
             let (vw, vh) = (H * 4 / 3, H);
@@ -1106,7 +1140,12 @@ impl Coop {
     pub(super) fn set_camera(&mut self, p: Option<usize>) -> String {
         let p = p.filter(|&p| p < self.seats.len());
         self.camera = p;
-        self.engine.game.listen(p);
+        // (a person playing hears their own game, whoever's on camera)
+        self.engine.game.listen(if self.human.is_some() {
+            Some(HUMAN_SEAT)
+        } else {
+            p
+        });
         match p {
             Some(p) => format!("console: camera on player {}", p + 1),
             None => "console: every view at once".into(),

@@ -980,6 +980,7 @@ fn watch_options(
         hunt_style: Vec::new(),
         fight_style: Vec::new(),
         camera: None,
+        human_window: false,
         window: evilboom::dsda::WindowSpec::default(),
         render: None,
         soundfont: evilboom::config::default_soundfont(),
@@ -1032,6 +1033,10 @@ fn watch_options(
                 w.lives_shared = true;
             }
             "--human" => w.human = true,
+            "--human-window" => {
+                w.human = true;
+                w.human_window = true;
+            }
             "--camera" => {
                 w.camera = match it.next().map(String::as_str) {
                     Some("grid") => None,
