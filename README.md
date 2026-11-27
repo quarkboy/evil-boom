@@ -32,6 +32,9 @@ and stepped a tic at a time from Rust.
   column for the viewers (map, what she's doing, her calls, the tally) whose parts can be turned
   on and off; and a web console for whoever runs the stream to set up, start, steer and stop the
   game, see what Evil is told and does, and act in her place.
+- **Plays with others:** co-op for two to four players, or deathmatch, with every view on screen
+  or one at a time. Each player is a bot, each can have a Neuro of her own, and you can join in
+  with keyboard and mouse. See [Co-op, deathmatch, and playing with her](#co-op-deathmatch-and-playing-with-her).
 - **Plays other maps:** PWADs in the DOOM format load over the IWAD (`--pwad`). Boom and MBF21
   map sets aren't supported yet.
 - **Comes with its own test bench:** headless runs and sweeps, set-piece fights (arenas), a
@@ -63,6 +66,50 @@ command.
 To have an AI direct her, point the game at a Neuro SDK server
 (`--neuro ws://127.0.0.1:8000`, or the console's "Directed by" setting);
 [docs/NEURO.md](docs/NEURO.md) has her actions and how to try it without Neuro.
+
+## Co-op, deathmatch, and playing with her
+
+Up to four players in one game, each one a bot of her own:
+
+```sh
+evil-boom watch doom2 MAP01 --players 3 --fight 3 --mortal          # co-op, monsters on HMP
+evil-boom watch doom2 MAP07 --players 2 --deathmatch --frags 20     # deathmatch, no monsters
+evil-boom watch doom2 MAP11 --players 4 --altdeath --minutes 10     # deathmatch 2.0: items come back
+```
+
+- **Co-op** is Doom's own: players are reborn at the start and friendly fire stays on. The bots
+  share what each learns of the level, leave a job to whoever is already at it, take turns on
+  small lifts, give way in corridors and hold fire when a teammate is in the way.
+- **Deathmatch:** the bots gear up first, then hunt each other by what they see and hear: gunfire,
+  grunts, doors, items being taken. They spray rockets and plasma across where a rival could
+  dodge to. With `--altdeath` they know when what they took comes back. Each bot can have its own
+  hunting style (`--hunt-style`, from relentless to passive) and fighting style (`--fight-style`,
+  from berserk to evasive). Small and medium maps work best; the biggest are too big for two.
+- **The window** shows every player's view at once, or one player's view filling it
+  (`--camera N`). Press 1-4 to switch, 0 for every view, and C for the next player. The sound
+  follows the camera (unless you're playing: then it's yours), and each view is labelled with
+  the name its Neuro gave on connecting.
+- **A Neuro each:** with `--neuro URL`, every player gets a Neuro of her own, at URL's port and
+  the ports after it (8000, 8001, ...). `tools/neuro/garys.sh N` starts that many stand-in
+  Neuros. Each is told the rules and the score, and of the others what a player would hear:
+  deaths, keys, frags. In deathmatch her instinct is always off: she hunts or gears up when told
+  to (`doom_hunt`) and sets her styles with `doom_policy`. See
+  [docs/NEURO.md](docs/NEURO.md#co-op-a-neuro-each).
+- **Playing with her:** `--human` makes you player 1, at the window's keyboard and mouse: WASD,
+  the mouse turns, Ctrl or click fires, Space, E or right click uses, 1-7 and the wheel change
+  weapons, Shift walks. Esc lets the mouse go (Esc again quits) and P pauses. `--mouse DEG` sets
+  the sensitivity.
+- **Your own window, for streaming:** `--human-window` gives you a second window with your view
+  and controls, so the main window stays the stream's for OBS to capture. Set its size with
+  `--human-window-size WxH`, or `--human-fullscreen` to fill the screen it's on. The sound stays
+  yours whoever is on camera.
+
+```sh
+evil-boom watch doom2 MAP01 --players 2 --deathmatch --human-window --neuro ws://127.0.0.1:8000
+```
+
+All of this can be set up and run from the console's Multiplayer tab, which also switches the
+camera during the game ([docs/CONSOLE.md](docs/CONSOLE.md)).
 
 ## Music
 
@@ -114,6 +161,7 @@ this is an unofficial fan project, not affiliated with or endorsed by Vedal.
 - Play more realistically still: everything decided by what she's seen, heard and learned. The
   Icon of Sin mode, for one, plans from the whole map.
 - Community WADs: Boom and MBF21 map sets, not just DOOM-format ones.
-- A person in the game with her, co-op or deathmatch; and two bots, Evil and Neuro.
+- Co-op and deathmatch: Restart level and Go to level from the console; hunts that keep off
+  floors that hurt.
 - Experimental: the advisor (`--advisor`), a decision model with a say in the bot's choices.
 - A custom status bar for the stream.
