@@ -7,8 +7,9 @@
 //!
 //! Keys: W/S or Up/Down forward and back, A/D strafe, Left/Right turn (strafe with Alt), the
 //! mouse turns; Ctrl or the left button fires, Space, E or the right button uses (and, dead,
-//! brings you back), 1-7 and the wheel the weapons. You run; Shift held, you walk. Esc lets the
-//! mouse go (a click takes it again; Esc again, the game's over).
+//! brings you back), 1-7 and the wheel the weapons. You run; Shift held, you walk. The mouse is
+//! the game's from the start, unseen and kept in the window (and again whenever the window's
+//! back in front); Esc lets it go (a click takes it again; Esc again, the game's over).
 
 use crate::domain::{Controls, Observation};
 use crate::dsda::{Dsda, Input};
@@ -87,12 +88,15 @@ pub(super) struct Human {
     input: Input,
     /// a button held last frame (a click, once)
     clicked_was: bool,
+    /// the window had the keyboard last frame
+    focused_was: bool,
 }
 
 impl Human {
     pub(super) fn new(sens: f64) -> Human {
         Human {
-            grabbed: false,
+            // (the mouse the game's from the start: the cursor gone, kept in the window)
+            grabbed: true,
             sens,
             turn: 0.0,
             attack: false,
@@ -102,6 +106,7 @@ impl Human {
             turn_held: 0,
             input: Input::default(),
             clicked_was: false,
+            focused_was: false,
         }
     }
 
@@ -130,10 +135,11 @@ impl Human {
             return Asked::Nothing; // (the click that took it isn't a shot)
         }
         self.clicked_was = clicked;
-        if !input.focused {
-            self.grabbed = false;
-        }
-        if self.grabbed {
+        // (the window's keyboard back: the mouse taken again by itself, and the click that
+        // brought it back no shot)
+        let back = input.focused && !self.focused_was;
+        self.focused_was = input.focused;
+        if self.grabbed && !back {
             self.turn += f64::from(input.mouse.0) * self.sens;
             self.attack |= input.buttons & 1 != 0;
             self.use_ |= input.buttons & 4 != 0;

@@ -1149,28 +1149,50 @@ EVIL_API int evil_window_events(int *out, int max)
   return n;
 }
 
+/* The mouse kept in the window for a player (on) or let go: unseen, held inside it, its motion
+ * relative. Relative mode by warping the pointer back to the window's middle: the system's own
+ * kind doesn't take everywhere (XWayland, WSLg), and warping works wherever a pointer can be
+ * moved. */
+static int evil_grabbed;
+static void evil_grab(int on)
+{
+  if (on)
+  {
+    SDL_SetHint(SDL_HINT_MOUSE_RELATIVE_MODE_WARP, "1");
+    SDL_RaiseWindow(evil_window);
+  }
+  SDL_SetWindowGrab(evil_window, on ? SDL_TRUE : SDL_FALSE);
+  SDL_SetRelativeMouseMode(on ? SDL_TRUE : SDL_FALSE);
+  SDL_ShowCursor(on ? SDL_DISABLE : SDL_ENABLE);
+  SDL_GetRelativeMouseState(NULL, NULL); /* (what moved before, not counted) */
+  evil_grabbed = on;
+}
+
 /* The keyboard and mouse as a player at the window has them: `keys` (n of them, by SDL
  * scancode) 1 where a key's held; mouse[0], [1] its motion since last asked (right and down
  * positive), mouse[2] its buttons held (bit 0 left, 1 middle, 2 right). Nothing while the
- * window hasn't the keyboard. grab 1: the mouse kept in the window, unseen, its motion relative
- * (as a game has it); 0: let go; -1: as it is. Returns 1 if the window has the keyboard. */
+ * window hasn't the keyboard. grab 1: the mouse kept in the window (`evil_grab`), taken again
+ * whenever the window has the keyboard back; 0: let go; -1: as it is. Returns 1 if the window
+ * has the keyboard. */
 EVIL_API int evil_window_input(unsigned char *keys, int n, int *mouse, int grab)
 {
   const Uint8 *state;
-  int count = 0, i, x = 0, y = 0;
+  int count = 0, i, x = 0, y = 0, focused;
   Uint32 buttons;
   memset(keys, 0, n);
   mouse[0] = mouse[1] = mouse[2] = 0;
   if (!evil_window)
     return 0;
-  if (grab >= 0 && (SDL_GetRelativeMouseMode() == SDL_TRUE) != (grab == 1))
-  {
-    SDL_SetRelativeMouseMode(grab == 1 ? SDL_TRUE : SDL_FALSE);
-    SDL_GetRelativeMouseState(NULL, NULL); /* (what moved before, not counted) */
-  }
   SDL_PumpEvents();
+  focused = SDL_GetKeyboardFocus() == evil_window;
+  if (grab == 0 && evil_grabbed)
+    evil_grab(0);
+  /* (grabbed or not as asked; let go of while the window's lost the keyboard, as the system
+   * lets go of it, and taken again when it's back) */
+  else if (grab == 1 && focused != evil_grabbed)
+    evil_grab(focused);
   buttons = SDL_GetRelativeMouseState(&x, &y);
-  if (SDL_GetKeyboardFocus() != evil_window)
+  if (!focused)
     return 0;
   state = SDL_GetKeyboardState(&count);
   for (i = 0; i < n && i < count; i++)
@@ -1206,6 +1228,8 @@ EVIL_API void evil_window_icon(const unsigned int *px, int w, int h)
 
 EVIL_API void evil_window_close(void)
 {
+  if (evil_window && evil_grabbed)
+    evil_grab(0);
   SDL_SetEventFilter(NULL, NULL);
   if (evil_texture)
     SDL_DestroyTexture(evil_texture);
