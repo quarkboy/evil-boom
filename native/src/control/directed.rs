@@ -579,8 +579,10 @@ pub struct Director {
     /// new level: a new player)
     pub policy: Policy,
     pub(crate) policy_due: bool,
-    /// (a deathmatch) hunting or gearing up with nothing to go for, told so
+    /// (a deathmatch) hunting or gearing up with nothing to go for, told so; when it last took
+    /// something up
     hunt_idle: bool,
+    hunt_took: i64,
     /// the last resorts she's let her instinct take, this level
     resorts: std::collections::BTreeSet<crate::knowledge::explorer::Resort>,
     progress: Option<((usize, [usize; 6]), i64)>,

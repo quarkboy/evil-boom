@@ -15,6 +15,11 @@ impl Director {
             self.report(obs, true, Event::Outcome, "Geared up.".into());
             return;
         }
+        // (what she took last ended as she took it, gone: the ranking it came from is as old as
+        // a second, and has it still; taken again from it every tic, she went round and round)
+        if obs.tic - self.hunt_took <= 1 {
+            self.fresh_ranking();
+        }
         let open = self.open_objectives(agent, obs);
         let wanted: Vec<Objective> = open
             .iter()
@@ -31,6 +36,7 @@ impl Director {
             if agent.x_mut().take(obs, o) {
                 self.doing = Some(Doing::Hunt(gear));
                 self.hunt_idle = false;
+                self.hunt_took = obs.tic;
                 return;
             }
         }
@@ -41,6 +47,7 @@ impl Director {
         for o in roam {
             if agent.x_mut().take(obs, o) {
                 roaming = true;
+                self.hunt_took = obs.tic;
                 break;
             }
         }

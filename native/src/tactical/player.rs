@@ -2168,10 +2168,14 @@ impl Hooks for Fight {
             }),
             Kind::Hunt => match obj.thing {
                 Some(t) => !self.combat.remaining().iter().any(|s| s.id == t),
-                // (a clue of the others': gone when it is, or she's no longer after them)
+                // (a clue of the others': gone when it is, or she's no longer after them. Ordered to
+                // hunt, she's after them geared or not, as `hunt` offers it: else offered and gone,
+                // tic after tic)
                 None => self.rivals.as_ref().is_none_or(|r| {
                     obj.reveals.iter().all(|&id| r.by_id(id).is_none())
-                        || !(r.hunting || super::rivals::geared(obs, &self.tune.deathmatch, true))
+                        || !(r.hunting
+                            || r.ordered
+                            || super::rivals::geared(obs, &self.tune.deathmatch, true))
                 }),
             },
             // (a spot she's off to see whether something's back at: gone once she's seen it)
