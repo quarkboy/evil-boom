@@ -305,3 +305,8 @@ keeps it from level to level. What was new:
   player on it is waited for off its edge (28 clear, 20 s at most). A box over a lift's edge
   under a lower ceiling stops the lift rising at all (Plutonia MAP06's sector 146: all four
   stuck behind two on it). Doors aren't lifts here: a wait in a doorway bought nothing.
+- **The console (2026-11-26):** a Multiplayer tab sets players, co-op or deathmatch and its
+  limits; co-op takes `--control` now (`viewer/coop/console.rs`): pause, speed, sound, the
+  picture, god mode, the exits, and what's said and set to every Neuro. Restart level and Go to
+  level aren't there yet (each needs every seat started afresh, as `next_level` does). The Evil
+  panel stays empty: there are four of her; the players table is what's shown instead.

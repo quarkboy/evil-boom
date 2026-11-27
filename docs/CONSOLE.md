@@ -49,6 +49,9 @@ form's changes first).
 | Your name, as she's told it | `console_name` | who she's told says or does what comes from the page ("Vedal: ...", "Vedal did doom_go ..."); Vedal by default |
 | Levels, Skills, Play she may choose | `evil_maps`, `evil_skills`, `evil_play` | what Evil's offered when she chooses the game (skills 1-4: never Nightmare) |
 | She goes on to the next level herself; She may restart a level | `evil_next`, `evil_restart` | hers while she directs: from the tally (else it goes on after 30 s); after 90 s with nothing new |
+| Instinct off from the start | `instinct_off` | directed: she stands and waits when an action's done (`--instinct off`), her starting settings' instinct made off to match |
+| **Multiplayer** (its own tab): Players, Kind of game | `players`, `multi` | 1 (Evil alone) to 4, each a bot of her own in one game (`--players`); `coop`, `deathmatch` or `altdeath` |
+| Frag limit, Time limit (minutes) | `frag_limit`, `minutes` | a deathmatch over at so many frags, or after so long (20 and 10 unless set; 0: no limit) |
 | **Ultra instinct:** on or off, Deaths on a level before it's hers | `ultra`, `ultra_after` | once a level has killed her that often (3 unless set; 0: from its start), a death is undone and the fight searched for her in the game itself, for up to 30 s (60 after as many deaths again), got back as she plays. On unless turned off; only where she can die |
 | Seconds a death is undone, Game speed while it searches, Worker processes | `ultra_back`, `ultra_speed`, `ultra_workers` | how far back (5; 1 to 20), the game's pace meanwhile (0.5; up to 1), and the processes that search (8; 0: the game itself, the picture stopping for each look) |
 | **Window:** Layout | `layout` | `stream` (16:9, the game and a viewers' column) or `watcher` (the game, the map and her log) |
@@ -60,6 +63,13 @@ form's changes first).
 | **Picture:** Brightness, View (FOV) | `brightness`, `fov` | how bright the game's frame is shown (0, Doom's own, to 10: a gamma curve, the dark lifted most), and how wide its view in degrees (60 to 120; Doom's own is 90). Both change as it plays and are kept for the next game. A wider view makes movement look slower; the weapon is drawn the same |
 | Red flash, Gold flash, Green tint | `flash_red`, `flash_gold`, `flash_green` | how strong the game's screen flashes are shown, 0 (none) to 100 (Doom's own); 50 unless set: the red of being hurt and of the berserk pack, the gold of a pickup, the green of the radiation suit |
 
+More than one player: each directed by Neuro in co-op, player 1 at the Neuro URL and each next
+one at the port after (`tools/neuro/garys.sh N` starts that many Garys); a deathmatch is the bots
+alone, and the GPT stand-in plays only alone. Doom's own screens, the stream layout, the ultra
+instinct and Evil choosing the game are left out; the window is co-op's own (each one's view,
+the map, their cards). From the page: pause, speed, sound, the picture, god mode, the exits, and
+Talk to Evil and her settings (to every one) work; Restart level and Go to level don't yet.
+
 Settings that apply only under others are shown only then: the Neuro URL for Neuro, Evil's for
 Neuro or GPT, the title card's choice with Doom's own screens, the column for the stream.
 
@@ -70,7 +80,7 @@ editing it (the page says so under the Neuro URL).
 
 ## The page
 
-A top bar and four tabs. The bar is there whatever tab is open: whether the console, the game
+A top bar and five tabs. The bar is there whatever tab is open: whether the console, the game
 and Neuro are up, where she is (the level, its time, her health and armor), and what's wanted
 mid-stream (Pause, Restart level, Mute, Reconnect Neuro). The tabs, by what you're doing:
 
@@ -81,6 +91,9 @@ mid-stream (Pause, Restart level, Mute, Reconnect Neuro). The tabs, by what you'
   pushed.
 - **Setup**, before a game: Settings (saved, used when a game starts), the stream column, and
   the sound and picture as each game is given them.
+- **Multiplayer**, before a game: how many play (1 to 4), co-op or a deathmatch and its limits,
+  who directs each; while one plays, each player's health, kills, deaths (frags), Neuro and
+  what she's doing (on the Live tab too).
 - **Debug**: speed, god mode and the exits; looking and acting as her, a raw action, why; the
   log.
 

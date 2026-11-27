@@ -163,6 +163,18 @@ pub struct Settings {
     pub evil_next: bool,
     /// the level again from its start hers, after a while with nothing new
     pub evil_restart: bool,
+    /// instinct off from the start (`--instinct off`): she stands and waits when an action's
+    /// done, till she's told what next
+    pub instinct_off: bool,
+    /// players in the game (1 to 4): more than one, a co-op or deathmatch game, each a bot of
+    /// her own (`--players`), directed, in co-op, each by her own Neuro: player 1 at
+    /// `neuro_url`, the next at its port and one, and so on
+    pub players: usize,
+    /// with them: "coop", "deathmatch" (Doom's classic) or "altdeath" (its second kind)
+    pub multi: String,
+    /// a deathmatch over at this many frags, or after this many minutes (0: no limit)
+    pub frag_limit: i32,
+    pub minutes: f64,
 }
 
 impl Default for Settings {
@@ -220,6 +232,11 @@ impl Default for Settings {
             evil_play: String::new(),
             evil_next: true,
             evil_restart: true,
+            instinct_off: false,
+            players: 1,
+            multi: "coop".into(),
+            frag_limit: 20,
+            minutes: 10.0,
         }
     }
 }
@@ -326,6 +343,24 @@ impl Settings {
         if self.ultra_workers > 32 {
             return Err("ultra_workers: 0 to 32".into());
         }
+        if !(1..=4).contains(&self.players) {
+            return Err("players: 1 to 4".into());
+        }
+        if !["coop", "deathmatch", "altdeath"].contains(&self.multi.as_str()) {
+            return Err("multi: coop, deathmatch or altdeath".into());
+        }
+        if !(0..=999).contains(&self.frag_limit) {
+            return Err("frag_limit: 0 to 999".into());
+        }
+        if !(0.0..=600.0).contains(&self.minutes) {
+            return Err("minutes: 0 to 600".into());
+        }
+        if self.multiplayer() && self.mode == "gpt" {
+            return Err("the GPT stand-in plays alone: one player, or the bots or Neuro".into());
+        }
+        if self.multiplayer() && self.multi != "coop" && self.mode == "neuro" {
+            return Err("Neuro in a deathmatch: not yet (co-op, or the bots alone)".into());
+        }
         let name = self.console_name.trim();
         if name.is_empty() || name.chars().count() > 32 || name.chars().any(char::is_control) {
             return Err("console_name: a name, at most 32 characters".into());
@@ -333,8 +368,28 @@ impl Settings {
         Ok(())
     }
 
+    /// Her settings as she starts (`evil_policy`), instinct in them off if it's to start off:
+    /// the settings given after the game's begun, they'd turn it on again over `--instinct off`.
+    fn start_policy(&self) -> Option<String> {
+        let p = self.evil_policy.clone()?;
+        if !self.instinct_off {
+            return Some(p);
+        }
+        let mut v: serde_json::Map<String, Value> = serde_json::from_str(&p).unwrap_or_default();
+        v.insert("instinct".into(), Value::from("off"));
+        Some(Value::Object(v).to_string())
+    }
+
+    /// More than one player (`players`).
+    pub fn multiplayer(&self) -> bool {
+        self.players > 1
+    }
+
     /// `watch`'s arguments for these settings, its link to the console at `control`.
+    /// (More than one player: what co-op and deathmatch don't have left out: Doom's own
+    /// screens, the stream's window, the ultra instinct, a game hers to choose.)
     fn args(&self, control: &str) -> Vec<String> {
+        let multi = self.multiplayer();
         let mut a: Vec<String> = vec!["watch".into(), self.wad.clone(), self.map.to_uppercase()];
         if self.skill > 0 {
             a.extend(["--fight".into(), self.skill.to_string()]);
@@ -351,7 +406,19 @@ impl Settings {
         if self.episode {
             a.push("--episode".into());
         }
-        if self.present {
+        if multi {
+            a.extend(["--players".into(), self.players.to_string()]);
+            if self.multi != "coop" {
+                a.extend([
+                    format!("--{}", self.multi),
+                    "--frags".into(),
+                    self.frag_limit.to_string(),
+                    "--minutes".into(),
+                    self.minutes.to_string(),
+                ]);
+            }
+        }
+        if self.present && !multi {
             a.push(
                 if self.title_wait {
                     "--title"
@@ -361,7 +428,7 @@ impl Settings {
                 .into(),
             );
         }
-        if self.layout == "stream" {
+        if self.layout == "stream" && !multi {
             a.extend(["--stream".into(), self.panel_side.clone()]);
         }
         if !self.window_size.trim().is_empty() {
@@ -377,7 +444,7 @@ impl Settings {
             a.extend(["--soundfont".into(), self.soundfont.clone()]);
         }
         // (hers by dying, so only where she can die)
-        if self.ultra && self.mortal && self.skill > 0 {
+        if self.ultra && self.mortal && self.skill > 0 && !multi {
             a.extend([
                 "--ultra-after".into(),
                 self.ultra_after.to_string(),
@@ -396,11 +463,16 @@ impl Settings {
             a.push("--fullscreen".into());
         }
         match self.mode.as_str() {
-            "neuro" => a.extend(["--neuro".into(), self.neuro_url.clone()]),
+            "neuro" if !(multi && self.multi != "coop") => {
+                a.extend(["--neuro".into(), self.neuro_url.clone()]);
+            }
             "gpt" => a.push("--gpt".into()),
             _ => {}
         }
-        if let Some(c) = self.choices() {
+        if self.instinct_off && self.mode != "bot" {
+            a.extend(["--instinct".into(), "off".into()]);
+        }
+        if let Some(c) = self.choices().filter(|_| !multi) {
             a.extend(["--choices".into(), c]);
         }
         a.extend(["--control".into(), control.to_string()]);
@@ -835,7 +907,7 @@ fn read_game(stream: TcpStream, hub: &Hub) {
                 // (what she starts with: the game does them once the level's begun)
                 if s.settings.mode != "bot" {
                     let starts = [
-                        ("doom_policy", s.settings.evil_policy.clone()),
+                        ("doom_policy", s.settings.start_policy()),
                         ("doom_goal", s.settings.evil_goal.clone()),
                     ];
                     for (action, data) in starts {
@@ -1556,6 +1628,60 @@ fn same(a: &str, b: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+
+    /// More than one player: co-op or a deathmatch passed as set, what they don't have left
+    /// out, what `watch` would refuse refused.
+    #[test]
+    fn multiplayer_settings() {
+        let line = |s: &super::Settings| s.args("x").join(" ");
+        let mut s = super::Settings {
+            players: 3,
+            mode: "neuro".into(),
+            instinct_off: true,
+            ..Default::default()
+        };
+        assert!(s.check().is_ok());
+        let a = line(&s);
+        assert!(
+            a.contains("--players 3") && a.contains("--neuro ws://127.0.0.1:8000"),
+            "{a}"
+        );
+        assert!(a.contains("--instinct off"), "{a}");
+        for gone in [
+            "--present",
+            "--title",
+            "--stream",
+            "--ultra-after",
+            "--choices",
+            "--frags",
+        ] {
+            assert!(!a.contains(gone), "{gone}: {a}");
+        }
+        s.multi = "deathmatch".into();
+        assert!(s.check().is_err(), "Neuro in a deathmatch");
+        s.mode = "bot".into();
+        assert!(s.check().is_ok());
+        let a = line(&s);
+        assert!(a.contains("--deathmatch --frags 20 --minutes 10"), "{a}");
+        assert!(!a.contains("--instinct"), "{a}");
+        s.players = 5;
+        assert!(s.check().is_err());
+        s.evil_policy = Some(r#"{"instinct":"on","stance":"steady"}"#.into());
+        let p: serde_json::Value =
+            serde_json::from_str(&s.start_policy().unwrap_or_default()).unwrap_or_default();
+        assert_eq!(
+            (p["instinct"].as_str(), p["stance"].as_str()),
+            (Some("off"), Some("steady"))
+        );
+        s.evil_policy = None;
+        assert_eq!(s.start_policy(), None);
+        s.players = 1;
+        let a = line(&s);
+        assert!(
+            !a.contains("--players") && !a.contains("--deathmatch"),
+            "{a}"
+        );
+    }
 
     /// The ultra instinct: passed to a game she can die in, as set; off, or where she can't,
     /// not at all; what `watch` would refuse, refused.

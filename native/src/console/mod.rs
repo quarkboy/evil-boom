@@ -275,6 +275,26 @@ pub struct GameState {
     /// picture
     #[serde(default)]
     pub chat_box: Option<[usize; 4]>,
+    /// a co-op or deathmatch game's players, each (none alone)
+    #[serde(default)]
+    pub players: Vec<PlayerState>,
+}
+
+/// One of a co-op or deathmatch game's players, as the console shows her.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct PlayerState {
+    /// 1 the first
+    pub player: usize,
+    pub health: i32,
+    pub armor: i32,
+    pub dead: bool,
+    pub deaths: i32,
+    /// a deathmatch's
+    pub frags: Option<i32>,
+    pub kills: i32,
+    pub doing: String,
+    /// her Neuro, if one directs her
+    pub neuro: Option<NeuroState>,
 }
 
 /// Evil as the console shows her (directed by Neuro or a file): her standing settings and goal,

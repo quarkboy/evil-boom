@@ -147,6 +147,17 @@ impl Console {
                 .pictures
                 .try_send(Picture::Rgb("map", right.2, right.3, crop(px, right)));
         }
+        self.game_view(px, frame, palette);
+    }
+
+    /// The game's frame (palette indices, and the palette), if a page is showing it; none yet,
+    /// the window's part where it's drawn.
+    pub(super) fn game_view(
+        &mut self,
+        px: &[u32],
+        frame: Option<&(usize, usize, Vec<u8>)>,
+        palette: &[u32],
+    ) {
         if !self.wants("game") {
             return;
         }
@@ -165,6 +176,17 @@ impl Console {
             None => Picture::Rgb("game", GAME.2, GAME.3, crop(px, GAME)),
         };
         let _ = self.pictures.try_send(game);
+    }
+
+    /// The pictures a page is showing, for a while (`Command::Views`).
+    pub(super) fn want(&mut self, names: Vec<String>) {
+        self.wanted = names;
+        self.wanted_until = Some(Instant::now() + VIEWS_HOLD);
+    }
+
+    /// The link itself (a co-op game's, which has its own players and commands).
+    pub(super) fn link(&mut self) -> &mut Link {
+        &mut self.link
     }
 
     /// A new level: her log starts again (a new agent's).

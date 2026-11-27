@@ -30,6 +30,8 @@
 //!
 //! Keys: space pause, N a tic while paused, +/- speed, M mute, Esc quit.
 
+mod console;
+
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
@@ -118,6 +120,8 @@ struct Coop {
     sound: bool,
     muted: bool,
     sound_on: bool,
+    /// the stream console's link (`--control`)
+    console: Option<console::Link>,
 }
 
 /// A co-op game of `o.players` watched in a window (or played through headless).
@@ -131,7 +135,6 @@ pub fn watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(), String> 
             o.neuro.is_some() && o.deathmatch > 0,
             "Neuro in a deathmatch",
         ),
-        (o.control.is_some(), "the stream console (--control)"),
         (o.present, "--present"),
         (o.stream.is_some(), "--stream"),
         (
@@ -219,6 +222,12 @@ impl Coop {
         }
         let palettes = palettes(&w).iter().map(|p| brightened(p)).collect();
         let began = engine.tic;
+        let console = match o.control.as_deref() {
+            Some(addr) => Some(console::Link::new(super::console::Console::connect(
+                addr, wad, &map_name, &w,
+            )?)),
+            None => None,
+        };
         Ok(Coop {
             w,
             m,
@@ -238,6 +247,7 @@ impl Coop {
             sound,
             muted: false,
             sound_on: sound,
+            console,
         })
     }
 
@@ -566,6 +576,9 @@ impl Coop {
         for (s, d) in self.seats.iter_mut().zip(deaths) {
             s.deaths = d;
         }
+        if let Some(k) = self.console.as_mut() {
+            k.new_level();
+        }
         println!("{} done: on to {next}", self.map_name);
         (self.m, self.nav, self.map_name) = (m, nav, next);
         self.began = self.engine.tic;
@@ -587,6 +600,10 @@ impl Coop {
         loop {
             let cap = (o.max_seconds * TICRATE) as i64;
             while !self.engine.exited() && self.engine.tic - self.began < cap {
+                if self.engine.tic % 9 == 0 && self.console_frame() {
+                    self.report(start, true);
+                    return Ok(());
+                }
                 self.tic();
                 if paced {
                     let due = (self.engine.tic - tic0) as f64 / (TICRATE * speed);
@@ -718,6 +735,9 @@ impl Coop {
         let real = Instant::now();
         let mut reported = false;
         'frames: loop {
+            if self.console_frame() {
+                break 'frames;
+            }
             for event in window::Window::events(&self.engine.game) {
                 use window::key;
                 let WindowEvent::Key(k) = event else {
@@ -788,6 +808,7 @@ impl Coop {
             self.draw(&mut canvas);
             let painted = Instant::now();
             window.show(&self.engine.game, &canvas.px, W, H);
+            self.console_views(&canvas.px);
             if let Some(f) = frames.as_mut() {
                 let picture = self.seats[0].frame.as_ref().map_or(&[][..], |f| &f.2[..]);
                 f.frame(now, stepped, painted, self.engine.tic - tic0, picture);

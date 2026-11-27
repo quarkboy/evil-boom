@@ -47,6 +47,7 @@ main { display: grid; gap: 14px; padding: 16px 20px 28px; grid-template-columns:
 body[data-tab="live"] section[data-tab]:not([data-tab="live"]),
 body[data-tab="evil"] section[data-tab]:not([data-tab="evil"]),
 body[data-tab="setup"] section[data-tab]:not([data-tab="setup"]),
+body[data-tab="multi"] section[data-tab]:not([data-tab="multi"]),
 body[data-tab="debug"] section[data-tab]:not([data-tab="debug"]) { display: none; }
 /* (one column where a tab's sections are all one kind: nothing beside them) */
 body:not([data-tab="live"]) main { grid-template-columns: minmax(0, 1fr); max-width: 1100px; row-gap: 0; }
@@ -230,6 +231,14 @@ input[type=checkbox]:checked:not([data-lock]) { box-shadow: 0 0 10px -2px var(--
 .lock input[type=checkbox]:checked { filter: drop-shadow(0 0 5px #e0a83a99); }
 #stats { display: grid; gap: 8px; margin: 2px 0 12px; }
 #stats[hidden] { display: none; }
+#players-live, #players-multi { width: 100%; border-collapse: collapse; font-size: 14px; }
+.players th { text-align: left; color: var(--dim); font-weight: 600; padding: 4px 8px; border-bottom: 1px solid var(--line); }
+.players td { padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.players td.doing { width: 100%; }
+.players td:first-child { white-space: nowrap; }
+.players tr.dead td { color: var(--dim); }
+.players .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+h2.sub { margin-top: 18px; font-size: 15px; }
 .tally, .ammo { display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .ammo { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .tl { position: relative; display: grid; gap: 4px; overflow: hidden; background: var(--inset); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px 10px; }
@@ -309,6 +318,7 @@ header { gap: 8px 10px; } header h1 { font-size: 16px; letter-spacing: .18em; ga
   <button data-tab="live" title="What you watch and do while she plays">Live</button>
   <button data-tab="evil" title="Her goal and settings, what's locked from her, how she's pushed">Evil</button>
   <button data-tab="setup" title="What a game starts with: the level, who directs her, the window, sound and picture">Setup</button>
+  <button data-tab="multi" title="Co-op and deathmatch: how many players, which kind of game, who directs each">Multiplayer</button>
   <button data-tab="debug" title="Testing: speed, god mode, exits, raw actions, the log">Debug</button>
   <button id="layout-reset" title="Every section back where it was, unfolded">Reset layout</button>
 </nav>
@@ -347,6 +357,36 @@ header { gap: 8px 10px; } header h1 { font-size: 16px; letter-spacing: .18em; ga
       <div class="keys" id="keys"></div>
     </div>
     <dl id="state"></dl>
+  </section>
+
+  <section id="sec-multi" data-tab="multi">
+    <h2>Multiplayer</h2>
+    <p class="note lead">Used when the game starts. Save changes before they will take effect.</p>
+    <div class="form">
+      <fieldset class="group wide"><legend>Game</legend>
+        <label title="One: Evil alone, as always. Two to four: each player a bot of her own, in one game">Players <select form="settings" name="players"><option value="1">1 (Evil alone)</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label>
+        <label data-when="multi">Kind of game <select form="settings" name="multi"><option value="coop">co-op: all together, out by the exit</option><option value="deathmatch">deathmatch</option><option value="altdeath">deathmatch 2.0 (items come back)</option></select></label>
+        <label data-when="dm" title="The match is over when a player has this many frags. 0: no limit">Frag limit <input form="settings" type="number" name="frag_limit" min="0" max="999" step="1"></label>
+        <label data-when="dm" title="The match is over after this long. 0: no limit">Time limit (minutes) <input form="settings" type="number" name="minutes" min="0" max="600" step="1"></label>
+      </fieldset>
+      <fieldset class="group wide" data-when="multi"><legend>Who directs them</legend>
+        <p class="note wide" data-when="multi-bot">Each player is the bot alone. For Neuro to direct them, choose Neuro under "Who directs her" on the Setup tab.</p>
+        <p class="note wide" data-when="multi-neuro">Each player has her own Neuro: player 1 at the Neuro URL set on the Setup tab, player 2 at the next port up, and so on (8000, 8001, 8002, 8003). Each must be running before the game starts: <code>tools/neuro/garys.sh N</code> starts that many Garys on those ports.</p>
+        <p class="note wide" data-when="multi-neuro-dm">Neuro can't direct a deathmatch yet: choose co-op, or the bot alone on the Setup tab.</p>
+        <p class="note wide" data-when="multi-gpt">The GPT stand-in plays alone: choose the bot alone or Neuro on the Setup tab.</p>
+      </fieldset>
+      <fieldset class="group wide" data-when="multi"><legend>Not in a game of more than one</legend>
+        <p class="note wide">Doom's own screens (the title card, the tally), the stream's window layout (the game shows each player's view, the map and their cards), the ultra instinct, and Evil choosing the game are left out. From the Live tab, Restart level and Go to level don't work yet; pause, speed, sound, god mode, the exits and Talk to Evil (said to every one) do.</p>
+      </fieldset>
+      <div class="row wide">
+        <button type="button" id="m-save">Save</button>
+        <span id="m-dirty" class="note" hidden>Changed, not saved yet (Start saves them first)</span>
+        <button type="button" class="primary" id="m-apply">Save and restart game</button>
+      </div>
+    </div>
+    <h2 class="sub">Now</h2>
+    <p class="note" id="players-none">No game of more than one running.</p>
+    <table class="players" id="players-multi"></table>
   </section>
 
   <section id="sec-testing" data-tab="debug">
@@ -419,6 +459,7 @@ header { gap: 8px 10px; } header h1 { font-size: 16px; letter-spacing: .18em; ga
   <section id="sec-settings" data-tab="setup">
     <h2>Settings</h2>
     <p class="note lead">Used when the game starts. Save changes before they will take effect.</p>
+    <p class="note lead" data-when="multi" id="s-multi-note">More than one player is set (the Multiplayer tab): Doom's own screens, the stream layout, the ultra instinct and Evil choosing the game don't apply.</p>
     <form class="form" id="settings" onsubmit="return false">
       <fieldset class="group wide"><legend>Game</legend>
         <label>WAD <select name="wad"><option value="doom2">Doom II</option><option value="doom">Doom</option><option value="tnt">TNT: Evilution</option><option value="plutonia">The Plutonia Experiment</option></select></label>
@@ -449,6 +490,7 @@ header { gap: 8px 10px; } header h1 { font-size: 16px; letter-spacing: .18em; ga
         <label data-when="evilchooses">Skills she may choose <input name="evil_skills" placeholder="the skill above; 3, 4"></label>
         <label class="wide" data-when="evilchooses">Play she may choose <select name="evil_play"><option value="">as "Go on through the episode" above</option><option value="single">one level</option><option value="continuous">on through the episode</option><option value="both">either</option></select></label>
         <span class="check wide" data-when="directed"><input type="checkbox" name="evil_next" id="s-evil-next"><label for="s-evil-next" class="check">She goes on to the next level herself, from the tally (else it goes on after 30 s)</label></span>
+        <span class="check wide" data-when="directed" title="She stands and waits when an action's done, till she's told what next (doom_policy instinct: on gives it back, unless it's locked)"><input type="checkbox" name="instinct_off" id="s-instinct-off"><label for="s-instinct-off" class="check">Instinct off from the start</label></span>
         <span class="check wide" data-when="directed"><input type="checkbox" name="evil_restart" id="s-evil-restart"><label for="s-evil-restart" class="check">She may restart a level (after 90 s with nothing new)</label></span>
       </fieldset>
       <fieldset class="group wide"><legend>Ultra instinct</legend>
@@ -503,6 +545,11 @@ header { gap: 8px 10px; } header h1 { font-size: 16px; letter-spacing: .18em; ga
       <figure id="fig-game" hidden><img id="img-game" alt="the game's view"><figcaption>Game</figcaption></figure>
       <figure class="full" id="fig-stream" hidden><img id="img-stream" alt="the stream's window, as OBS captures it"><figcaption>The stream's window (half size)</figcaption></figure>
     </div>
+  </section>
+
+  <section id="sec-players" data-tab="live" hidden>
+    <h2>Players</h2>
+    <table class="players" id="players-live"></table>
   </section>
 
   <section id="evilcard" data-tab="live" class="evil-part">
@@ -832,7 +879,44 @@ function render(p) {
   showChatBox(p.state);
   for (const name of ["map", "game", "stream"]) showView(name, (p.views || {})[name]);
   renderEvil(p.connected && st && st.evil, n, p);
+  renderPlayers(p.connected && st ? st.players || [] : []);
   addLog(p.log);
+}
+// Each player of a co-op or deathmatch game: on the Live tab, and the Multiplayer tab's Now.
+const PLAYER_COLOURS = ["#50dc50", "#9696ff", "#d2a05a", "#f05050"], PLAYER_NAMES = ["green", "indigo", "brown", "red"];
+let playersKey = "";
+function renderPlayers(ps) {
+  const key = JSON.stringify(ps);
+  if (key === playersKey) return;
+  playersKey = key;
+  $("sec-players").hidden = !ps.length;
+  $("players-none").hidden = !!ps.length;
+  $("players-multi").hidden = !ps.length;
+  const dm = ps.some((x) => x.frags != null), neuro = ps.some((x) => x.neuro);
+  for (const id of ["players-live", "players-multi"]) {
+    const t = $(id), head = document.createElement("tr");
+    for (const h of ["Player", ...(dm ? ["Frags"] : []), "Health", "Armor", "Kills", "Deaths", ...(neuro ? ["Neuro"] : []), "Doing"]) {
+      const th = document.createElement("th"); th.textContent = h; head.append(th);
+    }
+    const rows = ps.map((x) => {
+      const tr = document.createElement("tr"); if (x.dead) tr.className = "dead";
+      const td = (text, cls) => { const d = document.createElement("td"); d.textContent = text; if (cls) d.className = cls; tr.append(d); return d; };
+      const who = td(x.player + " (" + (PLAYER_NAMES[x.player - 1] || "?") + ")");
+      const sw = document.createElement("span"); sw.className = "swatch"; sw.style.background = PLAYER_COLOURS[x.player - 1] || "#888"; who.prepend(sw);
+      if (dm) td(String(x.frags));
+      td(x.dead ? "dead" : String(x.health)); td(String(x.armor)); td(String(x.kills)); td(String(x.deaths));
+      if (neuro) {
+        const c = td(""), b = document.createElement("span");
+        b.className = "badge " + (x.neuro && x.neuro.connected ? "ok" : "bad");
+        b.textContent = x.neuro ? (x.neuro.connected ? x.neuro.who || "connected" : "not connected") : "-";
+        b.title = x.neuro ? x.neuro.url : "";
+        c.append(b);
+      }
+      td(x.doing, "doing");
+      return tr;
+    });
+    t.replaceChildren(head, ...rows);
+  }
 }
 let evilTold = "", evilActs = "", replySeen = 0, qShown = null;
 function li(text) { const e = document.createElement("li"); e.textContent = text; return e; }
@@ -1034,7 +1118,16 @@ function applyWhen() {
     "ultra-off": !f.ultra.checked,
     "ultra-immortal": f.ultra.checked && !(f.mortal.checked && Number(f.skill.value) > 0),
   };
-  for (const el of document.querySelectorAll("#settings [data-when]")) el.hidden = !on[el.dataset.when];
+  const multi = Number(f.players.value) > 1, coop = f.multi.value === "coop";
+  Object.assign(on, {
+    multi,
+    dm: multi && !coop,
+    "multi-bot": multi && f.mode.value === "bot",
+    "multi-neuro": multi && coop && f.mode.value === "neuro",
+    "multi-neuro-dm": multi && !coop && f.mode.value === "neuro",
+    "multi-gpt": multi && f.mode.value === "gpt",
+  });
+  for (const el of document.querySelectorAll("#settings [data-when], #sec-multi [data-when], #s-multi-note")) el.hidden = !on[el.dataset.when];
 }
 function fillForm(s) {
   const f = $("settings");
@@ -1065,7 +1158,7 @@ function readForm() {
   for (const el of f.elements) {
     if (!el.name) continue;
     if (el.type === "checkbox") s[el.name] = el.checked;
-    else if (el.name === "skill" || el.type === "number") s[el.name] = Number(el.value);
+    else if (el.name === "skill" || el.name === "players" || el.type === "number") s[el.name] = Number(el.value);
     else if (el.name === "seed") s.seed = el.value.trim() === "" ? null : Number(el.value);
     else s[el.name] = el.value.trim();
   }
@@ -1179,10 +1272,20 @@ for (const x of [0.5, 1, 2, 4, 8]) {
 $("settings").addEventListener("input", (e) => {
   formDirty = true;
   $("s-dirty").hidden = false;
+  $("m-dirty").hidden = false;
   if (e.target.name === "wad") fillLevels(e.target.value, null);
   applyWhen();
 });
-async function save() { const j = await act("api/settings", readForm(), "Saved."); if (j) { formDirty = false; $("s-dirty").hidden = true; } return j; }
+// (the Multiplayer tab's fields are the form's, outside it: their changes marked as its own)
+$("sec-multi").addEventListener("input", () => {
+  formDirty = true;
+  $("s-dirty").hidden = false;
+  $("m-dirty").hidden = false;
+  applyWhen();
+});
+async function save() { const j = await act("api/settings", readForm(), "Saved."); if (j) { formDirty = false; $("s-dirty").hidden = true; $("m-dirty").hidden = true; } return j; }
+$("m-save").onclick = () => $("s-save").onclick();
+$("m-apply").onclick = () => $("s-apply").onclick();
 $("s-save").onclick = async () => { const j = await save(); if (j && j.restart_needed) say("Saved: restart the game to use them."); };
 $("s-apply").onclick = async () => { if (await save()) act(last && last.game.running ? "api/game/restart" : "api/game/start", {}, "Saved; (re)starting..."); };
 $("logfilter").onchange = () => { for (const d of $("log").children) d.hidden = !shown(d.dataset.k); $("log").scrollTop = $("log").scrollHeight; };
@@ -1213,7 +1316,7 @@ for (const b of document.querySelectorAll("#tabs button[data-tab]")) b.onclick =
 { let t = "live"; try { t = localStorage.getItem(TAB_KEY) || t; } catch (e) { /* (the first) */ }
   // (or the address's: ?tab=setup opens there, for a link to one)
   t = new URLSearchParams(location.search).get("tab") || t;
-  showTab(["live", "evil", "setup", "debug"].includes(t) ? t : "live"); }
+  showTab(["live", "evil", "setup", "multi", "debug"].includes(t) ? t : "live"); }
 const movable = () => [...document.querySelectorAll("main .col > section")].filter((s) => s.id !== "tokenbox");
 function saveLayout() {
   const l = { cols: {}, collapsed: movable().filter((s) => s.classList.contains("collapsed")).map((s) => s.id) };
