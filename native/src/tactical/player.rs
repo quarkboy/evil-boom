@@ -105,6 +105,11 @@ struct Fight {
     /// a deathmatch she hunts the others in (`watch --deathmatch`, `--hunt`): what she knows of
     /// them, and whether she's geared up to go after them (`tactical/rivals.rs`)
     rivals: Option<super::rivals::Rivals>,
+    /// deathmatch 2.0 (`--altdeath`): what the level put down comes back 30 s after it's taken
+    /// (`Returns`)
+    returns: Option<Returns>,
+    /// the spots she's off to see whether something's back at (`checks`), this choosing
+    checking: Vec<(Point, (&'static str, i32, i32))>,
     /// the numbers she judges by (the fight's are the same)
     tune: Rc<Tuning>,
     /// what the hooks had to say (logged once the explorer's done)
@@ -389,6 +394,8 @@ impl Player {
                 going_on: false,
                 coop: None,
                 rivals: None,
+                returns: None,
+                checking: Vec::new(),
                 tune: Rc::clone(&tune),
                 pending_log: Vec::new(),
                 offered: BTreeSet::new(),
@@ -466,6 +473,7 @@ impl Player {
     /// till she sees it isn't. What a monster drops dying round a corner she finds when she
     /// looks.
     fn notice_things(&mut self, obs: &Observation) {
+        self.notice_returns(obs);
         let (k, nav) = (&self.explorer.knowledge, &self.explorer.nav);
         for t in obs.things.iter().flatten().filter(|t| Self::lies_about(t)) {
             if self.things_seen.contains(&Self::what_where(t)) {
@@ -478,6 +486,46 @@ impl Player {
             });
             if in_view {
                 self.things_seen.insert(Self::what_where(t));
+            }
+        }
+    }
+
+    /// Deathmatch 2.0: the things she knew of lying about whose spots are in view this tic: gone
+    /// since now if they're not there (or, gone and due back, still not: taken again since);
+    /// there, back. (Before `notice_things` takes in what's in view.)
+    fn notice_returns(&mut self, obs: &Observation) {
+        let Some(r) = self.fight.returns.as_mut() else {
+            return;
+        };
+        let (k, nav) = (&self.explorer.knowledge, &self.explorer.nav);
+        let present: BTreeSet<(&'static str, i32, i32)> = obs
+            .things
+            .iter()
+            .flatten()
+            .filter(|t| Self::lies_about(t))
+            .map(Self::what_where)
+            .collect();
+        let in_view = |x: i32, y: i32| {
+            nav.poly_at((f64::from(x), f64::from(y))).is_some_and(|p| {
+                k.seen_tic
+                    .get(&nav.sector_of_poly(p))
+                    .is_some_and(|&tic| tic == obs.tic)
+            })
+        };
+        for &key in self.things_seen.iter() {
+            if !r.comes_back(key) || !in_view(key.1, key.2) {
+                continue;
+            }
+            if present.contains(&key) {
+                r.gone.remove(&key);
+            } else {
+                let due = r
+                    .gone
+                    .get(&key)
+                    .is_some_and(|&t| obs.tic - t >= RETURN_TICS);
+                if due || !r.gone.contains_key(&key) {
+                    r.gone.insert(key, obs.tic);
+                }
             }
         }
     }
@@ -508,7 +556,15 @@ impl Player {
                 } else if crate::bestiary::missile(t.name).is_some() {
                     c.missiles_seen.contains(&t.id)
                 } else {
-                    !Self::lies_about(t) || self.things_seen.contains(&Self::what_where(t))
+                    let key = Self::what_where(t);
+                    // (deathmatch 2.0: one she's seen gone is gone to her till she sees it back)
+                    !Self::lies_about(t)
+                        || (self.things_seen.contains(&key)
+                            && !self
+                                .fight
+                                .returns
+                                .as_ref()
+                                .is_some_and(|r| r.gone.contains_key(&key)))
                 }
             });
         }
@@ -553,6 +609,18 @@ impl Player {
     /// doors sound as a player's do).
     pub fn set_hunting(&mut self, monsters: bool) {
         self.fight.rivals = Some(super::rivals::Rivals::new(monsters));
+    }
+
+    /// Deathmatch 2.0: what the level put down comes back 30 s after it's taken, as every player
+    /// knows (but the spheres of invulnerability and invisibility).
+    pub fn set_items_return(&mut self) {
+        let spots = (self.explorer.nav.map.things.iter())
+            .map(|m| (m.x.round() as i32, m.y.round() as i32))
+            .collect();
+        self.fight.returns = Some(Returns {
+            spots,
+            gone: std::collections::BTreeMap::new(),
+        });
     }
 
     /// Whether she hunts the others (`set_hunting`).
@@ -1755,6 +1823,50 @@ impl Fight {
 }
 
 impl Fight {
+    /// Deathmatch 2.0: what she needs that's due back by now where she saw it taken, to go and
+    /// see: health hurt, armor without much, the big ones (a soul sphere, a megasphere, the
+    /// blue armor, a berserk pack) whenever. Whether it's there, she'll see (a rival may have
+    /// had it again).
+    fn checks(
+        &mut self,
+        x: &Explorer,
+        obs: &Observation,
+        reach: &BTreeSet<usize>,
+    ) -> Vec<Objective> {
+        self.checking.clear();
+        let Some(r) = &self.returns else {
+            return Vec::new();
+        };
+        let health = obs.health.unwrap_or(100.0);
+        let armor = obs.armor.unwrap_or(0.0);
+        let mut out = Vec::new();
+        for &key in r.gone.keys().filter(|&&k| r.due(k, obs.tic)) {
+            let (name, cx, cy) = key;
+            let big = matches!(name, "Soulsphere" | "Megasphere" | "BlueArmor" | "Berserk");
+            let wanted = big
+                || (crate::bestiary::category(name) == "Health"
+                    && health < self.tune.errands.hurt + 20.0)
+                || (name == "GreenArmor" && armor < 50.0);
+            if !wanted {
+                continue;
+            }
+            let at = (f64::from(cx), f64::from(cy));
+            if x.nav.poly_at(at).is_none_or(|p| !reach.contains(&p)) {
+                continue;
+            }
+            let goal = x.stand_spot_for(at, reach);
+            let mut o = Objective::new(
+                Kind::Visit,
+                goal,
+                format!("see if the {} is back", crate::control::names::called(name)),
+            );
+            o.needed = true;
+            self.checking.push((goal, key));
+            out.push(o);
+        }
+        out
+    }
+
     /// A deathmatch: the others to go after, where the best clue of them is (from `reach`:
     /// what she can get to), geared up; or half geared up, for a fresh clue near her.
     fn hunt(
@@ -1840,6 +1952,30 @@ impl Fight {
     }
 }
 
+/// Deathmatch 2.0's things that come back: where the level put things down, and those she's
+/// seen gone, since when (her `what_where`).
+struct Returns {
+    spots: BTreeSet<(i32, i32)>,
+    gone: std::collections::BTreeMap<(&'static str, i32, i32), i64>,
+}
+
+/// a thing taken comes back this long after (Doom's P_RespawnSpecials: 30 s)
+const RETURN_TICS: i64 = 30 * 35;
+
+impl Returns {
+    /// It comes back: the level put it there, and it's not a sphere of invulnerability or
+    /// invisibility (P_RemoveMobj queues neither, nor what's dropped).
+    fn comes_back(&self, key: (&'static str, i32, i32)) -> bool {
+        self.spots.contains(&(key.1, key.2))
+            && !matches!(key.0, "InvulnerabilitySphere" | "BlurSphere")
+    }
+
+    /// Seen gone and back by now, as far as she knows.
+    fn due(&self, key: (&'static str, i32, i32), tic: i64) -> bool {
+        self.gone.get(&key).is_some_and(|&t| tic - t >= RETURN_TICS)
+    }
+}
+
 impl Hooks for Fight {
     fn unarmed(&self, obs: &Observation) -> bool {
         !self.combat.armed(obs)
@@ -1897,6 +2033,7 @@ impl Hooks for Fight {
         let mut out = self.supplies(x, obs, reach, pos);
         out.extend(self.barrels(x, obs, pos));
         out.extend(self.hunt(x, obs, reach, pos));
+        out.extend(self.checks(x, obs, reach));
         if let Some((at, what)) = self.charge.clone().filter(|_| self.combat.now.invulnerable) {
             let mut o = Objective::new(
                 Kind::Visit,
@@ -2016,6 +2153,14 @@ impl Hooks for Fight {
                         || !(r.hunting || super::rivals::geared(obs, &self.tune.deathmatch, true))
                 }),
             },
+            // (a spot she's off to see whether something's back at: gone once she's seen it)
+            Kind::Visit if obj.label.starts_with("see if the ") => {
+                !self.returns.as_ref().is_some_and(|r| {
+                    self.checking
+                        .iter()
+                        .any(|(at, key)| *at == obj.goal && r.due(*key, obs.tic))
+                })
+            }
             Kind::Barrel => obj
                 .look_at
                 .is_none_or(|b| crate::motor::follower::barrel_now(obs, b).is_none()),

@@ -1163,10 +1163,13 @@ fn seats(nav: &Rc<Navigator>, map_name: &str, o: &WatchOptions) -> Result<Vec<Se
             }
             if o.deathmatch > 0 {
                 agent.x_mut().exit_held_back = true;
-                if hunts(o, i)
-                    && let Some(p) = agent.player_mut()
-                {
-                    p.set_hunting(o.fight > 0);
+                if let Some(p) = agent.player_mut() {
+                    if hunts(o, i) {
+                        p.set_hunting(o.fight > 0);
+                    }
+                    if o.deathmatch == 2 {
+                        p.set_items_return();
+                    }
                 }
             }
             if o.keys {

@@ -7,7 +7,7 @@
 # out/dm/NAME/, then the frags of each side, run for run (put the date in NAME).
 #
 # BIN: out/build/release/evil-boom unless given. JOBS: runs at once (8). SEEDS: 1 to 8 unless
-# given. MAPS: the levels (WAD:MAP ...). HUNT=none plays both as before, HUNT=all both hunting
+# given. ALT=1: deathmatch 2.0 (--altdeath: what's taken comes back). MAPS: the levels (WAD:MAP ...). HUNT=none plays both as before, HUNT=all both hunting
 # (how often they meet, in frags a minute, with hunting and without).
 set -u
 cd "$(dirname "$0")/../.."
@@ -33,12 +33,14 @@ one() {
   set -- $1
   local wad=${1%%:*} map=${1#*:} seed=$2 hunt=$3 out="$dir/${1#*:}-s$2-h$3.txt"
   [ -s "$out" ] && return
-  timeout 1200 "$bin" watch "$wad" "$map" --players 2 --deathmatch --mortal --headless \
+  timeout 1200 "$bin" watch "$wad" "$map" --players 2 "$mode" --mortal --headless \
     --seed "$seed" --hunt "$hunt" --max-seconds 700 2>&1 | grep -E '^(DEATHMATCH|  player [0-9]( \(hunts\))?: frags)' > "$out.tmp"
   mv "$out.tmp" "$out"
 }
 export -f one
-export bin dir
+mode=--deathmatch
+[ "${ALT:-}" = 1 ] && mode=--altdeath
+export bin dir mode
 printf '%s\n' "${runs[@]}" | xargs -P "$jobs" -I{} bash -c 'one "$@"' _ {}
 python3 - "$dir" <<'PY'
 import glob, math, re, sys

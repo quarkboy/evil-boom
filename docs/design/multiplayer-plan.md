@@ -328,3 +328,10 @@ keeps it from level to level. What was new:
   hunter +0.47 a match (s.e. 0.68). Ambushing ruled out (the maintainer: cheap, no fun on
   stream). Open: hunts route through hurting floors (MAP11's slime), costing the health that
   ends the hunt.
+- **Deathmatch 2.0's returns (2026-11-27):** what the level put down comes back 30 s after it's
+  taken (not the invulnerability or invisibility spheres, not what's dropped). She knew of a
+  thing come back the moment it did, wherever she was (her memory of things is by name and
+  spot, and the new one matched): now one she's seen gone is gone to her till she sees it back,
+  and once its 30 s are up she goes to see whether it's there when she needs it (health hurt,
+  armor short, the big ones whenever). Against the old knowledge, 80 matches seat for seat:
+  -0.68 frags a match (s.e. 0.88): the knowledge she shouldn't have had bought nothing.
